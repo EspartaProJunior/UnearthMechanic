@@ -93,8 +93,11 @@ class OraxenImpl(
 
         for (entity in nearby) {
             try {
-                val furniture = OraxenFurniture.isFurniture(entity)
+                /*val furniture = OraxenFurniture.isFurniture(entity)
                 if (furniture != null && entity.isValid && !entity.isDead) {
+                    return true
+                }*/
+                if(entity.isValid && !entity.isDead ){
                     return true
                 }
             } catch (_: Exception) {
@@ -171,11 +174,19 @@ class OraxenImpl(
 
         removeStageData(loc)
         setRemoving(loc)
+
+        if(!isRemoving(loc)){
+            if(!stageManager.activeSequences.contains(loc)){
+                clearRemoving(loc)
+            }
+        }
     }
 
     @EventHandler
     fun onFurniturePlace(event: OraxenFurniturePlaceEvent) {
-        clearRemoving(event.baseEntity.location.block.location)
+        Bukkit.getScheduler().runTaskLater(core, Runnable {
+            clearRemoving(event.baseEntity.location.block.location)
+        }, 3L)
     }
 
 

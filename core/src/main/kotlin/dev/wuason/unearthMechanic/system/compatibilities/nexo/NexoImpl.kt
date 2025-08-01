@@ -88,12 +88,15 @@ class NexoImpl(
 
     override fun isValid(loc: Location, expectedAdapterId: String?): Boolean {
         val world = loc.world ?: return false
-        val nearby = world.getNearbyEntities(loc, 0.5, 1.0, 0.5)
 
+        val nearby = world.getNearbyEntities(loc, 0.5, 1.0, 0.5)
         for (entity in nearby) {
             try {
-                val furniture = NexoFurniture.isFurniture(entity)
+                /*val furniture = NexoFurniture.isFurniture(entity)
                 if (furniture != null && entity.isValid && !entity.isDead) {
+                    return true
+                }*/
+                if(entity.isValid && !entity.isDead ){
                     return true
                 }
             } catch (_: Exception) {
@@ -172,11 +175,19 @@ class NexoImpl(
 
         removeStageData(loc)
         setRemoving(loc)
+
+        if(!isRemoving(loc)){
+            if(!stageManager.activeSequences.contains(loc)){
+                clearRemoving(loc)
+            }
+        }
     }
 
     @EventHandler
     fun onFurniturePlace(event: NexoFurniturePlaceEvent) {
-        clearRemoving(event.baseEntity.location.block.location)
+        Bukkit.getScheduler().runTaskLater(core, Runnable {
+            clearRemoving(event.baseEntity.location.block.location)
+        }, 3L)
     }
 
 

@@ -1,5 +1,6 @@
 package dev.wuason.unearthMechanic.system.compatibilities.ce
 
+import dev.lone.itemsadder.api.CustomFurniture
 import dev.wuason.libs.adapter.AdapterComp
 import dev.wuason.libs.adapter.AdapterData
 import dev.wuason.unearthMechanic.UnearthMechanicPlugin
@@ -32,6 +33,8 @@ import org.bukkit.inventory.ItemStack
 
 import net.momirealms.craftengine.core.util.Key
 import net.momirealms.craftengine.core.entity.furniture.AnchorType
+import org.bukkit.NamespacedKey
+import org.bukkit.persistence.PersistentDataType
 import java.util.Collections
 import java.util.UUID
 
@@ -87,21 +90,17 @@ class CraftEngineImpl(
     }
 
     override fun isValid(loc: Location, expectedAdapterId: String?): Boolean {
-        val blockLoc = loc.block.location
         val world = loc.world ?: return false
 
-        val nearby = world.getNearbyEntities(blockLoc, 0.5, 1.0, 0.5)
+        val nearby = world.getNearbyEntities(loc, 0.5, 1.0, 0.5)
         for (entity in nearby) {
-            val furniture = CraftEngineFurniture.getLoadedFurnitureByBaseEntity(entity)
-            if (furniture != null) {
-                val id = furniture.id().toString()
-                if (expectedAdapterId == null) {
+            try {
+                val furniture = CraftEngineFurniture.getLoadedFurnitureByBaseEntity(entity)
+                if (furniture != null && entity.isValid && !entity.isDead) {
                     return true
                 }
-                // Verifica si el ID coincide con el esperado
-                if (id.equals(expectedAdapterId, ignoreCase = true)) {
-                    return true
-                }
+            } catch (_: Exception) {
+                continue
             }
         }
         if (loc.block.type != org.bukkit.Material.AIR) return true
@@ -128,7 +127,9 @@ class CraftEngineImpl(
             return
         }
 
-        if (event.furniture().baseEntity() != null) {
+        val uuid = event.furniture().baseEntity().uniqueId
+
+        if (event.furniture().baseEntity() != null && event.furniture().baseEntity().uniqueId == uuid) {
             val adapterId = "ce:" + event.furniture().id()
             stageManager.interact(
                 event.player,
@@ -155,11 +156,21 @@ class CraftEngineImpl(
 
         removeStageData(loc)
         setRemoving(loc)
+
+        if(!isRemoving(loc)){
+            if(!stageManager.activeSequences.contains(loc)){
+                clearRemoving(loc)
+            }
+        }
     }
 
     @EventHandler
     fun onFurniturePlace(event: FurniturePlaceEvent) {
-        clearRemoving(event.furniture().location().block.location)
+
+        Bukkit.getScheduler().runTaskLater(core, Runnable {
+            clearRemoving(event.furniture().location().block.location)
+            //Bukkit.getConsoleSender().sendMessage("[DEBUG] Furniture desbloqueado en ${event.furniture().location().block.location}")
+        }, 3L)
     }
 
     private fun placeBlock(adapterId: String, location: Location?) {
@@ -249,33 +260,35 @@ class CraftEngineImpl(
         generic: IGeneric,
         stage: IStage
     ) {
-        if(isRemoving(loc.block.location)){
+        if(isRemoving(loc.block.location.block.location)){
             if(!stageManager.activeSequences.contains(loc.block.location)){
-                clearRemoving(loc.block.location)
-                }
+                clearRemoving(loc.block.location) }
             return
         }
 
         if (event is FurnitureInteractEvent) {
-            event.isCancelled = true
-
             val entityEvent: Entity = event.furniture().baseEntity()
 
             if (!entityEvent.isValid || entityEvent.isDead) return
 
-            // Cancel automatic drop (just in case)
-            CraftEngineFurniture.remove(event.furniture().baseEntity())
+            if(isRemoving(loc.block.location)){
+                if(!stageManager.activeSequences.contains(loc.block.location.block.location)){
+                    clearRemoving(loc.block.location) }
+                return
+            }
+
+            if(isValid(loc, itemAdapterData.toString())){
+                CraftEngineFurniture.remove(event.furniture().baseEntity())
+                event.furniture().baseEntity().remove()
+                breakBlock(event.furniture().baseEntity().location.block.location)
+            }else{
+                breakBlock(event.furniture().baseEntity().location.block.location)
+            }
 
             // Spawn of the new furniture
             val furnitureId = Key.of(itemAdapterData.id.removePrefix("ce:"))
             val furniture = CraftEngineFurniture.byId(furnitureId)
             val anchor = furniture?.getAnyAnchorType() ?: AnchorType.GROUND
-
-            if(isRemoving(loc.block.location)){
-                if(!stageManager.activeSequences.contains(loc.block.location)){
-                    clearRemoving(loc.block.location) }
-                return
-            }
             CraftEngineFurniture.place(loc,
                 furnitureId,
                 anchor,

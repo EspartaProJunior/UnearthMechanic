@@ -444,16 +444,10 @@ class StageManager(private val core: UnearthMechanic) : IStageManager {
                     val nextStage = stage.getStage() + 1
                     if (nextStage < generic.getStages().size) {
                         StageData.saveStageData(loc, StageData(loc, nextStage, generic))
-
-                        compatibility.getFurnitureUUID(loc).let { furnitureuuid ->
-                            furnitureuuid?.let { compatibility.clearRemoving(loc.block.location) }
-                        }
+                        compatibility.clearRemoving(loc.block.location)
                     } else {
                         StageData.removeStageData(loc)
-
-                        compatibility.getFurnitureUUID(loc).let { furnitureuuid ->
-                            furnitureuuid?.let { compatibility.clearRemoving(loc.block.location) }
-                        }
+                        compatibility.clearRemoving(loc.block.location)
                     }
                 }
             }, delayTicks)

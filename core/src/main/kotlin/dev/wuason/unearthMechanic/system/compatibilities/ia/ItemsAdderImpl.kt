@@ -91,7 +91,6 @@ class ItemsAdderImpl(
     override fun isValid(loc: Location, expectedAdapterId: String?): Boolean {
         val world = loc.world ?: return false
 
-        // Check for furniture
         val nearby = world.getNearbyEntities(loc, 0.5, 1.0, 0.5)
         for (entity in nearby) {
             try {
