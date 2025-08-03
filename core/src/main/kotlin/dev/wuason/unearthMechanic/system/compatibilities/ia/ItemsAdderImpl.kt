@@ -22,9 +22,12 @@ import org.bukkit.Location
 import org.bukkit.NamespacedKey
 import org.bukkit.block.Block
 import org.bukkit.block.BlockFace
+import org.bukkit.entity.ArmorStand
 import org.bukkit.entity.Entity
+import org.bukkit.entity.ItemDisplay
 import org.bukkit.entity.ItemFrame
 import org.bukkit.entity.Player
+import org.bukkit.entity.TextDisplay
 import org.bukkit.event.Event
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
@@ -69,6 +72,10 @@ class ItemsAdderImpl(
         StageData.removeStageData(location)
     }
 
+    fun isPossibleFurnitureEntity(entity: Entity): Boolean {
+        return entity is ItemFrame || entity is ArmorStand || entity is ItemDisplay || entity is TextDisplay
+    }
+
     override fun getFurnitureUUID(location: Location): UUID? {
         val world = location.world ?: return null
 
@@ -76,6 +83,7 @@ class ItemsAdderImpl(
 
         for (entity in entities) {
             try {
+                if (!isPossibleFurnitureEntity(entity)) continue
                 val furniture = CustomFurniture.byAlreadySpawned(entity)
                 if (furniture != null) {
                     return entity.uniqueId
@@ -94,6 +102,7 @@ class ItemsAdderImpl(
         val nearby = world.getNearbyEntities(loc, 0.5, 1.0, 0.5)
         for (entity in nearby) {
             try {
+                if (!isPossibleFurnitureEntity(entity)) continue
                 val furniture = CustomFurniture.byAlreadySpawned(entity)
                 if (furniture != null && entity.isValid && !entity.isDead) {
                     //Bukkit.getConsoleSender().sendMessage("[UM][ItemsAdderImpl] isValid: furniture válido encontrado en $location (${furniture.namespace}:${furniture.id})")
@@ -311,8 +320,11 @@ class ItemsAdderImpl(
 
                 entity.setRotation(entityEvent.location.yaw, entityEvent.location.pitch)
 
-                CustomFurniture.byAlreadySpawned(loc.block)?.entity?.let { entity ->
-                    rotationMap[loc] = Pair(entityEvent.location.yaw, entityEvent.location.pitch)
+                if(isPossibleFurnitureEntity(entityEvent)){
+                    val furniture = CustomFurniture.byAlreadySpawned(entityEvent)
+                    if (furniture != null) {
+                        rotationMap[loc] = Pair(entityEvent.location.yaw, entityEvent.location.pitch)
+                    }
                 }
 
                 if (entityEvent is ItemFrame && entity is ItemFrame) {

@@ -536,17 +536,19 @@ class StageManager(private val core: UnearthMechanic) : IStageManager {
                 player,
                 blockFace
             ).forEach { block ->
-                StageData.applyMultiple(block)
-                val playerInteractEvent: Event = PlayerInteractEvent(
-                    player,
-                    Action.RIGHT_CLICK_BLOCK,
-                    toolUsed.getItemMainHand(),
-                    block,
-                    blockFace,
-                    EquipmentSlot.HAND
-                )
-                Bukkit.getPluginManager().callEvent(playerInteractEvent)
-                StageData.removeMultiple(block)
+                if (block != null) {
+                    StageData.applyMultiple(block)
+                    val playerInteractEvent: Event = PlayerInteractEvent(
+                        player,
+                        Action.RIGHT_CLICK_BLOCK,
+                        toolUsed.getItemMainHand(),
+                        block,
+                        blockFace,
+                        EquipmentSlot.HAND
+                    )
+                    Bukkit.getPluginManager().callEvent(playerInteractEvent)
+                    StageData.removeMultiple(block)
+                }
             }
         }
     }
