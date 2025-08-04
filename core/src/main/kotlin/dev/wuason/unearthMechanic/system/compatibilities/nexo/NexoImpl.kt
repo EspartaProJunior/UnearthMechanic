@@ -12,6 +12,7 @@ import com.nexomc.nexo.api.events.furniture.NexoFurniturePlaceEvent
 import com.nexomc.nexo.utils.drops.Drop
 import dev.wuason.libs.adapter.AdapterComp
 import dev.wuason.libs.adapter.AdapterData
+import dev.wuason.unearthMechanic.UnearthMechanic
 import dev.wuason.unearthMechanic.UnearthMechanicPlugin
 import dev.wuason.unearthMechanic.config.*
 import dev.wuason.unearthMechanic.system.ILiveTool
@@ -185,7 +186,7 @@ class NexoImpl(
 
     @EventHandler
     fun onFurniturePlace(event: NexoFurniturePlaceEvent) {
-        Bukkit.getScheduler().runTaskLater(core, Runnable {
+        Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
             clearRemoving(event.baseEntity.location.block.location)
         }, 3L)
     }
@@ -230,7 +231,7 @@ class NexoImpl(
         if (stage is IBlockStage) {
             handleBlockStage(player, itemAdapterData, event, loc, toolUsed, generic, stage)
         } else if (stage is IFurnitureStage) {
-            Bukkit.getScheduler().runTaskLater(core, Runnable {
+            Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
                 handleFurnitureStage(player, itemAdapterData, event, loc, toolUsed, generic, stage)
             }, 2L)
         }
@@ -288,7 +289,7 @@ class NexoImpl(
             breakFurniture(event.baseEntity, player, event.mechanic.itemID)
             placeFurniture(itemAdapterData, loc, event.baseEntity.facing, event.baseEntity.location.yaw)
 
-            Bukkit.getScheduler().runTaskLater(core, Runnable {
+            Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
                 if(!stageManager.activeSequences.contains(event.baseEntity.location.block.location)){
                     clearRemoving(event.baseEntity.location.block.location)
                 }

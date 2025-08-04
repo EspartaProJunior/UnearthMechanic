@@ -3,6 +3,7 @@ package dev.wuason.unearthMechanic.system.compatibilities.ce
 import dev.lone.itemsadder.api.CustomFurniture
 import dev.wuason.libs.adapter.AdapterComp
 import dev.wuason.libs.adapter.AdapterData
+import dev.wuason.unearthMechanic.UnearthMechanic
 import dev.wuason.unearthMechanic.UnearthMechanicPlugin
 import dev.wuason.unearthMechanic.config.*
 import dev.wuason.unearthMechanic.system.ILiveTool
@@ -167,7 +168,7 @@ class CraftEngineImpl(
     @EventHandler
     fun onFurniturePlace(event: FurniturePlaceEvent) {
 
-        Bukkit.getScheduler().runTaskLater(core, Runnable {
+        Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
             clearRemoving(event.furniture().location().block.location)
             //Bukkit.getConsoleSender().sendMessage("[DEBUG] Furniture desbloqueado en ${event.furniture().location().block.location}")
         }, 3L)
@@ -211,7 +212,7 @@ class CraftEngineImpl(
         if (stage is IBlockStage) {
             handleBlockStage(player, itemAdapterData, event, loc, toolUsed, generic, stage)
         } else if (stage is IFurnitureStage) {
-            Bukkit.getScheduler().runTaskLater(core, Runnable {
+            Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
                 handleFurnitureStage(player, itemAdapterData, event, loc, toolUsed, generic, stage)
             }, 2L)
         }
@@ -306,7 +307,7 @@ class CraftEngineImpl(
                     itemFrameRotationMap[loc] = entity.rotation
                 }
             }
-            Bukkit.getScheduler().runTaskLater(core, Runnable {
+            Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
                 if(!stageManager.activeSequences.contains(event.furniture().baseEntity().location.block.location)){
                     clearRemoving(event.furniture().baseEntity().location.block.location)
                 }

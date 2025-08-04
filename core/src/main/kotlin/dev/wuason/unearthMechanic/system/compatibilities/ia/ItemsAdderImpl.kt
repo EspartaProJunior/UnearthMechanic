@@ -9,6 +9,7 @@ import dev.lone.itemsadder.api.Events.FurnitureInteractEvent
 import dev.lone.itemsadder.api.Events.FurniturePlaceEvent
 import dev.wuason.libs.adapter.AdapterComp
 import dev.wuason.libs.adapter.AdapterData
+import dev.wuason.unearthMechanic.UnearthMechanic
 import dev.wuason.unearthMechanic.UnearthMechanicPlugin
 import dev.wuason.unearthMechanic.config.*
 import dev.wuason.unearthMechanic.system.ILiveTool
@@ -32,6 +33,7 @@ import org.bukkit.event.Event
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.block.Action
+import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
@@ -186,21 +188,32 @@ class ItemsAdderImpl(
         }
     }
 
+    private val lastFurniturePlace: MutableMap<UUID, Location> = mutableMapOf()
+    @EventHandler
+    fun onPlayerInteract(event: PlayerInteractEvent) {
+        if (event.action == Action.RIGHT_CLICK_BLOCK) {
+            val player = event.player
+            val block = event.clickedBlock ?: return
+            lastFurniturePlace[player.uniqueId] = block.location
+        }
+    }
+
     @EventHandler
     fun onFurniturePlace(event: FurniturePlaceEvent) {
         val player = event.player
         val idPlaced = event.namespacedID
+        val targetLoc = lastFurniturePlace[player.uniqueId]
 
-        Bukkit.getScheduler().runTaskLater(core, Runnable {
-            val nearby = player.world.getNearbyEntities(player.location, 5.0, 5.0, 5.0)
+        Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
+            val key = NamespacedKey("itemsadder", "placeable_entity_item")
+            val searchLoc = targetLoc ?: player.location
 
-            val furniture = nearby
+            val furniture = player.world.getNearbyEntities(searchLoc, 1.5, 1.5, 1.5)
                 .filterIsInstance<ItemFrame>()
-                .firstOrNull { frame ->
-                    val key = NamespacedKey("itemsadder", "placeable_entity_item")
-                    val entityId = frame.persistentDataContainer.get(key, PersistentDataType.STRING)
-                    entityId == idPlaced
+                .filter { frame ->
+                    frame.persistentDataContainer.get(key, PersistentDataType.STRING) == idPlaced
                 }
+                .minByOrNull { it.location.distanceSquared(searchLoc) }
 
             furniture?.let {
                 clearRemoving(it.location.block.location)
@@ -240,7 +253,7 @@ class ItemsAdderImpl(
         if (stage is IBlockStage) {
             handleBlockStage(player, itemAdapterData, event, loc, toolUsed, generic, stage)
         } else if (stage is IFurnitureStage) {
-            Bukkit.getScheduler().runTaskLater(core, Runnable {
+            Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
                 handleFurnitureStage(player, itemAdapterData, event, loc, toolUsed, generic, stage)
             }, 2L)
         }
@@ -333,7 +346,7 @@ class ItemsAdderImpl(
                 }
 
             }
-            Bukkit.getScheduler().runTaskLater(core, Runnable {
+            Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
                 if(!stageManager.activeSequences.contains(event.bukkitEntity.location.block.location)){
                     //Bukkit.getConsoleSender().sendMessage("clearRemoving "+event.bukkitEntity.location.block.location)
                     clearRemoving(event.bukkitEntity.location.block.location)
@@ -378,7 +391,9 @@ class ItemsAdderImpl(
         }
         if (event is FurnitureInteractEvent) {
             event.bukkitEntity?.let { entity ->
-                rotationMap[entity.location] = Pair(entity.location.yaw, entity.location.pitch)
+                if (isPossibleFurnitureEntity(entity)) {
+                    rotationMap[entity.location] = Pair(entity.location.yaw, entity.location.pitch)
+                }
             }
             setRemoving(event.bukkitEntity.location.block.location)
 
@@ -390,8 +405,17 @@ class ItemsAdderImpl(
         }
 
         // Sequence System
-        val furniture = CustomFurniture.byAlreadySpawned(loc.block)
-        furniture?.remove(false)
+        val world = loc.block.location.world ?: return
+        val entities = world.getNearbyEntities(loc.block.location, 0.5, 1.0, 0.5)
+        entities
+            .filter { isPossibleFurnitureEntity(it) }
+            .forEach { entity ->
+                try {
+                    val furniture = CustomFurniture.byAlreadySpawned(entity)
+                    furniture?.remove(false)
+                } catch (_: Exception) { }
+            }
+
         if (loc.block.type != org.bukkit.Material.AIR) {
             breakBlock(loc)
         }

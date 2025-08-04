@@ -95,6 +95,8 @@ class StageManager(private val core: UnearthMechanic) : IStageManager {
     fun interact(player: Player, baseItemId: String, location: Location, event: Event, compatibility: ICompatibility) {
         if (player.isSneaking) return
 
+        if(compatibility.isRemoving(location.block.location)) return
+
         //player.sendMessage("ProtectionLib es "+ProtectionLib.canInteract(player, location))
         //player.sendMessage("worldguard es "+WorldGuardPlugin.isWorldGuardEnabled())
 

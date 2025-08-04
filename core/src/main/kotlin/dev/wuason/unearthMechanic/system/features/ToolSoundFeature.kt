@@ -21,7 +21,7 @@ class ToolSoundFeature: AbstractFeature() {
         iGeneric: IGeneric
     ) {
         liveTool.getITool().getSound()?.let { sound ->
-            p.playSound(
+            p.getWorld().playSound(
                 loc,
                 sound.soundId,
                 SoundCategory.BLOCKS,
