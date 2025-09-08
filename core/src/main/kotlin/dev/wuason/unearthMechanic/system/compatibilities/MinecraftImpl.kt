@@ -53,6 +53,10 @@ class MinecraftImpl(
         return null
     }
 
+    override fun isValidUUID(loc: Location, expectedAdapterId: String?, expectedUuid: UUID?): Boolean {
+        return false
+    }
+
     override fun isValid(loc: Location, expectedAdapterId: String?): Boolean {
         return false
     }

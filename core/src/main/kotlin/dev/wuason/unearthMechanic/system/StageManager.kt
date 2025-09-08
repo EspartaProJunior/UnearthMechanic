@@ -3,7 +3,6 @@ package dev.wuason.unearthMechanic.system
 import com.sk89q.wepif.bPermissionsResolver
 import dev.wuason.libs.adapter.Adapter
 import dev.wuason.libs.adapter.AdapterData
-import dev.wuason.libs.protectionlib.ProtectionLib
 import dev.wuason.mechanics.utils.AdventureUtils
 import dev.wuason.unearthMechanic.UnearthMechanic
 import dev.wuason.unearthMechanic.compatibilities.LuckPermsComp
@@ -59,6 +58,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager {
     private val animator: AnimationManager = AnimationManager(core)
 
     public val activeSequences = mutableSetOf<Location>()
+    private val activeSequenceUuids = mutableMapOf<Location, UUID?>()
     private val scheduledTasks = mutableMapOf<Location, MutableList<BukkitTask>>()
 
     private val transitioningLocations = mutableSetOf<Location>()
@@ -96,9 +96,6 @@ class StageManager(private val core: UnearthMechanic) : IStageManager {
         if (player.isSneaking) return
 
         if(compatibility.isRemoving(location.block.location)) return
-
-        //player.sendMessage("ProtectionLib es "+ProtectionLib.canInteract(player, location))
-        //player.sendMessage("worldguard es "+WorldGuardPlugin.isWorldGuardEnabled())
 
         if (StageData.hasStageData(location)) {
             val stageData: StageData = StageData.fromLoc(location) ?: return
@@ -168,11 +165,11 @@ class StageManager(private val core: UnearthMechanic) : IStageManager {
                 || player.hasPermission("unearthMechanic.bypass")
                 || generic.isNotProtect()
                 || (
-                !WorldGuardPlugin.isWorldGuardEnabled() && ProtectionLib.canInteract(player, location)
+                !WorldGuardPlugin.isWorldGuardEnabled() && core.mechanics.antiGriefLib.canInteract(player, location)
                 )
                 || (
                 WorldGuardPlugin.isWorldGuardEnabled()
-                        && ProtectionLib.canInteract(player, location)
+                        && core.mechanics.antiGriefLib.canInteract(player, location)
                         && core.getWorldGuardComp().canInteractCustom(player, location)
                 )
     }
@@ -215,11 +212,11 @@ class StageManager(private val core: UnearthMechanic) : IStageManager {
                 || player.hasPermission("unearthMechanic.bypass")
                 || generic.isNotProtect()
                 || (
-                !WorldGuardPlugin.isWorldGuardEnabled() && ProtectionLib.canInteract(player, location)
+                !WorldGuardPlugin.isWorldGuardEnabled() && core.mechanics.antiGriefLib.canInteract(player, location)
                 )
                 || (
                 WorldGuardPlugin.isWorldGuardEnabled()
-                        && ProtectionLib.canInteract(player, location)
+                        && core.mechanics.antiGriefLib.canInteract(player, location)
                         && core.getWorldGuardComp().canInteractCustom(player, location)
                 )
     }
@@ -381,6 +378,8 @@ class StageManager(private val core: UnearthMechanic) : IStageManager {
         }
 
         if (stage is Stage && stage.getSequenceStages()?.isNotEmpty() == true) {
+            activeSequenceUuids[loc.block.location] = compatibility.getFurnitureUUID(loc.block.location) as UUID
+
             handleSequence(player, compatibility, loc, toolUsed, generic, stage)
         }
 
@@ -410,15 +409,26 @@ class StageManager(private val core: UnearthMechanic) : IStageManager {
         val tasks = mutableListOf<BukkitTask>()
         activeSequences.add(loc)
 
+        compatibility.getFurnitureUUID(loc)?.let { uuid ->
+            activeSequenceUuids[loc] = uuid
+        }
+
         lastSequenceStage[0] = stage
 
         sequenceStages.forEach { (delayTicks, sequenceStage) ->
             val task = Bukkit.getScheduler().runTaskLater(core, Runnable {
                 if (!activeSequences.contains(loc)) return@Runnable
 
+                val expectedUuid = compatibility.getFurnitureUUID(loc) //activeSequenceUuids[loc]
                 if (!compatibility.isValid(loc,stage.getAdapterData()?.id)) {
-                    //Bukkit.getConsoleSender().sendMessage("[UM] Secuencia cancelada en $loc porque ya no existe.")
+                    //Bukkit.getConsoleSender().sendMessage("[UM] isValid false")
                     cancelSequence(compatibility,loc)
+                    return@Runnable
+                }
+
+                if (!compatibility.isValidUUID(loc,stage.getAdapterData()?.id,activeSequenceUuids[loc])) {
+                    cancelSequence(compatibility, loc)
+                    //Bukkit.getConsoleSender().sendMessage("[UM] isValidUUID=false mi webo gastronomico")
                     return@Runnable
                 }
 
@@ -441,6 +451,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager {
                 if (delayTicks == sequenceStages.keys.maxOrNull()) {
                     //Bukkit.getConsoleSender().sendMessage("[UM] Secuencia finalizada en $loc.")
                     activeSequences.remove(loc)
+                    activeSequenceUuids.remove(loc)
                     scheduledTasks.remove(loc)
 
                     val nextStage = stage.getStage() + 1
@@ -474,12 +485,14 @@ class StageManager(private val core: UnearthMechanic) : IStageManager {
             if (isSimilarCompatibility(it, compatibility)) {
                 if (!compatibility.isValid(loc,stage.getAdapterData()?.id)) {
                     compatibility.handleRemove(player, event, loc, toolUsed, generic, stage)
+                    //  Bukkit.getConsoleSender().sendMessage("[UM] cancelSequence")
                     //Bukkit.getConsoleSender().sendMessage("[UM] handleRemove aplicado para ${stage.getAdapterData()?.adapter?.type}:${stage.getAdapterData()?.id} en ${Bukkit.getCurrentTick()}")
                 }
 
                 //Bukkit.getConsoleSender().sendMessage("[UM] handleStage aplicado para $furnitureUuid en $currentTick")
                 //Bukkit.getConsoleSender().sendMessage("[UM] handleStage aplicado para ${stage.getAdapterData()?.adapter?.type}:${stage.getAdapterData()?.id} en ${Bukkit.getCurrentTick()}")
                 compatibility.handleSequenceStage(player, it, event, loc, toolUsed, generic, stage)
+
 
             } else {
                 val c: ICompatibility =
@@ -492,6 +505,11 @@ class StageManager(private val core: UnearthMechanic) : IStageManager {
                 //Bukkit.getConsoleSender().sendMessage("[UM] handleStage2 aplicado para $furnitureUuid en $currentTick")
             }
         }
+
+        Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
+            val newUuid = compatibility.getFurnitureUUID(loc)
+            activeSequenceUuids[loc] = newUuid
+        }, 1L)
     }
 
 
@@ -499,6 +517,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager {
         scheduledTasks[loc]?.forEach { it.cancel() }
         scheduledTasks.remove(loc)
         activeSequences.remove(loc)
+        activeSequenceUuids.remove(loc)
         //Bukkit.getConsoleSender().sendMessage("[UM] Secuencia cancelada en $loc.")
 
         compatibility.getFurnitureUUID(loc).let { furnitureuuid ->

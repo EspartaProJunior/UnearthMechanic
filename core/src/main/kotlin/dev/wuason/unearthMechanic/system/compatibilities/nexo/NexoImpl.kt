@@ -22,6 +22,7 @@ import dev.wuason.unearthMechanic.system.compatibilities.ICompatibility
 import dev.wuason.unearthMechanic.utils.Utils
 import org.bukkit.Bukkit
 import org.bukkit.Location
+import org.bukkit.NamespacedKey
 import org.bukkit.block.Block
 import org.bukkit.block.BlockFace
 import org.bukkit.entity.Entity
@@ -32,6 +33,7 @@ import org.bukkit.event.EventPriority
 import org.bukkit.event.block.Action
 import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
+import org.bukkit.persistence.PersistentDataType
 import java.util.Collections
 import java.util.UUID
 
@@ -85,6 +87,45 @@ class NexoImpl(
         }
 
         return null
+    }
+
+    override fun isValidUUID(loc: Location, expectedAdapterId: String?, expectedUuid: UUID?): Boolean {
+        val keyLoc = loc.block.location
+        val world = keyLoc.world ?: return false
+
+
+        val center = keyLoc.clone().add(0.5, 0.5, 0.5)
+        val nearby = world.getNearbyEntities(center, 1.5, 1.5, 1.5)
+
+
+        for (entity in nearby) {
+            val entityBlock = entity.location.block.location
+            if (entityBlock != keyLoc) continue
+            if (!entity.isValid || entity.isDead) continue
+
+
+            var adapterId: String? = null
+
+
+            for (key in entity.persistentDataContainer.keys) {
+                val value = try {
+                    entity.persistentDataContainer.get(key, PersistentDataType.STRING)
+                } catch (ex: IllegalArgumentException) {
+                    null
+                }
+
+                if (value != null && adapterId == null) {
+                    adapterId = value
+                }
+            }
+
+
+            if (expectedUuid != null && entity.uniqueId == expectedUuid) return true
+            if (expectedAdapterId != null && adapterId != null && adapterId.equals(expectedAdapterId.removePrefix("nexo:"), ignoreCase = true)) return true
+        }
+
+
+        return false
     }
 
     override fun isValid(loc: Location, expectedAdapterId: String?): Boolean {

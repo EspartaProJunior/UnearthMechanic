@@ -35,6 +35,11 @@ import org.bukkit.inventory.ItemStack
 import net.momirealms.craftengine.core.util.Key
 import net.momirealms.craftengine.core.entity.furniture.AnchorType
 import org.bukkit.NamespacedKey
+import org.bukkit.entity.ArmorStand
+import org.bukkit.entity.BlockDisplay
+import org.bukkit.entity.Interaction
+import org.bukkit.entity.ItemDisplay
+import org.bukkit.entity.TextDisplay
 import org.bukkit.persistence.PersistentDataType
 import java.util.Collections
 import java.util.UUID
@@ -88,6 +93,67 @@ class CraftEngineImpl(
         }
 
         return null
+    }
+
+    fun isPossibleFurnitureEntity(entity: Entity): Boolean {
+        return entity is ItemFrame || entity is ArmorStand || entity is ItemDisplay || entity is TextDisplay
+                || entity is Interaction || entity is BlockDisplay
+    }
+
+    override fun isValidUUID(loc: Location, expectedAdapterId: String?, expectedUuid: UUID?): Boolean {
+        val keyLoc = loc.block.location
+        val world = keyLoc.world ?: return false
+
+        //Bukkit.getConsoleSender().sendMessage("[CE][isValidFurniture] ENTER keyLoc=$keyLoc expectedUuid=$expectedUuid expectedAdapterId=$expectedAdapterId")
+
+        val center = keyLoc.clone().add(0.5, 0.5, 0.5)
+        val nearby = world.getNearbyEntities(center, 1.5, 1.5, 1.5)
+
+        //Bukkit.getConsoleSender().sendMessage("[CE][isValidFurniture] nearby.size=${nearby.size}")
+
+        for (entity in nearby) {
+            val entityBlock = entity.location.block.location
+            //Bukkit.getConsoleSender().sendMessage("[CE][Entity] ${entity.type} UUID=${entity.uniqueId} block=$entityBlock")
+
+            if (entityBlock != keyLoc) continue
+            if (!entity.isValid || entity.isDead || !isPossibleFurnitureEntity(entity)) continue
+
+            var adapterId: String? = null
+
+            for (key in entity.persistentDataContainer.keys) {
+                val value = try {
+                    entity.persistentDataContainer.get(key, PersistentDataType.STRING)
+                } catch (ex: IllegalArgumentException) {
+                    null
+                }
+
+                if (value != null) {
+                    //Bukkit.getConsoleSender().sendMessage("[CE][PDC] ${key.namespace}:${key.key} = $value")
+                    if (adapterId == null) {
+                        adapterId = value // agarramos el primer id válido para intentar matchear
+                    }
+                } else {
+                    //Bukkit.getConsoleSender().sendMessage("[CE][PDC] ${key.namespace}:${key.key} (tipo no STRING o nulo)")
+                }
+            }
+
+            //Bukkit.getConsoleSender().sendMessage("[CE][FurnitureData] id=$adapterId")
+
+            if (expectedUuid != null && entity.uniqueId == expectedUuid) {
+                //Bukkit.getConsoleSender().sendMessage("[CE][isValidFurniture] ✅ MATCH por UUID")
+                return true
+            }
+
+            if (expectedAdapterId != null && adapterId != null && adapterId.equals(expectedAdapterId.removePrefix("ce:"), ignoreCase = true)) {
+                //Bukkit.getConsoleSender().sendMessage("[CE][isValidFurniture] ✅ MATCH por adapterId")
+                return true
+            }
+
+            //Bukkit.getConsoleSender().sendMessage("[CE][isValidFurniture] ❌ mismatch: id=$adapterId")
+        }
+
+        //Bukkit.getConsoleSender().sendMessage("[CE][isValidFurniture] ❌ SIN MATCH en $keyLoc")
+        return false
     }
 
     override fun isValid(loc: Location, expectedAdapterId: String?): Boolean {

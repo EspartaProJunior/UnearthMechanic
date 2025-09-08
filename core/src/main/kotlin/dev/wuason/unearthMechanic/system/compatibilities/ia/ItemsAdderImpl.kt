@@ -20,6 +20,7 @@ import dev.wuason.unearthMechanic.utils.Utils
 import io.papermc.paper.command.brigadier.argument.ArgumentTypes.entity
 import org.bukkit.Bukkit
 import org.bukkit.Location
+import org.bukkit.Material
 import org.bukkit.NamespacedKey
 import org.bukkit.block.Block
 import org.bukkit.block.BlockFace
@@ -81,7 +82,7 @@ class ItemsAdderImpl(
     override fun getFurnitureUUID(location: Location): UUID? {
         val world = location.world ?: return null
 
-        val entities = world.getNearbyEntities(location, 1.0, 1.0, 1.0)
+        val entities = world.getNearbyEntities(location, 0.5, 1.0, 0.5)
 
         for (entity in entities) {
             try {
@@ -98,23 +99,75 @@ class ItemsAdderImpl(
         return null
     }
 
+    override fun isValidUUID(loc: Location, expectedAdapterId: String?, expectedUuid: UUID?): Boolean {
+        val keyLoc = loc.block.location
+        val world = keyLoc.world ?: run {
+            //Bukkit.getConsoleSender().sendMessage("[UM][isValidUUID] ❌ world=null")
+            return false
+        }
+
+        //Bukkit.getConsoleSender().sendMessage("[UM][isValidUUID] → ENTER keyLoc=$keyLoc expectedUuid=$expectedUuid removing=${isRemoving(keyLoc)}")
+
+        if (expectedUuid != null && isRemoving(keyLoc)) {
+            //Bukkit.getConsoleSender().sendMessage("[UM][isValidUUID] ✔ keyLoc en removing → OK temporal")
+            return true
+        }
+
+        val center = keyLoc.clone().add(0.5, 0.5, 0.5)
+        val nearby = world.getNearbyEntities(center, 1.5, 1.5, 1.5)
+        //Bukkit.getConsoleSender().sendMessage("[UM][isValidUUID] nearby.size=${nearby.size} (center=$center)")
+
+        for (entity in nearby) {
+            val entityBlock = entity.location.block.location
+            if (entityBlock != keyLoc) continue
+
+            //Bukkit.getConsoleSender().sendMessage("[UM][isValidUUID]  - entity=${entity.type} uuid=${entity.uniqueId} block=$entityBlock")
+
+            if (!isPossibleFurnitureEntity(entity) || !entity.isValid || entity.isDead) {
+                //Bukkit.getConsoleSender().sendMessage("[UM][isValidUUID]    - Ignorado: no es furniture válido")
+                continue
+            }
+
+            val furniture = try { CustomFurniture.byAlreadySpawned(entity) } catch (_: Throwable) { null }
+            if (furniture == null) {
+                //Bukkit.getConsoleSender().sendMessage("[UM][isValidUUID]    - No se pudo mapear como furniture")
+                continue
+            }
+
+            //Bukkit.getConsoleSender().sendMessage("[UM][isValidUUID]    IA-mapping furniture=${furniture.namespacedID}")
+
+            if (expectedUuid != null && entity.uniqueId == expectedUuid) {
+                //Bukkit.getConsoleSender().sendMessage("[UM][isValidUUID] ✅ MATCH por UUID")
+                return true
+            }
+
+            if (expectedAdapterId != null && furniture.namespacedID.equals(expectedAdapterId.removePrefix("ia:"), ignoreCase = true)) {
+                //Bukkit.getConsoleSender().sendMessage("[UM][isValidUUID] ✅ MATCH por adapterId")
+                return true
+            }
+
+            //Bukkit.getConsoleSender().sendMessage("[UM][isValidUUID]    ❌ Mismo bloque, pero furniture distinto")
+        }
+
+        //Bukkit.getConsoleSender().sendMessage("[UM][isValidUUID] ❌ SIN MATCH en $keyLoc")
+        return false
+    }
+
     override fun isValid(loc: Location, expectedAdapterId: String?): Boolean {
         val world = loc.world ?: return false
-
         val nearby = world.getNearbyEntities(loc, 0.5, 1.0, 0.5)
+
         for (entity in nearby) {
             try {
-                if (!isPossibleFurnitureEntity(entity)) continue
-                val furniture = CustomFurniture.byAlreadySpawned(entity)
-                if (furniture != null && entity.isValid && !entity.isDead) {
-                    //Bukkit.getConsoleSender().sendMessage("[UM][ItemsAdderImpl] isValid: furniture válido encontrado en $location (${furniture.namespace}:${furniture.id})")
+                if(entity.isValid && !entity.isDead ){
                     return true
                 }
             } catch (_: Exception) {
                 continue
             }
         }
-        if (loc.block.type != org.bukkit.Material.AIR) return true
+
+        if (loc.block.type != Material.AIR) return true
 
         return false
     }
@@ -200,6 +253,7 @@ class ItemsAdderImpl(
 
     @EventHandler
     fun onFurniturePlace(event: FurniturePlaceEvent) {
+
         val player = event.player
         val idPlaced = event.namespacedID
         val targetLoc = lastFurniturePlace[player.uniqueId]
@@ -271,6 +325,7 @@ class ItemsAdderImpl(
         if (stage is IBlockStage) {
             handleBlockStage(player, itemAdapterData, event, loc, toolUsed, generic, stage)
         } else if (stage is IFurnitureStage) {
+            //Bukkit.getConsoleSender().sendMessage("[UM] handleFurnitureStage $loc → tick=${Bukkit.getCurrentTick()}")
             handleFurnitureStage(player, itemAdapterData, event, loc, toolUsed, generic, stage)
         }
     }
@@ -405,7 +460,7 @@ class ItemsAdderImpl(
         }
 
         // Sequence System
-        val world = loc.block.location.world ?: return
+        /*val world = loc.block.location.world ?: return
         val entities = world.getNearbyEntities(loc.block.location, 0.5, 1.0, 0.5)
         entities
             .filter { isPossibleFurnitureEntity(it) }
@@ -414,7 +469,12 @@ class ItemsAdderImpl(
                     val furniture = CustomFurniture.byAlreadySpawned(entity)
                     furniture?.remove(false)
                 } catch (_: Exception) { }
-            }
+            }*/
+
+        try {
+            CustomFurniture.byAlreadySpawned(loc.block)?.remove(false)
+        } catch (_: Exception) {
+        }
 
         if (loc.block.type != org.bukkit.Material.AIR) {
             breakBlock(loc)

@@ -18,7 +18,7 @@ val targetJavaVersion = 21
 allprojects {
 
     project.group = "dev.wuason"
-    project.version = "0.1.12c"
+    project.version = "0.1.12d"
 
     //apply kotlin jvm plugin
     apply(plugin = "kotlin")
@@ -173,7 +173,7 @@ project(":core") {
 subprojects {
     dependencies {
         compileOnly("io.papermc.paper:paper-api:1.20.6-R0.1-SNAPSHOT")
-        compileOnly("com.github.Wuason6x9:mechanics:1.0.3.6")
+        compileOnly("com.github.Wuason6x9:mechanics:1.0.3.8")
         compileOnly("io.th0rgal:oraxen:1.189.0") // 1.174.0 supported version
         compileOnly("dev.lone:api-itemsadder:4.0.2-beta-release-11")
         compileOnly("com.sk89q.worldguard:worldguard-bukkit:7.0.12-SNAPSHOT")

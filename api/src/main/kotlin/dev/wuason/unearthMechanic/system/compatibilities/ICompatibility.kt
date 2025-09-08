@@ -163,6 +163,8 @@ abstract class ICompatibility(
      * @param location The location to validate.
      * @return true if valid, false otherwise.
      */
+    open fun isValidUUID(loc: Location, expectedAdapterId: String?, expectedUuid: UUID?): Boolean = true
+
     open fun isValid(loc: Location, expectedAdapterId: String?): Boolean = true
 
     /**
