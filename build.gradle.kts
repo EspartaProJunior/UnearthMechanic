@@ -9,7 +9,7 @@ plugins {
     java
     kotlin("jvm") version "2.0.20-RC2"
     id("com.github.johnrengelman.shadow") version "8.1.1"
-    id("org.gradle.maven-publish")
+    id("maven-publish")
     id("org.jetbrains.dokka") version "1.9.20"
 }
 
@@ -18,12 +18,12 @@ val targetJavaVersion = 21
 allprojects {
 
     project.group = "dev.wuason"
-    project.version = "0.1.12d"
+    project.version = "0.1.12e"
 
     //apply kotlin jvm plugin
     apply(plugin = "kotlin")
     apply(plugin = "com.github.johnrengelman.shadow")
-    apply(plugin = "org.gradle.maven-publish")
+    apply(plugin = "maven-publish")
 
     repositories {
         mavenCentral()
@@ -103,13 +103,35 @@ project(":api") {
     }
 
     publishing {
-        publications {
-            create<MavenPublication>("mavenJava") {
-                groupId = rootProject.group.toString()
-                artifactId = rootProject.name
-                version = rootProject.version.toString()
-                artifact(tasks.jar)
-                artifact(tasks.getByName("dokkaJavadocJar"))
+        publishing {
+            repositories {
+                maven {
+                    url = uri("https://repo.techmc.es/releases")
+                    credentials(PasswordCredentials::class) {
+                        username = System.getenv("REPO_USERNAME")
+                        password = System.getenv("REPO_PASSWORD")
+                    }
+                }
+            }
+            publications {
+                create<MavenPublication>("mavenJava") {
+                    groupId = rootProject.group.toString()
+                    artifactId = rootProject.name
+                    version = rootProject.version.toString()
+                    artifact(tasks.jar)
+                    artifact(tasks.getByName("dokkaJavadocJar"))
+                    pom {
+                        name = "UnearthMechanic API"
+                        url = "https://github.com/Wuason6x9/Adapter/"
+                        licenses {
+                            license {
+                                name = "GNU General Public License v3.0"
+                                url = "https://www.gnu.org/licenses/gpl-3.0.html"
+                                distribution = "repo"
+                            }
+                        }
+                    }
+                }
             }
         }
     }

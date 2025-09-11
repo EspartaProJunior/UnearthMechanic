@@ -2,7 +2,7 @@
 
 # -> JavaDoc below <-
 
-[here](https://jitpack.io/com/github/Wuason6x9/UnearthMechanic/0.1.12d/javadoc "Go to javadoc")
+[here](https://repo.techmc.es/javadoc/releases/dev/wuason/unearth-mechanic/0.1.12e "Go to javadoc")
 
 ## Use api
 
@@ -12,8 +12,9 @@ Add the repository to your pom.xml file:
 ```xml
 <repositories>
     <repository>
-        <id>jitpack.io</id>
-        <url>https://jitpack.io</url>
+        <id>techmc-studios-releases</id>
+        <name>TechMC Repository</name>
+        <url>https://repo.techmc.es/releases</url>
     </repository>
 </repositories>
 ```
@@ -21,8 +22,8 @@ Add the repository to your pom.xml file:
 Add the dependency:
 ```xml
 <dependency>
-    <groupId>com.github.Wuason6x9</groupId>
-    <artifactId>UnearthMechanic</artifactId>
+    <groupId>dev.wuason</groupId>
+    <artifactId>unearth-mechanic</artifactId>
     <version>RELEASE-VERSION</version>
     <scope>provided</scope>
 </dependency>
@@ -33,7 +34,7 @@ Add the dependency:
 Add the repository to your build.gradle file:
 ```gradle
 repositories {
-    maven { url 'https://jitpack.io' }
+    maven { url 'https://repo.techmc.es/releases' }
 }
 ```
 
@@ -41,7 +42,7 @@ Add the dependency:
 ```gradle
 
 dependencies {
-    compileOnly 'com.github.Wuason6x9:UnearthMechanic:RELEASE-VERSION'
+    compileOnly 'dev.wuason:unearth-mechanic:RELEASE-VERSION'
 }
 ```
 
@@ -50,15 +51,16 @@ dependencies {
 Add the repository to your build.gradle.kts file:
 ```kotlin
 repositories {
-    maven("https://jitpack.io")
+    maven("https://repo.techmc.es/releases")
 }
 ```
 
 Add the dependency:
 ```kotlin
 dependencies {
-    compileOnly("com.github.Wuason6x9:UnearthMechanic:RELEASE-VERSION")
+    compileOnly("dev.wuason:unearth-mechanic:RELEASE-VERSION")
 }
 ```
 
-### WIKI for user [Link](https://wiki.techmc.es/en/mechanics)
+### Unearth WIKI for user [Link](https://plugins.elitefantasy.net/mechanics/unearthmechanic)
+### Mechanics WIKI for user [Link](https://wiki.techmc.es/en/mechanics)
