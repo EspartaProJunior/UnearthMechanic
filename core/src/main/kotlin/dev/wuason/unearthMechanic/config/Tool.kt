@@ -5,16 +5,16 @@ import dev.wuason.libs.adapter.AdapterData
 import java.util.*
 import kotlin.jvm.optionals.getOrNull
 
-class Tool(private val adapterData: AdapterData, private val size: Int, private val deep: Int, private val depth: Int, private val sound: Sound?, private val animation: Animation?, private val permission: String?, private val delay: Long, private val replaceOnBreak: String?): ITool {
+class Tool(private val adapterData: AdapterData, private val size: Int, private val deep: Int, private val depth: Int, private val sound: Sound?, private val animation: Animation?, private val permission: String?, private val delay: Long, private val replaceOnBreak: String?, private val tintFurniture: String?): ITool {
     companion object {
 
         fun Tool(adapterData: AdapterData): Tool {
-            return Tool(adapterData, 0, 0, 0, null, null, null, 0, null)
+            return Tool(adapterData, 0, 0, 0, null, null, null, 0, null, null)
         }
 
         fun parseTool(tool: String): Tool {
             val split: List<String> = tool.split(";")
-            if (split.size == 1) return Tool(Adapter.getAdapterData(split[0].trim()).getOrNull()?: throw NullPointerException("The adapter id: ${split[0].trim()} doesn't exists!"), 0, 0, 0, null, null, null, 0, null)
+            if (split.size == 1) return Tool(Adapter.getAdapterData(split[0].trim()).getOrNull()?: throw NullPointerException("The adapter id: ${split[0].trim()} doesn't exists!"), 0, 0, 0, null, null, null, 0,null,null)
             var size: Int = 0
             var deep: Int = 0
             var depth: Int = 0
@@ -24,6 +24,7 @@ class Tool(private val adapterData: AdapterData, private val size: Int, private 
             var delayAnim: Long = 0
             var delay: Long = 0
             var replaceOnBreak: String? = null
+            var tintFurniture: String? = null
             split.filter { split.indexOf(it) != 0 }.forEach {
                 val x = it.split("=")
                 if (x.size != 2) throw IllegalArgumentException("Invalid tool format")
@@ -37,6 +38,8 @@ class Tool(private val adapterData: AdapterData, private val size: Int, private 
                     "delayanim" -> delayAnim = x[1].trim().toLong()
                     "delay" -> delay = x[1].trim().toLong()
                     "replaceonbreak" -> replaceOnBreak = x[1].trim()
+
+                    "tintfurniture" -> tintFurniture = x[1].trim()
                 }
             }
             if (depth > 0) {
@@ -52,7 +55,7 @@ class Tool(private val adapterData: AdapterData, private val size: Int, private 
                 if (depth < 1) depth = 1
             }
             val animation: Animation? = if (anim != null) Animation(if (delayAnim > 0) delayAnim else -1, anim!!) else null
-            return Tool(Adapter.getAdapterData(split[0].trim()).getOrNull()?: throw NullPointerException("The adapter id: ${split[0].trim()} doesn't exists!"), size, deep, depth, sound, animation, permission, delay, replaceOnBreak)
+            return Tool(Adapter.getAdapterData(split[0].trim()).getOrNull()?: throw NullPointerException("The adapter id: ${split[0].trim()} doesn't exists!"), size, deep, depth, sound, animation, permission, delay, replaceOnBreak,tintFurniture)
         }
     }
 
@@ -99,6 +102,9 @@ class Tool(private val adapterData: AdapterData, private val size: Int, private 
         if (replaceOnBreak != null) {
             builder.append(";replaceonbreak=${replaceOnBreak}")
         }
+        if (tintFurniture != null) {
+            builder.append(";tintfurniture=${tintFurniture}")
+        }
         return builder.toString()
     }
 
@@ -130,6 +136,10 @@ class Tool(private val adapterData: AdapterData, private val size: Int, private 
 
     override fun getReplaceOnBreak(): String? {
         return replaceOnBreak
+    }
+
+    override fun getTintFurniture(): String? {
+        return tintFurniture
     }
 
 }

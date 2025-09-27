@@ -1,10 +1,8 @@
 package dev.wuason.unearthMechanic.system.compatibilities
 
-import dev.lone.itemsadder.api.CustomFurniture
 import dev.wuason.libs.adapter.Adapter
 import dev.wuason.libs.adapter.AdapterComp
 import dev.wuason.libs.adapter.AdapterData
-import dev.wuason.unearthMechanic.UnearthMechanic
 import dev.wuason.unearthMechanic.UnearthMechanicPlugin
 import dev.wuason.unearthMechanic.config.*
 import dev.wuason.unearthMechanic.system.ILiveTool
@@ -58,6 +56,11 @@ class MinecraftImpl(
     }
 
     override fun isValid(loc: Location, expectedAdapterId: String?): Boolean {
+        if (loc.block.type != Material.AIR){
+            Bukkit.getConsoleSender().sendMessage("[UM] loc.block.type != Material.AIR")
+            return true
+        }
+
         return false
     }
 

@@ -80,4 +80,11 @@ interface ITool {
      * @return The identifier of the item to replace the broken tool, or null if no replacement is specified.
      */
     fun getReplaceOnBreak(): String?
+
+    /**
+     * Retrieves the color identifier that will be applied when the tool is used.
+     *
+     * @return The identifier of the element that will give an rgb for the substitution or null if no substitution is specified.
+     */
+    fun getTintFurniture(): String?
 }

@@ -1,6 +1,5 @@
 package dev.wuason.unearthMechanic.system.compatibilities.ce
 
-import dev.lone.itemsadder.api.CustomFurniture
 import dev.wuason.libs.adapter.AdapterComp
 import dev.wuason.libs.adapter.AdapterData
 import dev.wuason.unearthMechanic.UnearthMechanic
@@ -34,7 +33,6 @@ import org.bukkit.inventory.ItemStack
 
 import net.momirealms.craftengine.core.util.Key
 import net.momirealms.craftengine.core.entity.furniture.AnchorType
-import org.bukkit.NamespacedKey
 import org.bukkit.entity.ArmorStand
 import org.bukkit.entity.BlockDisplay
 import org.bukkit.entity.Interaction
@@ -130,7 +128,7 @@ class CraftEngineImpl(
                 if (value != null) {
                     //Bukkit.getConsoleSender().sendMessage("[CE][PDC] ${key.namespace}:${key.key} = $value")
                     if (adapterId == null) {
-                        adapterId = value // agarramos el primer id válido para intentar matchear
+                        adapterId = value
                     }
                 } else {
                     //Bukkit.getConsoleSender().sendMessage("[CE][PDC] ${key.namespace}:${key.key} (tipo no STRING o nulo)")
@@ -432,15 +430,20 @@ class CraftEngineImpl(
         }
 
         // Sequence System
-        val nearby = loc.world.getNearbyEntities(loc, 0.5, 1.0, 0.5)
+        val center = loc.clone().add(0.5, 0.5, 0.5)
+        val nearby = loc.world.getNearbyEntities(center, 1.5, 1.5, 1.5)
+
         for (entity in nearby) {
-            try {
-                val furniture = CraftEngineFurniture.getLoadedFurnitureByBaseEntity(entity)
-                if (furniture != null && entity.isValid && !entity.isDead) {
-                    CraftEngineFurniture.remove(entity)
-                }
-            } catch (_: Exception) {
+            if (!isPossibleFurnitureEntity(entity) || !entity.isValid || entity.isDead) {
                 continue
+            }
+            if (entity.location.block != loc.block) { continue }
+
+            val furniture = CraftEngineFurniture.getLoadedFurnitureByBaseEntity(entity)
+            if (furniture != null && entity.isValid && !entity.isDead) {
+                CraftEngineFurniture.remove(entity)
+
+                return
             }
         }
         if (loc.block.type != org.bukkit.Material.AIR) {

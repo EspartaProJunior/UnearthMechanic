@@ -1,7 +1,5 @@
 package dev.wuason.unearthMechanic.system.compatibilities.or
 
-import dev.lone.itemsadder.api.CustomFurniture
-import dev.wuason.libs.adapter.Adapter
 import dev.wuason.libs.adapter.AdapterComp
 import dev.wuason.libs.adapter.AdapterData
 import dev.wuason.unearthMechanic.UnearthMechanic
@@ -11,7 +9,6 @@ import dev.wuason.unearthMechanic.system.ILiveTool
 import dev.wuason.unearthMechanic.system.StageData
 import dev.wuason.unearthMechanic.system.StageManager
 import dev.wuason.unearthMechanic.system.compatibilities.ICompatibility
-import dev.wuason.unearthMechanic.system.compatibilities.nexo.NexoImpl
 import dev.wuason.unearthMechanic.utils.Utils
 import io.th0rgal.oraxen.api.OraxenBlocks
 import io.th0rgal.oraxen.api.OraxenFurniture
@@ -25,11 +22,9 @@ import io.th0rgal.oraxen.api.events.stringblock.OraxenStringBlockInteractEvent
 import io.th0rgal.oraxen.utils.drops.Drop
 import org.bukkit.Bukkit
 import org.bukkit.Location
-import org.bukkit.NamespacedKey
 import org.bukkit.block.Block
 import org.bukkit.block.BlockFace
 import org.bukkit.entity.Entity
-import org.bukkit.entity.ItemFrame
 import org.bukkit.entity.Player
 import org.bukkit.event.Event
 import org.bukkit.event.EventHandler
@@ -372,16 +367,17 @@ class OraxenImpl(
             breakFurniture(event.baseEntity, player, event.mechanic.itemID)
         }
 
-        val nearby = loc.world.getNearbyEntities(loc, 0.5, 1.0, 0.5)
+        val center = loc.clone().add(0.5, 0.5, 0.5)
+        val nearby = loc.world.getNearbyEntities(center, 1.5, 1.5, 1.5)
 
         for (entity in nearby) {
-            try {
-                val furniture = OraxenFurniture.isFurniture(entity)
-                if (furniture != null && entity.isValid && !entity.isDead) {
-                    OraxenFurniture.remove(loc,player)
-                }
-            } catch (_: Exception) {
-                continue
+            if (entity.location.block != loc.block) { continue }
+
+            val furniture = OraxenFurniture.isFurniture(entity)
+            if (furniture != null && entity.isValid && !entity.isDead) {
+                OraxenFurniture.remove(loc,player)
+
+                return
             }
         }
 

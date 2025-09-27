@@ -16,9 +16,11 @@ import dev.wuason.unearthMechanic.system.ILiveTool
 import dev.wuason.unearthMechanic.system.StageData
 import dev.wuason.unearthMechanic.system.StageManager
 import dev.wuason.unearthMechanic.system.compatibilities.ICompatibility
+import dev.wuason.unearthMechanic.system.compatibilities.ce.CraftEngineImpl
 import dev.wuason.unearthMechanic.utils.Utils
-import io.papermc.paper.command.brigadier.argument.ArgumentTypes.entity
+import net.momirealms.craftengine.bukkit.api.CraftEngineFurniture
 import org.bukkit.Bukkit
+import org.bukkit.Color
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
@@ -37,6 +39,7 @@ import org.bukkit.event.block.Action
 import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
+import org.bukkit.inventory.meta.LeatherArmorMeta
 import org.bukkit.persistence.PersistentDataType
 import java.util.Collections
 import java.util.UUID
@@ -154,20 +157,22 @@ class ItemsAdderImpl(
     }
 
     override fun isValid(loc: Location, expectedAdapterId: String?): Boolean {
-        val world = loc.world ?: return false
-        val nearby = world.getNearbyEntities(loc, 0.5, 1.0, 0.5)
+        //Bukkit.getConsoleSender().sendMessage("[UM] webo asao "+loc.block.type)
 
-        for (entity in nearby) {
-            try {
-                if(entity.isValid && !entity.isDead ){
+        val nearby = loc.world?.getNearbyEntities(loc, 1.0, 1.0, 1.0)
+        nearby?.let {
+            for (entity in nearby) {
+                if (isPossibleFurnitureEntity(entity) && entity.isValid && !entity.isDead && entity.location.block == loc.block) {
+                    //Bukkit.getConsoleSender().sendMessage("[UM] isPossibleFurnitureEntity(entity)")
                     return true
                 }
-            } catch (_: Exception) {
-                continue
             }
         }
 
-        if (loc.block.type != Material.AIR) return true
+        if (loc.block.type != Material.AIR){
+            //Bukkit.getConsoleSender().sendMessage("[UM] loc.block.type != Material.AIR")
+            return true
+        }
 
         return false
     }
@@ -262,8 +267,21 @@ class ItemsAdderImpl(
             val key = NamespacedKey("itemsadder", "placeable_entity_item")
             val searchLoc = targetLoc ?: player.location
 
-            val furniture = player.world.getNearbyEntities(searchLoc, 1.5, 1.5, 1.5)
+            val nearby = player.world.getNearbyEntities(searchLoc, 1.5, 1.5, 1.5)
+            for (entity in nearby) {
+
+
+                entity?.let {
+                    if(isPossibleFurnitureEntity(entity)){
+                        clearRemoving(it.location.block.location)
+                    }
+                }
+            }
+
+            /*val furniture = player.world.getNearbyEntities(searchLoc, 1.5, 1.5, 1.5)
                 .filterIsInstance<ItemFrame>()
+                .filterIsInstance<ItemDisplay>()
+                .filterIsInstance<ArmorStand>()
                 .filter { frame ->
                     frame.persistentDataContainer.get(key, PersistentDataType.STRING) == idPlaced
                 }
@@ -272,7 +290,7 @@ class ItemsAdderImpl(
             furniture?.let {
                 clearRemoving(it.location.block.location)
                 //Bukkit.getConsoleSender().sendMessage("[DEBUG] Furniture desbloqueado en ${it.location.block.location}")
-            }
+            }*/
         }, 3L)
     }
 
@@ -453,27 +471,26 @@ class ItemsAdderImpl(
             setRemoving(event.bukkitEntity.location.block.location)
 
             //Bukkit.getConsoleSender().sendMessage("[IA] Furniture removido en $loc")
-            val uuid = event.bukkitEntity.uniqueId
+            //val uuid = event.bukkitEntity.uniqueId
             removeStageData(event.bukkitEntity.location.block.location)
             event.furniture?.remove(false)
             return
         }
 
         // Sequence System
-        /*val world = loc.block.location.world ?: return
-        val entities = world.getNearbyEntities(loc.block.location, 0.5, 1.0, 0.5)
-        entities
-            .filter { isPossibleFurnitureEntity(it) }
-            .forEach { entity ->
-                try {
-                    val furniture = CustomFurniture.byAlreadySpawned(entity)
-                    furniture?.remove(false)
-                } catch (_: Exception) { }
-            }*/
+        val center = loc.clone().add(0.5, 0.5, 0.5)
+        val nearby = loc.world.getNearbyEntities(center, 1.5, 1.5, 1.5)
 
-        try {
-            CustomFurniture.byAlreadySpawned(loc.block)?.remove(false)
-        } catch (_: Exception) {
+        for (entity in nearby) {
+            if (!isPossibleFurnitureEntity(entity) || !entity.isValid || entity.isDead) {
+                continue
+            }
+            if (entity.location.block != loc.block) { continue }
+
+            val furniture = CustomFurniture.byAlreadySpawned(entity)
+            furniture?.remove(false)
+
+            return
         }
 
         if (loc.block.type != org.bukkit.Material.AIR) {
