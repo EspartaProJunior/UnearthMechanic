@@ -4,43 +4,42 @@ import dev.wuason.libs.adapter.AdapterComp
 import dev.wuason.libs.adapter.AdapterData
 import dev.wuason.unearthMechanic.UnearthMechanic
 import dev.wuason.unearthMechanic.UnearthMechanicPlugin
-import dev.wuason.unearthMechanic.config.*
+import dev.wuason.unearthMechanic.config.IBlockStage
+import dev.wuason.unearthMechanic.config.IFurnitureStage
+import dev.wuason.unearthMechanic.config.IGeneric
+import dev.wuason.unearthMechanic.config.IStage
 import dev.wuason.unearthMechanic.system.ILiveTool
 import dev.wuason.unearthMechanic.system.StageData
 import dev.wuason.unearthMechanic.system.StageManager
 import dev.wuason.unearthMechanic.system.compatibilities.ICompatibility
 import dev.wuason.unearthMechanic.utils.Utils
+import net.momirealms.craftengine.bukkit.api.BukkitAdaptors
 import net.momirealms.craftengine.bukkit.api.CraftEngineBlocks
 import net.momirealms.craftengine.bukkit.api.CraftEngineFurniture
-import net.momirealms.craftengine.bukkit.api.event.CustomBlockBreakEvent
-import net.momirealms.craftengine.bukkit.api.event.CustomBlockInteractEvent
-import net.momirealms.craftengine.bukkit.api.event.FurnitureBreakEvent
-import net.momirealms.craftengine.bukkit.api.event.FurnitureInteractEvent
-import net.momirealms.craftengine.bukkit.api.event.FurniturePlaceEvent
+import net.momirealms.craftengine.bukkit.api.event.*
+import net.momirealms.craftengine.core.block.ImmutableBlockState
+import net.momirealms.craftengine.core.block.UpdateOption
+import net.momirealms.craftengine.core.block.properties.Property
+import net.momirealms.craftengine.core.block.properties.type.DoubleBlockHalf
+import net.momirealms.craftengine.core.entity.furniture.AnchorType
 import net.momirealms.craftengine.core.entity.player.InteractionHand
+import net.momirealms.craftengine.core.util.Key
 import net.momirealms.craftengine.libraries.nbt.CompoundTag
 import org.bukkit.Bukkit
 import org.bukkit.Location
+import org.bukkit.Material
 import org.bukkit.block.Block
 import org.bukkit.block.BlockFace
-import org.bukkit.entity.Entity
-import org.bukkit.entity.ItemFrame
-import org.bukkit.entity.Player
+import org.bukkit.block.data.*
+import org.bukkit.block.data.type.Door
+import org.bukkit.entity.*
 import org.bukkit.event.Event
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.inventory.ItemStack
-
-import net.momirealms.craftengine.core.util.Key
-import net.momirealms.craftengine.core.entity.furniture.AnchorType
-import org.bukkit.entity.ArmorStand
-import org.bukkit.entity.BlockDisplay
-import org.bukkit.entity.Interaction
-import org.bukkit.entity.ItemDisplay
-import org.bukkit.entity.TextDisplay
 import org.bukkit.persistence.PersistentDataType
-import java.util.Collections
-import java.util.UUID
+import java.util.*
+
 
 class CraftEngineImpl(
     pluginName: String,
@@ -52,6 +51,8 @@ class CraftEngineImpl(
     adapterComp
 ) {
     private val removedLocations = Collections.synchronizedSet(mutableSetOf<Location>())
+
+    private val lastBlockData = mutableMapOf<Location, BlockData>()
 
     override fun isRemoving(location: Location): Boolean {
         return removedLocations.contains(location)
@@ -177,6 +178,7 @@ class CraftEngineImpl(
     fun onInteractBlock(event: CustomBlockInteractEvent) {
         if (event.hand() != InteractionHand.MAIN_HAND) return
         val adapterId = "ce:" + event.customBlock().id()
+        //Bukkit.getConsoleSender().sendMessage("[DEBUG] onInteractBlock")
 
         stageManager.interact(event.player(),
             adapterId,
@@ -251,6 +253,10 @@ class CraftEngineImpl(
 
     private fun breakBlock(location: Location?) {
         if (location != null) {
+            val data = location.block.blockData
+            lastBlockData[location.block.location.block.location] = data
+            //Bukkit.getConsoleSender().sendMessage("💾 [DEBUG] Guardado BlockData en $location: $data")
+
             CraftEngineBlocks.remove(location.block)
         }
     }
@@ -298,6 +304,16 @@ class CraftEngineImpl(
         }
     }
 
+    private fun createDoorProperties(door: Door): CompoundTag {
+        return CompoundTag().apply {
+            putString("facing", door.facing.name.lowercase())
+            putString("half", if (door.half == Bisected.Half.BOTTOM) "lower" else "upper")
+            putString("hinge", door.hinge.name.lowercase())
+            putBoolean("open", door.isOpen)
+            putBoolean("powered", door.isPowered)
+        }
+    }
+
     private fun handleBlockStage(
         player: Player,
         itemAdapterData: AdapterData,
@@ -307,12 +323,123 @@ class CraftEngineImpl(
         generic: IGeneric,
         stage: IStage
     ) {
-        CraftEngineBlocks.place(
-            loc,
-            Key.of(itemAdapterData.id.removePrefix("ce:")),
-            CompoundTag(),
-            false
-        )
+        //Bukkit.getConsoleSender().sendMessage("💾 [DEBUG] handleBlockStage $loc:")
+        val data = loc.block.blockData
+        lastBlockData[loc.block.location.block.location] = data
+
+        val state1 = lastBlockData[loc]
+        if(state1 != null){
+            val previousBlockState : ImmutableBlockState? = CraftEngineBlocks.getCustomBlockState(state1);
+            if (previousBlockState == null) {
+                val block = loc.block
+                if (CraftEngineBlocks.isCustomBlock(block)) return;
+                val blockData = block.blockData
+                if (blockData is Door) {
+                    val customBlock = CraftEngineBlocks.byId(Key.of(itemAdapterData.id.removePrefix("ce:"))) ?: return
+                    if (customBlock == null) return;
+                    val otherHalf = when (blockData.half) {
+                        Bisected.Half.BOTTOM -> block.getRelative(BlockFace.UP)
+                        Bisected.Half.TOP -> block.getRelative(BlockFace.DOWN)
+                    }
+                    val relativeDoor = otherHalf.blockData as? Door ?: return
+                    //Bukkit.getConsoleSender().sendMessage("💾 [DEBUG] previousBlockState == null && blockData is Door")
+
+                    block.setType(Material.AIR, false)
+                    otherHalf.setType(Material.AIR, false)
+
+                    val properties1 = createDoorProperties(blockData)
+                    val newState1 = customBlock.getBlockState(properties1)
+                    CraftEngineBlocks.place(block.location, newState1, UpdateOption.UPDATE_NONE, false)
+
+                    val properties2 = createDoorProperties(relativeDoor)
+                    val newState2 = customBlock.getBlockState(properties2)
+                    CraftEngineBlocks.place(otherHalf.location, newState2, UpdateOption.UPDATE_NONE, false)
+                }else{
+                    //Bukkit.getConsoleSender().sendMessage("💾 [DEBUG] previousBlockState == null && !(blockData is Door)")
+                    CraftEngineBlocks.place(
+                        loc,
+                        Key.of(itemAdapterData.id.removePrefix("ce:")),
+                        CompoundTag(),
+                        false
+                    )
+                }
+
+                return
+            }
+
+            var doubleBlockProperty : Property<*>? = null;
+            for (property in previousBlockState.properties) {
+                if (property.valueClass() == DoubleBlockHalf::class.java) {
+                    doubleBlockProperty = property
+                    break
+                }
+            }
+
+            if (doubleBlockProperty != null) {
+                //Bukkit.getConsoleSender().sendMessage("💾 [DEBUG] doubleBlockProperty != null")
+                val half = previousBlockState.get(doubleBlockProperty) as DoubleBlockHalf;
+                when(half) {
+                    DoubleBlockHalf.UPPER -> {
+                        val previousLowerState = ImmutableBlockState.with(previousBlockState, doubleBlockProperty, DoubleBlockHalf.LOWER)
+
+                        val newUpperState = CraftEngineBlocks.byId(
+                            Key.of(itemAdapterData.id.removePrefix("ce:"))
+                        )?.getPossibleStates(previousBlockState.propertiesNbt())?.firstOrNull()
+                        val newLowerState = CraftEngineBlocks.byId(
+                            Key.of(itemAdapterData.id.removePrefix("ce:"))
+                        )?.getPossibleStates(previousLowerState.propertiesNbt())?.firstOrNull()
+                        val lowerLoc = Location(loc.world, loc.x, loc.y - 1, loc.z)
+
+                        //CraftEngineBlocks.remove(loc.block)
+                        //CraftEngineBlocks.remove(lowerLoc.block)
+
+                        if (newUpperState == null || newLowerState == null) return;
+                        BukkitAdaptors.adapt(loc.world).setBlockAt(
+                            loc.blockX, loc.blockY, loc.blockZ, newUpperState, 512)
+                        BukkitAdaptors.adapt(lowerLoc.world).setBlockAt(
+                            lowerLoc.blockX, lowerLoc.blockY, lowerLoc.blockZ, newLowerState, UpdateOption.UPDATE_ALL.flags())
+                    }
+                    DoubleBlockHalf.LOWER -> {
+                        val previousUpperState = ImmutableBlockState.with(previousBlockState, doubleBlockProperty, DoubleBlockHalf.UPPER)
+
+                        val newUpperState = CraftEngineBlocks.byId(
+                            Key.of(itemAdapterData.id.removePrefix("ce:"))
+                        )?.getPossibleStates(previousUpperState.propertiesNbt())?.firstOrNull()
+                        val newLowerState = CraftEngineBlocks.byId(
+                            Key.of(itemAdapterData.id.removePrefix("ce:"))
+                        )?.getPossibleStates(previousBlockState.propertiesNbt())?.firstOrNull()
+                        val upperLoc = Location(loc.world, loc.x, loc.y + 1, loc.z)
+
+                        if (newUpperState == null || newLowerState == null) return;
+                        BukkitAdaptors.adapt(loc.world).setBlockAt(loc.blockX, loc.blockY, loc.blockZ, newLowerState, 512)
+                        BukkitAdaptors.adapt(loc.world).setBlockAt(
+                            upperLoc.blockX, upperLoc.blockY, upperLoc.blockZ, newUpperState, UpdateOption.UPDATE_ALL.flags())
+                    }
+                }
+            }else{
+                //Bukkit.getConsoleSender().sendMessage("💾 [DEBUG] doubleBlockProperty == null")
+                val properties = previousBlockState.propertiesNbt()
+                if(properties != null){
+                    //CraftEngineBlocks.remove(loc.block)
+
+                    val newBlockState = CraftEngineBlocks.byId(
+                        Key.of(itemAdapterData.id.removePrefix("ce:"))
+                    )?.getPossibleStates(properties)?.firstOrNull();
+                    newBlockState?.let{ state ->
+                        CraftEngineBlocks.place(loc, state, false
+                        )
+                    }
+                }
+            }
+        }else{
+            //Bukkit.getConsoleSender().sendMessage("💾 [DEBUG] state1 == null")
+            CraftEngineBlocks.place(
+                loc,
+                Key.of(itemAdapterData.id.removePrefix("ce:")),
+                CompoundTag(),
+                false
+            )
+        }
         //placeBlock(itemAdapterData.id, loc)
     }
 
@@ -413,9 +540,10 @@ class CraftEngineImpl(
         generic: IGeneric,
         stage: IStage
     ) {
+        //Bukkit.getConsoleSender().sendMessage("🚨 [DEBUG] Se llamó a handleRemove con loc=$loc y event=${event::class.simpleName}")
+
         if (event is CustomBlockInteractEvent) {
-            //breakBlock(loc)
-            CraftEngineBlocks.remove(event.bukkitBlock())
+            breakBlock(loc)
             return
         }
         if (event is FurnitureInteractEvent) {

@@ -373,11 +373,11 @@ class StageManager(private val core: UnearthMechanic) : IStageManager {
             } else {
                 val c: ICompatibility =
                     getCompatibilityByAdapterId(it) ?: throw NullPointerException("Compatibility not found for $it")
-                compatibility.handleRemove(player, event, loc, toolUsed, generic, stage)
+                c.handleRemove(player, event, loc, toolUsed, generic, stage)
                 //Bukkit.getConsoleSender().sendMessage("[UM] handleRemove2 aplicado para $furnitureUuid en $currentTick")
 
                 c.handleStage(player, it, event, loc, toolUsed, generic, stage)
-                //Bukkit.getConsoleSender().sendMessage("[UM] handleStage aplicado para ${stage.getAdapterData()?.adapter?.type}:${stage.getAdapterData()?.id} en ${Bukkit.getCurrentTick()}")
+                //Bukkit.getConsoleSender().sendMessage("[UM] handleStage2 aplicado para ${stage.getAdapterData()?.adapter?.type}:${stage.getAdapterData()?.id} en ${Bukkit.getCurrentTick()}")
                 //Bukkit.getConsoleSender().sendMessage("[UM] handleStage2 aplicado para $furnitureUuid en $currentTick")
 
                 if (stage is Stage && stage.getSequenceStages()?.isNotEmpty() == true) {
@@ -525,7 +525,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager {
             } else {
                 val c: ICompatibility =
                     getCompatibilityByAdapterId(it) ?: throw NullPointerException("Compatibility not found for $it")
-                compatibility.handleRemove(player, event, loc, toolUsed, generic, stage)
+                c.handleRemove(player, event, loc, toolUsed, generic, stage)
                 //Bukkit.getConsoleSender().sendMessage("[UM] handleRemove2 aplicado para $furnitureUuid en $currentTick")
 
                 c.handleSequenceStage(player, it, event, loc, toolUsed, generic, stage)

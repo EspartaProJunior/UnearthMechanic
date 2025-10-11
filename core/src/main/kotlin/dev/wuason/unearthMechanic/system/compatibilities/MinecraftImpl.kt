@@ -3,6 +3,7 @@ package dev.wuason.unearthMechanic.system.compatibilities
 import dev.wuason.libs.adapter.Adapter
 import dev.wuason.libs.adapter.AdapterComp
 import dev.wuason.libs.adapter.AdapterData
+import dev.wuason.unearthMechanic.UnearthMechanic
 import dev.wuason.unearthMechanic.UnearthMechanicPlugin
 import dev.wuason.unearthMechanic.config.*
 import dev.wuason.unearthMechanic.system.ILiveTool
@@ -14,6 +15,12 @@ import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.block.Block
 import org.bukkit.block.BlockFace
+import org.bukkit.block.data.Bisected
+import org.bukkit.block.data.BlockData
+import org.bukkit.block.data.Directional
+import org.bukkit.block.data.Orientable
+import org.bukkit.block.data.Rotatable
+import org.bukkit.block.data.type.Stairs
 import org.bukkit.entity.Player
 import org.bukkit.event.Event
 import org.bukkit.event.EventHandler
@@ -34,6 +41,8 @@ class MinecraftImpl(
     adapterComp
 ) {
     private val removedLocations = Collections.synchronizedSet(mutableSetOf<Location>())
+
+    private val lastBlockData = mutableMapOf<Location, BlockData>()
 
     override fun isRemoving(location: Location): Boolean {
         return removedLocations.contains(location)
@@ -82,6 +91,23 @@ class MinecraftImpl(
         }
     }
 
+    fun copyOrientationProperties(from: BlockData, to: BlockData): BlockData {
+        try {
+            if (from is Directional && to is Directional) to.facing = from.facing
+            if (from is Rotatable && to is Rotatable) to.rotation = from.rotation
+            if (from is Orientable && to is Orientable) to.axis = from.axis
+            if (from is Bisected && to is Bisected) to.half = from.half
+            if (from is Stairs && to is Stairs) {
+                to.facing = from.facing
+                to.half = from.half
+            }
+        } catch (e: Exception) {
+            //Bukkit.getConsoleSender().sendMessage("❌ [DEBUG] Error aplicando orientación: ${e.message}")
+        }
+
+        return to
+    }
+
     private fun handleBlockStage(
         player: Player,
         itemAdapterData: AdapterData,
@@ -92,6 +118,28 @@ class MinecraftImpl(
         stage: IStage
     ) {
         loc.block.type = Material.getMaterial(itemAdapterData.id.uppercase(Locale.ENGLISH)) ?: return
+
+        val state1 = lastBlockData[loc]
+        val keyLoc = loc.block.location
+
+        state1?.let { it1 ->
+            Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
+                val newBlock = keyLoc.block
+                val state2 = newBlock.blockData
+
+                //Bukkit.getConsoleSender().sendMessage("📦 [2DEBUG] Block colocado en $loc: ${newBlock.type}")
+                //Bukkit.getConsoleSender().sendMessage("🔎 [2DEBUG] BlockData actual: ${state2}")
+                //Bukkit.getConsoleSender().sendMessage("📄 [2DEBUG] BlockData original: ${it1}")
+
+                val combinedData = it1?.let { copyOrientationProperties(it, state2.clone()) } ?: state2
+
+                //Bukkit.getConsoleSender().sendMessage("🛠️ [2DEBUG] BlockData combinado: ${combinedData}")
+
+                newBlock.blockData = combinedData
+                val result = newBlock.state.update(true, false)
+                //Bukkit.getConsoleSender().sendMessage("✅ [DEBUG] ¿Bloque actualizado?: $result")
+            }, 2L)
+        }
     }
 
     private fun handleFurnitureStage(
@@ -150,6 +198,10 @@ class MinecraftImpl(
         stage: IStage
     ) {
         if (event is PlayerInteractEvent) {
+            val data = loc.block.blockData
+            lastBlockData[loc.block.location.block.location] = data
+            //Bukkit.getConsoleSender().sendMessage("💾 [DEBUG2] Guardado BlockData en $loc: $data")
+
             loc.block.type = Material.AIR
         }
     }

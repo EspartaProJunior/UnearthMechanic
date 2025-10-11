@@ -18,7 +18,7 @@ val targetJavaVersion = 21
 allprojects {
 
     project.group = "dev.wuason"
-    project.version = "0.1.12f"
+    project.version = "0.1.12g"
 
     //apply kotlin jvm plugin
     apply(plugin = "kotlin")
@@ -57,6 +57,10 @@ allprojects {
         }
         maven("https://repo.momirealms.net/releases/") {
             name = "craftengine-releases"
+        }
+
+        maven("https://repo.techmc.es/releases") {
+            name = "techmc-repository"
         }
         
     }
@@ -155,7 +159,7 @@ project(":api") {
                 skipDeprecated.set(false)
                 reportUndocumented.set(true)
                 skipEmptyPackages.set(true)
-                jdkVersion.set(17)
+                jdkVersion.set(21)
                 noStdlibLink.set(false)
                 noJdkLink.set(false)
                 languageVersion.set("1.7")
@@ -195,16 +199,17 @@ project(":core") {
 subprojects {
     dependencies {
         compileOnly("io.papermc.paper:paper-api:1.20.6-R0.1-SNAPSHOT")
-        compileOnly("com.github.Wuason6x9:mechanics:1.0.3.8")
+        compileOnly("dev.wuason:mechanics:1.0.4.1")
         compileOnly("io.th0rgal:oraxen:1.189.0") // 1.174.0 supported version
         compileOnly("dev.lone:api-itemsadder:4.0.2-beta-release-11")
         compileOnly("com.sk89q.worldguard:worldguard-bukkit:7.0.12-SNAPSHOT")
         compileOnly("com.nexomc:nexo:0.4.0:dev")
 
-        compileOnly("net.momirealms:craft-engine-core:0.0.60")
-        compileOnly("net.momirealms:craft-engine-bukkit:0.0.60")
+        compileOnly("net.momirealms:craft-engine-core:0.0.64")
+        compileOnly("net.momirealms:craft-engine-bukkit:0.0.64")
 
         compileOnly("net.luckperms:api:5.4")
+        compileOnly("dev.wuason:adapter:1.0.6.2")
     }
 }
 
