@@ -1,14 +1,19 @@
 package dev.wuason.unearthMechanic
 
 import dev.wuason.mechanics.utils.AdventureUtils
-import dev.wuason.unearthMechanic.compatibilities.LuckPermsComp
-import dev.wuason.unearthMechanic.compatibilities.LuckPermsPlugin
-import dev.wuason.unearthMechanic.compatibilities.WorldGuardComp
-import dev.wuason.unearthMechanic.compatibilities.WorldGuardPlugin
+import dev.wuason.unearthMechanic.compatibilities.craftengine.CraftEngineComp
+import dev.wuason.unearthMechanic.compatibilities.craftengine.CraftEnginePlugin
+import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.ColumnBlockBehavior
+import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.WindowConnectTileBehavior
+import dev.wuason.unearthMechanic.compatibilities.luckperms.LuckPermsComp
+import dev.wuason.unearthMechanic.compatibilities.luckperms.LuckPermsPlugin
+import dev.wuason.unearthMechanic.compatibilities.worldguard.WorldGuardComp
+import dev.wuason.unearthMechanic.compatibilities.worldguard.WorldGuardPlugin
 import dev.wuason.unearthMechanic.config.ConfigManager
 import dev.wuason.unearthMechanic.system.IStageManager
 import dev.wuason.unearthMechanic.system.StageManager
-import net.luckperms.api.LuckPerms
+import net.momirealms.craftengine.core.block.behavior.BlockBehaviors
+import net.momirealms.craftengine.core.util.Key
 import org.bukkit.Bukkit
 
 class UnearthMechanic : UnearthMechanicPlugin() {
@@ -37,12 +42,15 @@ class UnearthMechanic : UnearthMechanicPlugin() {
     private lateinit var commandManager: CommandManager
     private lateinit var configManager: ConfigManager
     private lateinit var stageManager: StageManager
+
     private lateinit var worldGuardComp: WorldGuardComp
     private lateinit var luckPermsComb: LuckPermsComp
+    private lateinit var craftEngineComb: CraftEngineComp
 
     override fun onMechanicLoad() {
         if (WorldGuardPlugin.isWorldGuardLoaded()) worldGuardComp = WorldGuardComp(this)
         if(LuckPermsPlugin.isLuckPermsLoaded()) luckPermsComb = LuckPermsComp(this)
+        if(CraftEnginePlugin.isCraftEngineLoaded()) craftEngineComb = CraftEngineComp(this)
     }
 
     override fun onMechanicEnable() {
@@ -63,6 +71,19 @@ class UnearthMechanic : UnearthMechanicPlugin() {
         commandManager.loadCommands()
 
         stageManager = StageManager(this)
+        if(CraftEnginePlugin.isCraftEngineEnabled()){
+            BlockBehaviors.register(
+                Key.from("painter:column_block"),
+                ColumnBlockBehavior.FACTORY
+            )
+            BlockBehaviors.register(
+                Key.from("painter:window_connect_tile"),
+                WindowConnectTileBehavior.FACTORY
+            )
+
+            logger.info("Registered ColumnBlockBehavior for painter:column_block")
+            logger.info("Registered WindowConnectTileBehavior for painter:window_connect_tile")
+        }
         AdventureUtils.sendMessagePluginConsole(this, "<gray>-----------------------------------------------------------")
         AdventureUtils.sendMessagePluginConsole(this, "<gray>-----------------------------------------------------------")
 
@@ -90,6 +111,10 @@ class UnearthMechanic : UnearthMechanicPlugin() {
 
     fun getLuckPermsComb(): LuckPermsComp {
         return luckPermsComb
+    }
+
+    fun getCraftEngineComb(): CraftEngineComp {
+        return craftEngineComb
     }
 
     fun checkCompatibility(): String? {

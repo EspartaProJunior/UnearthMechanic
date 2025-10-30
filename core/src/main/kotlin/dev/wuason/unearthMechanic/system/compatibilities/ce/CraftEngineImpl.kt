@@ -324,10 +324,10 @@ class CraftEngineImpl(
         stage: IStage
     ) {
         //Bukkit.getConsoleSender().sendMessage("💾 [DEBUG] handleBlockStage $loc:")
-        val data = loc.block.blockData
-        lastBlockData[loc.block.location.block.location] = data
+        //val data = loc.block.blockData
+        //lastBlockData[loc.block.location.block.location] = data
 
-        val state1 = lastBlockData[loc]
+        val state1 = loc.block.blockData //lastBlockData[loc]
         if(state1 != null){
             val previousBlockState : ImmutableBlockState? = CraftEngineBlocks.getCustomBlockState(state1);
             if (previousBlockState == null) {
@@ -376,7 +376,7 @@ class CraftEngineImpl(
             }
 
             if (doubleBlockProperty != null) {
-                //Bukkit.getConsoleSender().sendMessage("💾 [DEBUG] doubleBlockProperty != null")
+                Bukkit.getConsoleSender().sendMessage("💾 [DEBUG] doubleBlockProperty != null")
                 val half = previousBlockState.get(doubleBlockProperty) as DoubleBlockHalf;
                 when(half) {
                     DoubleBlockHalf.UPPER -> {
@@ -390,8 +390,8 @@ class CraftEngineImpl(
                         )?.getPossibleStates(previousLowerState.propertiesNbt())?.firstOrNull()
                         val lowerLoc = Location(loc.world, loc.x, loc.y - 1, loc.z)
 
-                        //CraftEngineBlocks.remove(loc.block)
-                        //CraftEngineBlocks.remove(lowerLoc.block)
+                        CraftEngineBlocks.remove(loc.block)
+                        CraftEngineBlocks.remove(lowerLoc.block)
 
                         if (newUpperState == null || newLowerState == null) return;
                         BukkitAdaptors.adapt(loc.world).setBlockAt(
@@ -417,7 +417,7 @@ class CraftEngineImpl(
                     }
                 }
             }else{
-                //Bukkit.getConsoleSender().sendMessage("💾 [DEBUG] doubleBlockProperty == null")
+                Bukkit.getConsoleSender().sendMessage("💾 [DEBUG] doubleBlockProperty == null")
                 val properties = previousBlockState.propertiesNbt()
                 if(properties != null){
                     //CraftEngineBlocks.remove(loc.block)
@@ -432,7 +432,7 @@ class CraftEngineImpl(
                 }
             }
         }else{
-            //Bukkit.getConsoleSender().sendMessage("💾 [DEBUG] state1 == null")
+            Bukkit.getConsoleSender().sendMessage("💾 [DEBUG] state1 == null")
             CraftEngineBlocks.place(
                 loc,
                 Key.of(itemAdapterData.id.removePrefix("ce:")),

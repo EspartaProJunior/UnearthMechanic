@@ -18,7 +18,7 @@ val targetJavaVersion = 21
 allprojects {
 
     project.group = "dev.wuason"
-    project.version = "0.1.12g"
+    project.version = "0.1.12h"
 
     //apply kotlin jvm plugin
     apply(plugin = "kotlin")
@@ -205,8 +205,8 @@ subprojects {
         compileOnly("com.sk89q.worldguard:worldguard-bukkit:7.0.12-SNAPSHOT")
         compileOnly("com.nexomc:nexo:0.4.0:dev")
 
-        compileOnly("net.momirealms:craft-engine-core:0.0.64")
-        compileOnly("net.momirealms:craft-engine-bukkit:0.0.64")
+        compileOnly("net.momirealms:craft-engine-core:0.0.64.13")
+        compileOnly("net.momirealms:craft-engine-bukkit:0.0.64.13")
 
         compileOnly("net.luckperms:api:5.4")
         compileOnly("dev.wuason:adapter:1.0.6.2")

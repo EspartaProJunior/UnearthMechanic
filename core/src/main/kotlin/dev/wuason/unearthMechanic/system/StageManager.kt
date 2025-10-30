@@ -1,11 +1,10 @@
 package dev.wuason.unearthMechanic.system
 
-import dev.lone.itemsadder.api.CustomFurniture
 import dev.wuason.libs.adapter.Adapter
 import dev.wuason.libs.adapter.AdapterData
 import dev.wuason.unearthMechanic.UnearthMechanic
-import dev.wuason.unearthMechanic.compatibilities.LuckPermsPlugin
-import dev.wuason.unearthMechanic.compatibilities.WorldGuardPlugin
+import dev.wuason.unearthMechanic.compatibilities.luckperms.LuckPermsPlugin
+import dev.wuason.unearthMechanic.compatibilities.worldguard.WorldGuardPlugin
 import dev.wuason.unearthMechanic.config.*
 import dev.wuason.unearthMechanic.events.ApplyStageEvent
 import dev.wuason.unearthMechanic.events.FakePlayerInteractEvent

@@ -1,0 +1,385 @@
+package dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior
+
+import net.momirealms.craftengine.bukkit.api.BukkitAdaptors
+import net.momirealms.craftengine.bukkit.block.behavior.BukkitBlockBehavior
+import net.momirealms.craftengine.bukkit.util.BlockStateUtils
+import net.momirealms.craftengine.bukkit.world.BukkitWorld
+import net.momirealms.craftengine.core.block.CustomBlock
+import net.momirealms.craftengine.core.block.ImmutableBlockState
+import net.momirealms.craftengine.core.block.UpdateOption
+import net.momirealms.craftengine.core.block.behavior.BlockBehaviorFactory
+import net.momirealms.craftengine.core.block.properties.Property
+import net.momirealms.craftengine.core.item.context.BlockPlaceContext
+import net.momirealms.craftengine.core.registry.Holder
+import net.momirealms.craftengine.core.world.BlockPos
+import net.momirealms.craftengine.core.world.World
+import org.bukkit.Bukkit
+import java.util.concurrent.Callable
+import java.util.concurrent.ConcurrentHashMap
+
+/**
+ * “Window” connection using ONLY the “tile” property.
+ * Values: single, up_left, up, up_right, left, middle, right, down_left, down, down_right
+ */
+class WindowConnectTileBehavior(
+    customBlock: CustomBlock,
+    private val tileProperty: Property<String>
+) : BukkitBlockBehavior(customBlock) {
+
+    //private val log = Bukkit.getLogger()
+
+    // ================== Debounce scheduler ==================
+    companion object {
+        private val pending = ConcurrentHashMap<String, Boolean>()
+        private fun k(w: World, p: BlockPos) = "${w.name()}:${p.x()},${p.y()},${p.z()}"
+
+        private val inBatch: ThreadLocal<Boolean> = ThreadLocal.withInitial { false }
+
+        val FACTORY = Factory()
+        class Factory : BlockBehaviorFactory {
+            override fun create(block: CustomBlock, arguments: Map<String, Any>): WindowConnectTileBehavior {
+                val prop = block.getProperty("tile")
+                    ?: throw IllegalArgumentException("Missing 'tile' property")
+                @Suppress("UNCHECKED_CAST")
+                return WindowConnectTileBehavior(block, prop as Property<String>)
+            }
+        }
+    }
+
+    // ================== Hooks ==================
+    override fun updateShape(thisBlock: Any, args: Array<Any>, superMethod: Callable<Any>): Any {
+        val world = args.getOrNull(3) as? World ?: return superMethod.call()
+        val pos   = args.getOrNull(4) as? BlockPos ?: return superMethod.call()
+        //log.info("[WindowTile] updateShape(): (${world.name()}:${pos.x()},${pos.y()},${pos.z()})")
+
+        val optState = BlockStateUtils.getOptionalCustomBlockState(args[0]) ?: return superMethod.call()
+        val state = optState.get()
+        val newTile = calculateTile(world, pos)
+        //log.info("[WindowTile] updateShape(): APPLY (${world.name()}:${pos.x()},${pos.y()},${pos.z()}) tile='$newTile'")
+
+        return state.with(tileProperty, newTile)
+            .customBlockState()
+            .literalObject()
+    }
+
+    override fun updateStateForPlacement(context: BlockPlaceContext, state: ImmutableBlockState): ImmutableBlockState {
+        val world = context.level
+        val pos   = context.clickedPos
+        //log.info("[WindowTile] updateStateForPlacement(): (${world.name()}:${pos.x()},${pos.y()},${pos.z()}) stateIn=${customBlock.id().asString()}")
+        val newTile = calculateTile(world, pos)
+        //log.info("[WindowTile] updateStateForPlacement(): (${world.name()}:${pos.x()},${pos.y()},${pos.z()}) → tile='$newTile'")
+        return state.with(tileProperty, newTile)
+    }
+
+    override fun onPlace(thisBlock: Any, args: Array<Any>, superMethod: Callable<Any>) {
+        if (inBatch.get() == true) { superMethod.call(); return }
+        //log.info("[WindowTile] onPlace(): args.size=${args.size}")
+        val nmsWorld = args.getOrNull(1) ?: run { superMethod.call(); return }
+        val nmsPos   = args.getOrNull(2) ?: run { superMethod.call(); return }
+
+        val craftWorld = Bukkit.getWorlds().firstOrNull { w ->
+            val handle = w.javaClass.getMethod("getHandle").invoke(w)
+            handle == nmsWorld
+        } ?: run { superMethod.call(); return }
+
+        val x = nmsPos.javaClass.getMethod("getX").invoke(nmsPos) as Int
+        val y = nmsPos.javaClass.getMethod("getY").invoke(nmsPos) as Int
+        val z = nmsPos.javaClass.getMethod("getZ").invoke(nmsPos) as Int
+
+        val ceWorld = BukkitAdaptors.adapt(craftWorld)
+        val cePos   = BlockPos(x, y, z)
+        scheduleNeighborUpdate(ceWorld, cePos, 2L)
+        superMethod.call()
+    }
+
+    override fun onRemove(thisBlock: Any, args: Array<Any>, superMethod: Callable<Any>) {
+        if (inBatch.get() == true) { superMethod.call(); return }
+        //log.info("[WindowTile] onRemove(): args.size=${args.size}")
+        handleRemoval(args); superMethod.call()
+    }
+
+    override fun affectNeighborsAfterRemoval(thisBlock: Any, args: Array<Any>, superMethod: Callable<Any>) {
+        if (inBatch.get() == true) { superMethod.call(); return }
+        //log.info("[WindowTile] affectNeighborsAfterRemoval(): args.size=${args.size}")
+        handleRemoval(args); superMethod.call()
+    }
+
+    private fun handleRemoval(args: Array<Any>) {
+
+        val nmsWorld = args.getOrNull(1) ?: return
+        val nmsPos   = args.getOrNull(2) ?: return
+
+        val craftWorld = Bukkit.getWorlds().firstOrNull { w ->
+            val handle = w.javaClass.getMethod("getHandle").invoke(w)
+            handle == nmsWorld
+        } ?: return
+
+        val x = nmsPos.javaClass.getMethod("getX").invoke(nmsPos) as Int
+        val y = nmsPos.javaClass.getMethod("getY").invoke(nmsPos) as Int
+        val z = nmsPos.javaClass.getMethod("getZ").invoke(nmsPos) as Int
+
+        val ceWorld = BukkitAdaptors.adapt(craftWorld)
+        val cePos   = BlockPos(x, y, z)
+        scheduleNeighborUpdate(ceWorld, cePos, 2L)
+    }
+
+    private fun scheduleNeighborUpdate(world: World, pos: BlockPos, delay: Long) {
+        if (inBatch.get() == true) return
+
+        val key = k(world, pos)
+        if (pending.putIfAbsent(key, true) != null) {
+            //log.info("[WindowTile] scheduleNeighborUpdate(): SKIP dup for $key")
+            return
+        }
+        val plugin = Bukkit.getPluginManager().getPlugin("UnearthMechanic") ?: return
+        //log.info("[WindowTile] scheduleNeighborUpdate(): ($key) +${delay}t")
+        Bukkit.getScheduler().runTaskLater(plugin, Runnable {
+            try { updateNeighbors(world, pos) } finally { pending.remove(key) }
+        }, delay)
+    }
+
+    // ================== Connection logic ==================
+
+    private fun calculateTile(world: World, pos: BlockPos): String {
+        val n = isSame(world, pos.offset(0, 0, -1)) // N = -Z
+        val e = isSame(world, pos.offset(1, 0,  0)) // E = +X
+        val s = isSame(world, pos.offset(0, 0,  1)) // S = +Z
+        val w = isSame(world, pos.offset(-1,0,  0)) // W = -X
+
+        val hasH = e || w
+        val hasV = n || s
+
+        if (hasH) {
+            val family = when {
+                !n && !s -> "down"
+                s && !n  -> "up"
+                n && !s  -> "down"
+                else     -> "middle"
+            }
+            return when {
+                e && w -> when (family) { "up" -> "up"; "down" -> "down"; else -> "middle" }
+                e && !w -> when (family) { "up" -> "up_left"; "down" -> "down_left"; else -> "left" }
+                w && !e -> when (family) { "up" -> "up_right"; "down" -> "down_right"; else -> "right" }
+                else -> "single"
+            }
+        }
+
+        if (!hasH && hasV) {
+            return when {
+                s && !n -> "down_left"   // bloque de arriba
+                n && !s -> "down_right"  // bloque de abajo
+                else    -> "middle"
+            }
+        }
+
+        return "single"
+    }
+
+    private fun isSame(world: World, pos: BlockPos): Boolean {
+        val wrap = world.getBlockAt(pos).blockState() ?: return false
+        val neighborStr = try { wrap.ownerId()?.toString() } catch (_: Throwable) { null }
+        val selfStr     = try { customBlock.id().asString() } catch (_: Throwable) { customBlock.id().toString() }
+        return neighborStr != null && neighborStr == selfStr
+    }
+
+    // ---------------- Robust recalculation with flood-fill ----------------
+
+    private fun ceStateId(state: ImmutableBlockState?): String? {
+        if (state == null) return null
+        val ref = state.owner() as? Holder.Reference<CustomBlock> ?: return null
+        return try { ref.key().location().asString() } catch (_: Throwable) { null }
+    }
+
+    private fun ceFacing(state: ImmutableBlockState?, fallback: String = "south"): String {
+        if (state == null) return fallback
+        return try {
+            state.propertyEntries().entries
+                .firstOrNull { it.key.name() == "facing" }
+                ?.value?.toString()?.lowercase() ?: fallback
+        } catch (_: Throwable) { fallback }
+    }
+
+    private fun getTileNameFor(
+        useAxisZ: Boolean,   // true if the run is north-south (facing NORTH or SOUTH)
+        invertLR: Boolean,   // true if left/right needs to be reversed (EAST or WEST)
+        idx: Int,            // index within the segment 0..len-1
+        len: Int,            // length of the segment
+        family: String       // "up" | "middle" | "down"
+    ): String {
+        val first = idx == 0
+        val last  = idx == len - 1
+
+        return when (family) {
+            "up" -> when {
+                first && last -> "single"
+                first         -> if (invertLR) "up_right" else "up_left"
+                last          -> if (invertLR) "up_left"  else "up_right"
+                else          -> "up"
+            }
+            "down" -> when {
+                first && last -> "single"
+                first         -> if (invertLR) "down_right" else "down_left"
+                last          -> if (invertLR) "down_left"  else "down_right"
+                else          -> "down"
+            }
+            else -> when { // middle
+                first && last -> "single"
+                first         -> if (invertLR) "right" else "left"
+                last          -> if (invertLR) "left"  else "right"
+                else          -> "middle"
+            }
+        }
+    }
+
+
+    private fun updateNeighbors(world: World, origin: BlockPos) {
+        if (world !is BukkitWorld) return
+        val bWorld = org.bukkit.Bukkit.getWorld(world.name()) ?: return
+
+        val originState = world.getBlockAt(origin).customBlockState() ?: return
+        val originId = ceStateId(originState) ?: return
+        val facing = ceFacing(originState, "south")
+
+        // E/W run in Z, N/S run in X
+        val useAxisZ = (facing == "east" || facing == "west")
+        // Left/right inversions by orientation:
+        val invertLR_X = (facing == "north") // for runs in X
+        val invertLR_Z = (facing == "east")  // for runs in Z
+
+        fun sameBlockId(st: ImmutableBlockState?): Boolean = ceStateId(st) == originId
+
+        fun isSameAt(pos: BlockPos): Boolean {
+            val st = world.getBlockAt(pos).customBlockState() ?: return false
+            return sameBlockId(st) && ceFacing(st, facing) == facing
+        }
+
+        fun setTile(p: BlockPos, tile: String) {
+            val state = world.getBlockAt(p).customBlockState() ?: return
+            val newState = try { state.with(tileProperty, tile) } catch (_: Throwable) { return }
+            BukkitAdaptors.adapt(bWorld).setBlockAt(p.x(), p.y(), p.z(), newState, UpdateOption.UPDATE_ALL.flags())
+            //log.info("[WindowTile] (${p.x()},${p.y()},${p.z()}) tile='${tile}' facing=${facing}")
+        }
+
+        fun familyFor(p: BlockPos): String {
+            val up = isSameAt(p.offset(0, 1, 0))
+            val dn = isSameAt(p.offset(0,-1, 0))
+            return when {
+                up && dn  -> "middle"
+                dn && !up -> "up"    // top row (has block below)
+                up && !dn -> "down"  // bottom row (has block above)
+                else      -> "none"
+            }
+        }
+
+        fun tileFromFamily(fam: String, tag: String): String = when (fam) {
+            "up"     -> when (tag) { "L" -> "up_left";   "R" -> "up_right";   else -> "up" }
+            "down"   -> when (tag) { "L" -> "down_left"; "R" -> "down_right"; else -> "down" }
+            "middle" -> when (tag) { "L" -> "left";      "R" -> "right";      else -> "middle" }
+            else     -> "single"
+        }
+
+        // Only within updateNeighbors, so as not to touch other parts
+        fun getTileNameFor(invertLR: Boolean, idx: Int, len: Int, family: String): String {
+            val first = idx == 0
+            val last  = idx == len - 1
+            fun lrTag(): String = when {
+                len == 1     -> "C"
+                first        -> if (invertLR) "R" else "L"
+                last         -> if (invertLR) "L" else "R"
+                else         -> "C"
+            }
+            val tag = lrTag()
+            return tileFromFamily(if (family == "none") "down" else family, tag)
+        }
+
+        // Limit: 9x9 (radius 4) and ±2 in Y
+        val maxHr = 4  // 9 wide (4 on each side + center)
+        val maxVy = 2
+
+        val comp = LinkedHashSet<BlockPos>()
+        val q: ArrayDeque<BlockPos> = ArrayDeque()
+
+        if (!isSameAt(origin)) return
+        comp.add(origin); q.add(origin)
+
+        val dirs = arrayOf(
+            BlockPos( 1, 0, 0), BlockPos(-1, 0, 0),
+            BlockPos( 0, 0, 1), BlockPos( 0, 0,-1),
+            BlockPos( 0, 1, 0), BlockPos( 0,-1, 0)
+        )
+        val ox = origin.x(); val oy = origin.y(); val oz = origin.z()
+
+        while (q.isNotEmpty()) {
+            val p = q.removeFirst()
+            for (d in dirs) {
+                val n = p.offset(d.x(), d.y(), d.z())
+                val hr = maxOf(kotlin.math.abs(n.x() - ox), kotlin.math.abs(n.z() - oz))
+                val vy = kotlin.math.abs(n.y() - oy)
+                if (hr > maxHr || vy > maxVy) continue
+                if (!comp.contains(n) && isSameAt(n)) {
+                    comp.add(n); q.add(n)
+                }
+            }
+        }
+
+        // Plan by rows (by Y)
+        val rowsByY = comp.groupBy { it.y() }
+        val plan = ArrayList<Pair<BlockPos, String>>()
+
+        for ((y, row) in rowsByY) {
+            if (!useAxisZ) {
+                // NORTH/SOUTH → runs in X; reverse only if facing == NORTH
+                val byZ = row.groupBy { it.z() }
+                for ((z, col) in byZ) {
+                    val xs = col.map { it.x() }.sorted()
+                    var i = 0
+                    while (i < xs.size) {
+                        var j = i
+                        while (j + 1 < xs.size && xs[j + 1] == xs[j] + 1) j++
+                        val run = xs.subList(i, j + 1)
+                        for ((idx, x) in run.withIndex()) {
+                            val pos = BlockPos(x, y, z)
+                            val fam = familyFor(pos)
+                            val tile = getTileNameFor(invertLR_X, idx, run.size, fam)
+                            plan.add(pos to tile)
+                        }
+                        i = j + 1
+                    }
+                }
+            } else {
+                // EAST/WEST → runs in Z; reverse only if facing == WEST
+                val byX = row.groupBy { it.x() }
+                for ((x, col) in byX) {
+                    val zs = col.map { it.z() }.sorted()
+                    var i = 0
+                    while (i < zs.size) {
+                        var j = i
+                        while (j + 1 < zs.size && zs[j + 1] == zs[j] + 1) j++
+                        val run = zs.subList(i, j + 1)
+                        for ((idx, z) in run.withIndex()) {
+                            val pos = BlockPos(x, y, z)
+                            val fam = familyFor(pos)
+                            val tile = getTileNameFor(invertLR_Z, idx, run.size, fam)
+                            plan.add(pos to tile)
+                        }
+                        i = j + 1
+                    }
+                }
+            }
+        }
+
+        if (comp.size == 1) {
+            plan.clear()
+            plan.add(origin to "single")
+        }
+
+        inBatch.set(true)
+        try {
+            for ((p, t) in plan) setTile(p, t)
+        } finally {
+            inBatch.set(false)
+        }
+        //log.info("[WindowTile] updateNeighbors(): done facing=${facing} (${comp.size} bloques)")
+    }
+
+}

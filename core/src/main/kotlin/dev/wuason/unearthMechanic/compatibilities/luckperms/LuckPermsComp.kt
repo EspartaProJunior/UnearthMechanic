@@ -1,4 +1,4 @@
-package dev.wuason.unearthMechanic.compatibilities
+package dev.wuason.unearthMechanic.compatibilities.luckperms
 
 import dev.wuason.unearthMechanic.UnearthMechanic
 import net.luckperms.api.LuckPermsProvider

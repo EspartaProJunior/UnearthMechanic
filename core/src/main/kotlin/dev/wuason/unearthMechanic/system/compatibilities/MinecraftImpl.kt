@@ -5,11 +5,16 @@ import dev.wuason.libs.adapter.AdapterComp
 import dev.wuason.libs.adapter.AdapterData
 import dev.wuason.unearthMechanic.UnearthMechanic
 import dev.wuason.unearthMechanic.UnearthMechanicPlugin
+import dev.wuason.unearthMechanic.compatibilities.craftengine.CraftEnginePlugin
 import dev.wuason.unearthMechanic.config.*
 import dev.wuason.unearthMechanic.system.ILiveTool
 import dev.wuason.unearthMechanic.system.StageData
 import dev.wuason.unearthMechanic.system.StageManager
 import dev.wuason.unearthMechanic.utils.Utils
+import net.momirealms.craftengine.bukkit.api.CraftEngineBlocks
+import net.momirealms.craftengine.core.block.ImmutableBlockState
+import net.momirealms.craftengine.core.block.properties.Property
+import net.momirealms.craftengine.core.block.properties.type.DoubleBlockHalf
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.Material
@@ -20,6 +25,7 @@ import org.bukkit.block.data.BlockData
 import org.bukkit.block.data.Directional
 import org.bukkit.block.data.Orientable
 import org.bukkit.block.data.Rotatable
+import org.bukkit.block.data.type.Door
 import org.bukkit.block.data.type.Stairs
 import org.bukkit.entity.Player
 import org.bukkit.event.Event
@@ -119,7 +125,7 @@ class MinecraftImpl(
     ) {
         loc.block.type = Material.getMaterial(itemAdapterData.id.uppercase(Locale.ENGLISH)) ?: return
 
-        val state1 = lastBlockData[loc]
+        val state1 = loc.block.blockData //lastBlockData[loc]
         val keyLoc = loc.block.location
 
         state1?.let { it1 ->
@@ -130,6 +136,53 @@ class MinecraftImpl(
                 //Bukkit.getConsoleSender().sendMessage("📦 [2DEBUG] Block colocado en $loc: ${newBlock.type}")
                 //Bukkit.getConsoleSender().sendMessage("🔎 [2DEBUG] BlockData actual: ${state2}")
                 //Bukkit.getConsoleSender().sendMessage("📄 [2DEBUG] BlockData original: ${it1}")
+
+                if(CraftEnginePlugin.isCraftEngineEnabled() && CraftEnginePlugin.isCraftEngineLoaded()) {
+                    //Bukkit.getLogger().info("CraftEnginePlugin.isCraftEngineLoaded()")
+                    val previousBlockState : ImmutableBlockState? = CraftEngineBlocks.getCustomBlockState(state1);
+                    if(previousBlockState != null) {
+                        //Bukkit.getLogger().info("previousBlockState != null")
+                        var doubleBlockProperty : Property<*>? = null;
+                        for (property in previousBlockState.properties) {
+                            if (property.valueClass() == DoubleBlockHalf::class.java) {
+                                doubleBlockProperty = property
+                                break
+                            }
+                        }
+                        if (doubleBlockProperty != null) {
+                            val half = previousBlockState.get(doubleBlockProperty) as DoubleBlockHalf;
+                            when(half) {
+                                DoubleBlockHalf.UPPER -> {
+                                    //Bukkit.getLogger().info("DoubleBlockHalf.UPPER")
+                                    CraftEngineBlocks.remove(loc.block)
+                                    CraftEngineBlocks.remove(loc.clone().add(0.0, -1.0,0.0).block)
+                                }
+                                DoubleBlockHalf.LOWER -> {
+                                    //Bukkit.getLogger().info("DoubleBlockHalf.LOWER")
+                                    CraftEngineBlocks.remove(loc.block)
+                                }
+                            }
+                        }
+                    }else{
+                        //Bukkit.getLogger().info("previousBlockState == null")
+                        when(state1) {
+                            is Door -> {
+                                //Bukkit.getLogger().info("is Door")
+                                val half = state1.half
+                                if(half != null){
+                                    if(half == Bisected.Half.TOP){
+                                        //Bukkit.getLogger().info("Bisected.Half.TOP")
+                                        CraftEngineBlocks.remove(loc.clone().add(0.0, -1.0,0.0).block)
+
+                                    }else if(half == Bisected.Half.BOTTOM){
+                                        //Bukkit.getLogger().info("Bisected.Half.BOTTOM")
+                                        CraftEngineBlocks.remove(loc.clone().add(0.0, 1.0,0.0).block)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
 
                 val combinedData = it1?.let { copyOrientationProperties(it, state2.clone()) } ?: state2
 

@@ -1,4 +1,4 @@
-package dev.wuason.unearthMechanic.compatibilities
+package dev.wuason.unearthMechanic.compatibilities.worldguard
 
 import com.sk89q.worldedit.bukkit.BukkitAdapter
 import com.sk89q.worldguard.WorldGuard

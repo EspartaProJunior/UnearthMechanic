@@ -1,14 +1,6 @@
-package dev.wuason.unearthMechanic.compatibilities
+package dev.wuason.unearthMechanic.compatibilities.worldguard
 
-import com.sk89q.worldedit.bukkit.BukkitAdapter
-import com.sk89q.worldguard.WorldGuard
-import com.sk89q.worldguard.bukkit.WorldGuardPlugin
-import com.sk89q.worldguard.protection.flags.StateFlag
-import com.sk89q.worldguard.protection.flags.registry.FlagConflictException
-import dev.wuason.unearthMechanic.UnearthMechanic
 import org.bukkit.Bukkit
-import org.bukkit.Location
-import org.bukkit.entity.Player
 
 class WorldGuardPlugin {
     companion object {

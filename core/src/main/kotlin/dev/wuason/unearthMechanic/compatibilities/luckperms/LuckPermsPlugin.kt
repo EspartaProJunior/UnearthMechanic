@@ -1,8 +1,6 @@
-package dev.wuason.unearthMechanic.compatibilities
+package dev.wuason.unearthMechanic.compatibilities.luckperms
 
-import net.luckperms.api.LuckPermsProvider
 import org.bukkit.Bukkit
-import org.bukkit.entity.Player
 
 
 class LuckPermsPlugin {
