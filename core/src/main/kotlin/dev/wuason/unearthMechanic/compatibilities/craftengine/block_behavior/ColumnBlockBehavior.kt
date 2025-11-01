@@ -1,5 +1,7 @@
 package dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior
 
+import dev.wuason.unearthMechanic.compatibilities.craftengine.types.ColumnPosition
+import dev.wuason.unearthMechanic.compatibilities.craftengine.types.WindowTile
 import net.momirealms.craftengine.bukkit.api.BukkitAdaptors
 import net.momirealms.craftengine.bukkit.api.CraftEngineBlocks
 import net.momirealms.craftengine.bukkit.block.behavior.BukkitBlockBehavior
@@ -22,7 +24,7 @@ import java.util.concurrent.Callable
 
 class ColumnBlockBehavior(
     customBlock: CustomBlock,
-    private val positionProperty: Property<String>
+    private val positionProperty: Property<ColumnPosition>
 ) : BukkitBlockBehavior(customBlock) {
 
     override fun updateShape(thisBlock: Any, args: Array<Any>, superMethod: Callable<Any>): Any {
@@ -197,7 +199,7 @@ class ColumnBlockBehavior(
         superMethod.call()
     }*/
 
-    private fun calculateNewPosition(world: World, pos: BlockPos): String {
+    private fun calculateNewPosition(world: World, pos: BlockPos): ColumnPosition {
         val aboveState = world.getBlockAt(pos.offset(0, 1, 0)).blockState()
         val belowState = world.getBlockAt(pos.offset(0, -1, 0)).blockState()
 
@@ -205,10 +207,10 @@ class ColumnBlockBehavior(
         val hasBelow = isSameBlock(belowState)
 
         return when {
-            hasAbove && hasBelow -> "middle"
-            hasAbove -> "down"
-            hasBelow -> "up"
-            else -> "down"
+            hasAbove && hasBelow -> ColumnPosition.middle
+            hasAbove -> ColumnPosition.down
+            hasBelow -> ColumnPosition.up
+            else -> ColumnPosition.down
         }
     }
 
@@ -276,7 +278,8 @@ class ColumnBlockBehavior(
                 val prop = block.getProperty("position")
                     ?: throw IllegalArgumentException("Missing 'position' property")
                 @Suppress("UNCHECKED_CAST")
-                return ColumnBlockBehavior(block, prop as Property<String>)
+                val tileProperty = prop as Property<ColumnPosition>
+                return ColumnBlockBehavior(block, tileProperty)
             }
         }
     }

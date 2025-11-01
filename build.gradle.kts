@@ -208,6 +208,8 @@ subprojects {
         compileOnly("net.momirealms:craft-engine-core:0.0.64.13")
         compileOnly("net.momirealms:craft-engine-bukkit:0.0.64.13")
 
+        compileOnly("net.momirealms:craft-engine-nms-helper:1.0.121")
+
         compileOnly("net.luckperms:api:5.4")
         compileOnly("dev.wuason:adapter:1.0.6.2")
     }

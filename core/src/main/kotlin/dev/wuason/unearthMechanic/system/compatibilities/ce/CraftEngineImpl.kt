@@ -376,7 +376,7 @@ class CraftEngineImpl(
             }
 
             if (doubleBlockProperty != null) {
-                Bukkit.getConsoleSender().sendMessage("💾 [DEBUG] doubleBlockProperty != null")
+                //Bukkit.getConsoleSender().sendMessage("💾 [DEBUG] doubleBlockProperty != null")
                 val half = previousBlockState.get(doubleBlockProperty) as DoubleBlockHalf;
                 when(half) {
                     DoubleBlockHalf.UPPER -> {
@@ -417,7 +417,7 @@ class CraftEngineImpl(
                     }
                 }
             }else{
-                Bukkit.getConsoleSender().sendMessage("💾 [DEBUG] doubleBlockProperty == null")
+                //Bukkit.getConsoleSender().sendMessage("💾 [DEBUG] doubleBlockProperty == null")
                 val properties = previousBlockState.propertiesNbt()
                 if(properties != null){
                     //CraftEngineBlocks.remove(loc.block)
@@ -432,7 +432,7 @@ class CraftEngineImpl(
                 }
             }
         }else{
-            Bukkit.getConsoleSender().sendMessage("💾 [DEBUG] state1 == null")
+            //Bukkit.getConsoleSender().sendMessage("💾 [DEBUG] state1 == null")
             CraftEngineBlocks.place(
                 loc,
                 Key.of(itemAdapterData.id.removePrefix("ce:")),

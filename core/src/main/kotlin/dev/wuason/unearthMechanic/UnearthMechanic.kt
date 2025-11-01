@@ -5,6 +5,7 @@ import dev.wuason.unearthMechanic.compatibilities.craftengine.CraftEngineComp
 import dev.wuason.unearthMechanic.compatibilities.craftengine.CraftEnginePlugin
 import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.ColumnBlockBehavior
 import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.WindowConnectTileBehavior
+import dev.wuason.unearthMechanic.compatibilities.craftengine.types.UneProperties
 import dev.wuason.unearthMechanic.compatibilities.luckperms.LuckPermsComp
 import dev.wuason.unearthMechanic.compatibilities.luckperms.LuckPermsPlugin
 import dev.wuason.unearthMechanic.compatibilities.worldguard.WorldGuardComp
@@ -80,6 +81,7 @@ class UnearthMechanic : UnearthMechanicPlugin() {
                 Key.from("painter:window_connect_tile"),
                 WindowConnectTileBehavior.FACTORY
             )
+            UneProperties.registerAll()
 
             logger.info("Registered ColumnBlockBehavior for painter:column_block")
             logger.info("Registered WindowConnectTileBehavior for painter:window_connect_tile")

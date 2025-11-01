@@ -1,8 +1,11 @@
 package dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior
 
+import dev.wuason.unearthMechanic.compatibilities.craftengine.types.WindowTile
 import net.momirealms.craftengine.bukkit.api.BukkitAdaptors
 import net.momirealms.craftengine.bukkit.block.behavior.BukkitBlockBehavior
+import net.momirealms.craftengine.bukkit.nms.FastNMS
 import net.momirealms.craftengine.bukkit.util.BlockStateUtils
+import net.momirealms.craftengine.bukkit.util.LocationUtils
 import net.momirealms.craftengine.bukkit.world.BukkitWorld
 import net.momirealms.craftengine.core.block.CustomBlock
 import net.momirealms.craftengine.core.block.ImmutableBlockState
@@ -23,7 +26,7 @@ import java.util.concurrent.ConcurrentHashMap
  */
 class WindowConnectTileBehavior(
     customBlock: CustomBlock,
-    private val tileProperty: Property<String>
+    private val tileProperty: Property<WindowTile>
 ) : BukkitBlockBehavior(customBlock) {
 
     //private val log = Bukkit.getLogger()
@@ -41,7 +44,8 @@ class WindowConnectTileBehavior(
                 val prop = block.getProperty("tile")
                     ?: throw IllegalArgumentException("Missing 'tile' property")
                 @Suppress("UNCHECKED_CAST")
-                return WindowConnectTileBehavior(block, prop as Property<String>)
+                val tileProperty = prop as Property<WindowTile>
+                return WindowConnectTileBehavior(block, tileProperty)
             }
         }
     }
@@ -95,21 +99,23 @@ class WindowConnectTileBehavior(
     override fun onRemove(thisBlock: Any, args: Array<Any>, superMethod: Callable<Any>) {
         if (inBatch.get() == true) { superMethod.call(); return }
         //log.info("[WindowTile] onRemove(): args.size=${args.size}")
-        handleRemoval(args); superMethod.call()
+        handleRemoval(thisBlock, args); superMethod.call()
     }
 
     override fun affectNeighborsAfterRemoval(thisBlock: Any, args: Array<Any>, superMethod: Callable<Any>) {
         if (inBatch.get() == true) { superMethod.call(); return }
         //log.info("[WindowTile] affectNeighborsAfterRemoval(): args.size=${args.size}")
-        handleRemoval(args); superMethod.call()
+        handleRemoval(thisBlock, args); superMethod.call()
     }
 
-    private fun handleRemoval(args: Array<Any>) {
+    private fun handleRemoval(thisBlock: Any, args: Array<Any>) {
 
         val nmsWorld = args.getOrNull(1) ?: return
         val nmsPos   = args.getOrNull(2) ?: return
 
-        val craftWorld = Bukkit.getWorlds().firstOrNull { w ->
+        FastNMS.INSTANCE.`method$ScheduledTickAccess$scheduleBlockTick`(nmsWorld, nmsPos, thisBlock, 2)
+
+        /*val craftWorld = Bukkit.getWorlds().firstOrNull { w ->
             val handle = w.javaClass.getMethod("getHandle").invoke(w)
             handle == nmsWorld
         } ?: return
@@ -120,7 +126,7 @@ class WindowConnectTileBehavior(
 
         val ceWorld = BukkitAdaptors.adapt(craftWorld)
         val cePos   = BlockPos(x, y, z)
-        scheduleNeighborUpdate(ceWorld, cePos, 2L)
+        scheduleNeighborUpdate(ceWorld, cePos, 2L)*/
     }
 
     private fun scheduleNeighborUpdate(world: World, pos: BlockPos, delay: Long) {
@@ -136,11 +142,12 @@ class WindowConnectTileBehavior(
         Bukkit.getScheduler().runTaskLater(plugin, Runnable {
             try { updateNeighbors(world, pos) } finally { pending.remove(key) }
         }, delay)
+
     }
 
     // ================== Connection logic ==================
 
-    private fun calculateTile(world: World, pos: BlockPos): String {
+    private fun calculateTile(world: World, pos: BlockPos): WindowTile {
         val n = isSame(world, pos.offset(0, 0, -1)) // N = -Z
         val e = isSame(world, pos.offset(1, 0,  0)) // E = +X
         val s = isSame(world, pos.offset(0, 0,  1)) // S = +Z
@@ -157,22 +164,22 @@ class WindowConnectTileBehavior(
                 else     -> "middle"
             }
             return when {
-                e && w -> when (family) { "up" -> "up"; "down" -> "down"; else -> "middle" }
-                e && !w -> when (family) { "up" -> "up_left"; "down" -> "down_left"; else -> "left" }
-                w && !e -> when (family) { "up" -> "up_right"; "down" -> "down_right"; else -> "right" }
-                else -> "single"
+                e && w -> when (family) { "up" -> WindowTile.up; "down" -> WindowTile.down; else -> WindowTile.middle }
+                e && !w -> when (family) { "up" -> WindowTile.up_left; "down" -> WindowTile.down_left; else -> WindowTile.left }
+                w && !e -> when (family) { "up" -> WindowTile.up_right; "down" -> WindowTile.down_right; else -> WindowTile.right }
+                else -> WindowTile.single
             }
         }
 
         if (!hasH && hasV) {
             return when {
-                s && !n -> "down_left"   // bloque de arriba
-                n && !s -> "down_right"  // bloque de abajo
-                else    -> "middle"
+                s && !n -> WindowTile.down_left    // bloque de arriba
+                n && !s -> WindowTile.down_right   // bloque de abajo
+                else    -> WindowTile.middle
             }
         }
 
-        return "single"
+        return WindowTile.single
     }
 
     private fun isSame(world: World, pos: BlockPos): Boolean {
@@ -253,11 +260,11 @@ class WindowConnectTileBehavior(
             return sameBlockId(st) && ceFacing(st, facing) == facing
         }
 
-        fun setTile(p: BlockPos, tile: String) {
+        fun setTile(p: BlockPos, tile: WindowTile) {
             val state = world.getBlockAt(p).customBlockState() ?: return
             val newState = try { state.with(tileProperty, tile) } catch (_: Throwable) { return }
             BukkitAdaptors.adapt(bWorld).setBlockAt(p.x(), p.y(), p.z(), newState, UpdateOption.UPDATE_ALL.flags())
-            //log.info("[WindowTile] (${p.x()},${p.y()},${p.z()}) tile='${tile}' facing=${facing}")
+            // log: "[WindowTile] (${p.x()},${p.y()},${p.z()}) tile='${tile.name.lowercase()}' facing=${facing}"
         }
 
         fun familyFor(p: BlockPos): String {
@@ -271,15 +278,15 @@ class WindowConnectTileBehavior(
             }
         }
 
-        fun tileFromFamily(fam: String, tag: String): String = when (fam) {
-            "up"     -> when (tag) { "L" -> "up_left";   "R" -> "up_right";   else -> "up" }
-            "down"   -> when (tag) { "L" -> "down_left"; "R" -> "down_right"; else -> "down" }
-            "middle" -> when (tag) { "L" -> "left";      "R" -> "right";      else -> "middle" }
-            else     -> "single"
+        fun tileFromFamily(fam: String, tag: String): WindowTile = when (fam) {
+            "up"     -> when (tag) { "L" -> WindowTile.up_left;   "R" -> WindowTile.up_right;   else -> WindowTile.up }
+            "down"   -> when (tag) { "L" -> WindowTile.down_left; "R" -> WindowTile.down_right; else -> WindowTile.down }
+            "middle" -> when (tag) { "L" -> WindowTile.left;      "R" -> WindowTile.right;      else -> WindowTile.middle }
+            else     -> WindowTile.single
         }
 
         // Only within updateNeighbors, so as not to touch other parts
-        fun getTileNameFor(invertLR: Boolean, idx: Int, len: Int, family: String): String {
+        fun getTileNameFor(invertLR: Boolean, idx: Int, len: Int, family: String): WindowTile {
             val first = idx == 0
             val last  = idx == len - 1
             fun lrTag(): String = when {
@@ -324,7 +331,8 @@ class WindowConnectTileBehavior(
 
         // Plan by rows (by Y)
         val rowsByY = comp.groupBy { it.y() }
-        val plan = ArrayList<Pair<BlockPos, String>>()
+        //val plan = ArrayList<Pair<BlockPos, String>>()
+        val plan = mutableListOf<Pair<BlockPos, WindowTile>>()
 
         for ((y, row) in rowsByY) {
             if (!useAxisZ) {
@@ -370,7 +378,7 @@ class WindowConnectTileBehavior(
 
         if (comp.size == 1) {
             plan.clear()
-            plan.add(origin to "single")
+            plan.add(origin to WindowTile.single)
         }
 
         inBatch.set(true)
