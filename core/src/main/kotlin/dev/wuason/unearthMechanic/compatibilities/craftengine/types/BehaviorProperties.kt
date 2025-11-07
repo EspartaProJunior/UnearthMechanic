@@ -10,6 +10,12 @@ enum class WindowTile {
     down_left, down, down_right
 }
 
+enum class SofaTile {
+    single,
+    left, middle, right
+}
+
 enum class ColumnPosition {
+    single,
     up, middle, down
 }

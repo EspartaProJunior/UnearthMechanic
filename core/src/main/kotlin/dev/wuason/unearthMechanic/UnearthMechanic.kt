@@ -4,6 +4,7 @@ import dev.wuason.mechanics.utils.AdventureUtils
 import dev.wuason.unearthMechanic.compatibilities.craftengine.CraftEngineComp
 import dev.wuason.unearthMechanic.compatibilities.craftengine.CraftEnginePlugin
 import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.ColumnBlockBehavior
+import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.SofaConnectTileBehavior
 import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.WindowConnectTileBehavior
 import dev.wuason.unearthMechanic.compatibilities.craftengine.types.UneProperties
 import dev.wuason.unearthMechanic.compatibilities.luckperms.LuckPermsComp
@@ -80,6 +81,10 @@ class UnearthMechanic : UnearthMechanicPlugin() {
             BlockBehaviors.register(
                 Key.from("painter:window_connect_tile"),
                 WindowConnectTileBehavior.FACTORY
+            )
+            BlockBehaviors.register(
+                Key.from("painter:sofa_connect_tile"),
+                SofaConnectTileBehavior.FACTORY
             )
             UneProperties.registerAll()
 

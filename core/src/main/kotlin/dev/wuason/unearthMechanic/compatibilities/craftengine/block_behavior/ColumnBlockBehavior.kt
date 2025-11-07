@@ -208,9 +208,9 @@ class ColumnBlockBehavior(
 
         return when {
             hasAbove && hasBelow -> ColumnPosition.middle
-            hasAbove -> ColumnPosition.down
-            hasBelow -> ColumnPosition.up
-            else -> ColumnPosition.down
+            hasAbove && !hasBelow -> ColumnPosition.down
+            !hasAbove && hasBelow -> ColumnPosition.up
+            else -> ColumnPosition.single
         }
     }
 
