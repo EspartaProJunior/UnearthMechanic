@@ -72,7 +72,7 @@ class MinecraftImpl(
 
     override fun isValid(loc: Location, expectedAdapterId: String?): Boolean {
         if (loc.block.type != Material.AIR){
-            Bukkit.getConsoleSender().sendMessage("[UM] loc.block.type != Material.AIR")
+            //Bukkit.getConsoleSender().sendMessage("[UM] loc.block.type != Material.AIR")
             return true
         }
 
