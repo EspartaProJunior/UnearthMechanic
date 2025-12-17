@@ -81,7 +81,8 @@ class CraftEngineImpl(
         val entities = world.getNearbyEntities(location, 1.0, 1.0, 1.0)
         for (entity in entities) {
             try {
-                val furniture = CraftEngineFurniture.getLoadedFurnitureByBaseEntity(entity)
+                //val furniture = CraftEngineFurniture.getLoadedFurnitureByBaseEntity(entity)
+                val furniture = CraftEngineFurniture.getLoadedFurnitureByMetaEntity(entity)
                 if (furniture != null) {
                     return entity.uniqueId
                 }
@@ -161,7 +162,7 @@ class CraftEngineImpl(
         val nearby = world.getNearbyEntities(loc, 0.5, 1.0, 0.5)
         for (entity in nearby) {
             try {
-                val furniture = CraftEngineFurniture.getLoadedFurnitureByBaseEntity(entity)
+                val furniture = CraftEngineFurniture.getLoadedFurnitureByMetaEntity(entity)
                 if (furniture != null && entity.isValid && !entity.isDead) {
                     return true
                 }
@@ -169,7 +170,7 @@ class CraftEngineImpl(
                 continue
             }
         }
-        if (loc.block.type != org.bukkit.Material.AIR) return true
+        if (loc.block.type != Material.AIR) return true
 
         return false
     }
@@ -189,14 +190,14 @@ class CraftEngineImpl(
 
     @EventHandler
     fun onInteractFurniture(event: FurnitureInteractEvent) {
-        if (stageManager.isTransitioning(event.furniture().baseEntity().location.block.location)) {
+        if (stageManager.isTransitioning(event.furniture().bukkitEntity.location.block.location)) {
             event.isCancelled = true
             return
         }
 
-        val uuid = event.furniture().baseEntity().uniqueId
+        val uuid = event.furniture().bukkitEntity.uniqueId
 
-        if (event.furniture().baseEntity() != null && event.furniture().baseEntity().uniqueId == uuid) {
+        if (event.furniture().bukkitEntity != null && event.furniture().bukkitEntity.uniqueId == uuid) {
             val adapterId = "ce:" + event.furniture().id()
             stageManager.interact(
                 event.player,
@@ -214,12 +215,12 @@ class CraftEngineImpl(
 
     @EventHandler(priority = EventPriority.LOWEST)
     fun onFurnitureBreak(event: FurnitureBreakEvent) {
-        if (stageManager.isTransitioning(event.furniture().baseEntity().location.block.location)) {
+        if (stageManager.isTransitioning(event.furniture().bukkitEntity.location.block.location)) {
             event.isCancelled = true
             return
         }
 
-        val loc = event.furniture().baseEntity().location.block.location
+        val loc = event.furniture().bukkitEntity.location.block.location
 
         removeStageData(loc)
         setRemoving(loc)
@@ -243,7 +244,7 @@ class CraftEngineImpl(
     private fun placeBlock(adapterId: String, location: Location?) {
         val furnitureId = Key.of(adapterId.replace("ce:", ""))
         val furniture = CraftEngineFurniture.byId(furnitureId)
-        val anchor = furniture?.getAnyAnchorType() ?: AnchorType.GROUND
+        val anchor = furniture?.anyVariantName() ?: AnchorType.WALL.variantName()
 
         CraftEngineFurniture.place(location,
             furnitureId,
@@ -394,9 +395,9 @@ class CraftEngineImpl(
                         CraftEngineBlocks.remove(lowerLoc.block)
 
                         if (newUpperState == null || newLowerState == null) return;
-                        BukkitAdaptors.adapt(loc.world).setBlockAt(
+                        BukkitAdaptors.adapt(loc.world).setBlockState(
                             loc.blockX, loc.blockY, loc.blockZ, newUpperState, 512)
-                        BukkitAdaptors.adapt(lowerLoc.world).setBlockAt(
+                        BukkitAdaptors.adapt(lowerLoc.world).setBlockState(
                             lowerLoc.blockX, lowerLoc.blockY, lowerLoc.blockZ, newLowerState, UpdateOption.UPDATE_ALL.flags())
                     }
                     DoubleBlockHalf.LOWER -> {
@@ -411,8 +412,8 @@ class CraftEngineImpl(
                         val upperLoc = Location(loc.world, loc.x, loc.y + 1, loc.z)
 
                         if (newUpperState == null || newLowerState == null) return;
-                        BukkitAdaptors.adapt(loc.world).setBlockAt(loc.blockX, loc.blockY, loc.blockZ, newLowerState, 512)
-                        BukkitAdaptors.adapt(loc.world).setBlockAt(
+                        BukkitAdaptors.adapt(loc.world).setBlockState(loc.blockX, loc.blockY, loc.blockZ, newLowerState, 512)
+                        BukkitAdaptors.adapt(loc.world).setBlockState(
                             upperLoc.blockX, upperLoc.blockY, upperLoc.blockZ, newUpperState, UpdateOption.UPDATE_ALL.flags())
                     }
                 }
@@ -459,7 +460,7 @@ class CraftEngineImpl(
         }
 
         if (event is FurnitureInteractEvent) {
-            val entityEvent: Entity = event.furniture().baseEntity()
+            val entityEvent: Entity = event.furniture().bukkitEntity
 
             if (!entityEvent.isValid || entityEvent.isDead) return
 
@@ -470,23 +471,23 @@ class CraftEngineImpl(
             }
 
             if(isValid(loc, itemAdapterData.toString())){
-                CraftEngineFurniture.remove(event.furniture().baseEntity())
-                event.furniture().baseEntity().remove()
-                breakBlock(event.furniture().baseEntity().location.block.location)
+                CraftEngineFurniture.remove(event.furniture().bukkitEntity)
+                event.furniture().bukkitEntity.remove()
+                breakBlock(event.furniture().bukkitEntity.location.block.location)
             }else{
-                breakBlock(event.furniture().baseEntity().location.block.location)
+                breakBlock(event.furniture().bukkitEntity.location.block.location)
             }
 
             // Spawn of the new furniture
             val furnitureId = Key.of(itemAdapterData.id.removePrefix("ce:"))
             val furniture = CraftEngineFurniture.byId(furnitureId)
-            val anchor = furniture?.getAnyAnchorType() ?: AnchorType.GROUND
+            val anchor = furniture?.anyVariantName() ?: AnchorType.WALL.variantName()
             CraftEngineFurniture.place(loc,
                 furnitureId,
                 anchor,
                 false)?.let { customFurniture ->
 
-                val entity: Entity = customFurniture.baseEntity() ?: return
+                val entity: Entity = customFurniture.bukkitEntity ?: return
                 entity.setRotation(entityEvent.location.yaw, entityEvent.location.pitch)
 
                 CraftEngineFurniture.isFurniture(entity)?.let { entity ->
@@ -499,15 +500,16 @@ class CraftEngineImpl(
                 }
             }
             Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
-                if(!stageManager.activeSequences.contains(event.furniture().baseEntity().location.block.location)){
-                    clearRemoving(event.furniture().baseEntity().location.block.location)
+                if(!stageManager.activeSequences.contains(event.furniture().bukkitEntity.location.block.location)){
+                    clearRemoving(event.furniture().bukkitEntity.location.block.location)
                 }
             }, 5L)
         }else{
             // Sequence System
             val furnitureId = Key.of(itemAdapterData.id.removePrefix("ce:"))
             val furniture = CraftEngineFurniture.byId(furnitureId)
-            val anchor = furniture?.getAnyAnchorType() ?: AnchorType.GROUND
+            //val anchor = furniture?.getAnyAnchorType() ?: AnchorType.GROUND
+            val anchor = furniture?.anyVariantName() ?: AnchorType.WALL.variantName()
 
             val rotation = rotationMap.remove(loc)
             val cachedFrameRotation = itemFrameRotationMap[loc]
@@ -522,7 +524,7 @@ class CraftEngineImpl(
                 anchor,
                 false)?.let { customFurniture ->
 
-                val entity: Entity = customFurniture.baseEntity() ?: return
+                val entity: Entity = customFurniture.bukkitEntity ?: return
 
                 if (rotation != null) entity.setRotation(rotation.first, rotation.second)
                 if (cachedFrameRotation != null && entity is ItemFrame) {
@@ -547,13 +549,13 @@ class CraftEngineImpl(
             return
         }
         if (event is FurnitureInteractEvent) {
-            event.furniture().baseEntity()?.let { entity ->
+            event.furniture().bukkitEntity?.let { entity ->
                 rotationMap[entity.location] = Pair(entity.location.yaw, entity.location.pitch)
             }
-            setRemoving(event.furniture().baseEntity().location.block.location)
+            setRemoving(event.furniture().bukkitEntity.location.block.location)
 
-            removeStageData(event.furniture().baseEntity().location.block.location)
-            CraftEngineFurniture.remove(event.furniture().baseEntity())
+            removeStageData(event.furniture().bukkitEntity.location.block.location)
+            CraftEngineFurniture.remove(event.furniture().bukkitEntity)
             return
         }
 
@@ -567,7 +569,7 @@ class CraftEngineImpl(
             }
             if (entity.location.block != loc.block) { continue }
 
-            val furniture = CraftEngineFurniture.getLoadedFurnitureByBaseEntity(entity)
+            val furniture = CraftEngineFurniture.getLoadedFurnitureByMetaEntity(entity)
             if (furniture != null && entity.isValid && !entity.isDead) {
                 CraftEngineFurniture.remove(entity)
 
@@ -598,7 +600,7 @@ class CraftEngineImpl(
             )
         }
         if (event is FurnitureInteractEvent) {
-            val entity: Entity = event.furniture().baseEntity()
+            val entity: Entity = event.furniture().bukkitEntity
             return Utils.calculateHashCode(
                 entity.location.hashCode(),
                 entity.hashCode(),

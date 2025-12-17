@@ -46,7 +46,7 @@ class SofaConnectTileBehavior(
     }
 
     private fun isSame(world: World, pos: BlockPos): Boolean {
-        val wrap = world.getBlockAt(pos).blockState() ?: return false
+        val wrap = world.getBlockState(pos) ?: return false
         val neighborStr = try { wrap.ownerId()?.toString() } catch (_: Throwable) { null }
         val selfStr = try { customBlock.id().asString() } catch (_: Throwable) { customBlock.id().toString() }
         return neighborStr != null && neighborStr == selfStr
@@ -132,14 +132,17 @@ class SofaConnectTileBehavior(
         inBatch.set(true)
         try {
             for (p in targets) {
-                val state = world.getBlockAt(p).customBlockState() ?: continue
+                val state = world.getBlock(p).customBlockState() ?: continue
+                //val state = world.getBlockAt(p).customBlockState() ?: continue //OLD API METHOD
+
                 // Para vecinos: solo si son el mismo bloque; para el origen, siempre.
                 if (p != origin && !isSame(world, p)) continue
 
 
                 val newTile = calculateTile(world, p)
                 val newState = try { state.with(tileProperty, newTile) } catch (_: Throwable) { continue }
-                BukkitAdaptors.adapt(bWorld).setBlockAt(p.x(), p.y(), p.z(), newState, UpdateOption.UPDATE_ALL.flags())
+                //BukkitAdaptors.adapt(bWorld).setBlockAt(p.x(), p.y(), p.z(), newState, UpdateOption.UPDATE_ALL.flags())
+                BukkitAdaptors.adapt(bWorld).setBlockState(p.x(), p.y(), p.z(), newState, UpdateOption.UPDATE_ALL.flags())
             }
         } finally {
             inBatch.set(false)

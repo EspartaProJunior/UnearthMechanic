@@ -5,7 +5,6 @@ import net.momirealms.craftengine.bukkit.api.BukkitAdaptors
 import net.momirealms.craftengine.bukkit.block.behavior.BukkitBlockBehavior
 import net.momirealms.craftengine.bukkit.nms.FastNMS
 import net.momirealms.craftengine.bukkit.util.BlockStateUtils
-import net.momirealms.craftengine.bukkit.util.LocationUtils
 import net.momirealms.craftengine.bukkit.world.BukkitWorld
 import net.momirealms.craftengine.core.block.CustomBlock
 import net.momirealms.craftengine.core.block.ImmutableBlockState
@@ -183,7 +182,8 @@ class WindowConnectTileBehavior(
     }
 
     private fun isSame(world: World, pos: BlockPos): Boolean {
-        val wrap = world.getBlockAt(pos).blockState() ?: return false
+        val wrap = world.getBlockState(pos) ?: return false
+        //val wrap = world.getBlockAt(pos).blockState() ?: return false
         val neighborStr = try { wrap.ownerId()?.toString() } catch (_: Throwable) { null }
         val selfStr     = try { customBlock.id().asString() } catch (_: Throwable) { customBlock.id().toString() }
         return neighborStr != null && neighborStr == selfStr
@@ -243,7 +243,8 @@ class WindowConnectTileBehavior(
         if (world !is BukkitWorld) return
         val bWorld = org.bukkit.Bukkit.getWorld(world.name()) ?: return
 
-        val originState = world.getBlockAt(origin).customBlockState() ?: return
+        val originState = world.getBlock(origin).customBlockState() ?: return
+        //val originState = world.getBlockAt(origin).customBlockState() ?: return //OLD API METHOD
         val originId = ceStateId(originState) ?: return
         val facing = ceFacing(originState, "south")
 
@@ -256,14 +257,17 @@ class WindowConnectTileBehavior(
         fun sameBlockId(st: ImmutableBlockState?): Boolean = ceStateId(st) == originId
 
         fun isSameAt(pos: BlockPos): Boolean {
-            val st = world.getBlockAt(pos).customBlockState() ?: return false
+            val st = world.getBlock(pos).customBlockState() ?: return false
+            //val st = world.getBlockAt(pos).customBlockState() ?: return false
             return sameBlockId(st) && ceFacing(st, facing) == facing
         }
 
         fun setTile(p: BlockPos, tile: WindowTile) {
-            val state = world.getBlockAt(p).customBlockState() ?: return
+            val state = world.getBlock(p).customBlockState() ?: return
+
             val newState = try { state.with(tileProperty, tile) } catch (_: Throwable) { return }
-            BukkitAdaptors.adapt(bWorld).setBlockAt(p.x(), p.y(), p.z(), newState, UpdateOption.UPDATE_ALL.flags())
+            BukkitAdaptors.adapt(bWorld).setBlockState(p.x(), p.y(), p.z(), newState, UpdateOption.UPDATE_ALL.flags())
+            //BukkitAdaptors.adapt(bWorld).setBlockAt(p.x(), p.y(), p.z(), newState, UpdateOption.UPDATE_ALL.flags()) //OLD API METHOD
             // log: "[WindowTile] (${p.x()},${p.y()},${p.z()}) tile='${tile.name.lowercase()}' facing=${facing}"
         }
 

@@ -50,7 +50,7 @@ class ColumnBlockBehavior(
         val world = context.level
         val pos = context.clickedPos
 
-        val blockBelow = world.getBlockAt(pos.offset(0, -1, 0)).blockState()
+        val blockBelow = world.getBlock(pos.offset(0, -1, 0)).blockState()
         val isPlacingOnTopOfSameBlock = isSameBlock(blockBelow)
 
         if (isPlacingOnTopOfSameBlock) {
@@ -200,8 +200,8 @@ class ColumnBlockBehavior(
     }*/
 
     private fun calculateNewPosition(world: World, pos: BlockPos): ColumnPosition {
-        val aboveState = world.getBlockAt(pos.offset(0, 1, 0)).blockState()
-        val belowState = world.getBlockAt(pos.offset(0, -1, 0)).blockState()
+        val aboveState = world.getBlock(pos.offset(0, 1, 0)).blockState()
+        val belowState = world.getBlock(pos.offset(0, -1, 0)).blockState()
 
         val hasAbove = isSameBlock(aboveState)
         val hasBelow = isSameBlock(belowState)
@@ -222,7 +222,8 @@ class ColumnBlockBehavior(
             }
 
             val neighborPos = pos.offset(0, offsetY, 0)
-            val neighborBlock = world.getBlockAt(neighborPos)
+            //val neighborBlock = world.getBlockAt(neighborPos)
+            val neighborBlock = world.getBlock(neighborPos)
             val neighborStateOpt = neighborBlock.customBlockState()
             val neighborWrapper = neighborBlock.blockState()
 
@@ -251,7 +252,7 @@ class ColumnBlockBehavior(
 
                 //Bukkit.getConsoleSender().sendMessage("Actualizando bloque en ${bukkitLoc.blockX}, ${bukkitLoc.blockY}, ${bukkitLoc.blockZ}")
 
-                BukkitAdaptors.adapt(bukkitLoc.world).setBlockAt(
+                BukkitAdaptors.adapt(bukkitLoc.world).setBlockState(
                     bukkitLoc.blockX,
                     bukkitLoc.blockY,
                     bukkitLoc.blockZ,
