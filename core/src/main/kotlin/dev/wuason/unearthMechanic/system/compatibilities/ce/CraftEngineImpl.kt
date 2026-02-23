@@ -4,6 +4,9 @@ import dev.wuason.libs.adapter.AdapterComp
 import dev.wuason.libs.adapter.AdapterData
 import dev.wuason.unearthMechanic.UnearthMechanic
 import dev.wuason.unearthMechanic.UnearthMechanicPlugin
+import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.fishtank.FishTankBehavior
+import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.fishtank.FishTankDataStore
+import dev.wuason.unearthMechanic.compatibilities.craftengine.types.FishType
 import dev.wuason.unearthMechanic.config.IBlockStage
 import dev.wuason.unearthMechanic.config.IFurnitureStage
 import dev.wuason.unearthMechanic.config.IGeneric
@@ -24,8 +27,10 @@ import net.momirealms.craftengine.core.block.properties.type.DoubleBlockHalf
 import net.momirealms.craftengine.core.entity.furniture.AnchorType
 import net.momirealms.craftengine.core.entity.player.InteractionHand
 import net.momirealms.craftengine.core.util.Key
+import net.momirealms.craftengine.core.world.BlockPos
 import net.momirealms.craftengine.libraries.nbt.CompoundTag
 import org.bukkit.Bukkit
+import org.bukkit.GameMode
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.block.Block
@@ -87,7 +92,7 @@ class CraftEngineImpl(
                     return entity.uniqueId
                 }
             } catch (e: Exception) {
-                // Si lanza error es porque esa entidad no es un mueble válido
+                // If it throws an error, it is because that entity is not a valid piece of furniture.
                 continue
             }
         }
@@ -140,19 +145,19 @@ class CraftEngineImpl(
             //Bukkit.getConsoleSender().sendMessage("[CE][FurnitureData] id=$adapterId")
 
             if (expectedUuid != null && entity.uniqueId == expectedUuid) {
-                //Bukkit.getConsoleSender().sendMessage("[CE][isValidFurniture] ✅ MATCH por UUID")
+                //Bukkit.getConsoleSender().sendMessage("[CE][isValidFurniture] MATCH por UUID")
                 return true
             }
 
             if (expectedAdapterId != null && adapterId != null && adapterId.equals(expectedAdapterId.removePrefix("ce:"), ignoreCase = true)) {
-                //Bukkit.getConsoleSender().sendMessage("[CE][isValidFurniture] ✅ MATCH por adapterId")
+                //Bukkit.getConsoleSender().sendMessage("[CE][isValidFurniture] MATCH por adapterId")
                 return true
             }
 
-            //Bukkit.getConsoleSender().sendMessage("[CE][isValidFurniture] ❌ mismatch: id=$adapterId")
+            //Bukkit.getConsoleSender().sendMessage("[CE][isValidFurniture] mismatch: id=$adapterId")
         }
 
-        //Bukkit.getConsoleSender().sendMessage("[CE][isValidFurniture] ❌ SIN MATCH en $keyLoc")
+        //Bukkit.getConsoleSender().sendMessage("[CE][isValidFurniture] SIN MATCH en $keyLoc")
         return false
     }
 
@@ -186,6 +191,115 @@ class CraftEngineImpl(
             event.location(),
             event,
             this)
+
+        // FishTankBehavior
+        onFishTankBehavior(event)
+    }
+
+    fun onFishTankBehavior(event: CustomBlockInteractEvent){
+        //val log = Bukkit.getLogger()
+        //log.info("[FishTank] event class=${event.javaClass.name}")
+        //log.info("[FishTank] methods=" + event.javaClass.methods.joinToString(",") { it.name }.take(800))
+        //log.info("[DBG] CE Interact item=${event.item()?.type} block=${event.customBlock().id()} loc=${event.location().blockX},${event.location().blockY},${event.location().blockZ}")
+        try {
+            val state = event.blockState()
+            val ownerBlock = state.owner().value() ?: return
+
+            val loc = event.location()
+            val bw = loc.world
+
+            val ceWorld = BukkitAdaptors.adapt(bw)
+            val pos = BlockPos(loc.blockX, loc.blockY, loc.blockZ)
+
+            val fishPropAny = ownerBlock.getProperty("fish") ?: return
+            @Suppress("UNCHECKED_CAST")
+            val fishProp = fishPropAny as Property<FishType>
+
+            val currentFish = try { state.get(fishProp, FishType.none) } catch (_: Throwable) { return }
+
+            val player = event.player
+            val inv = player.inventory
+            val hand = inv.itemInMainHand
+            val mat = hand.type
+
+            // tankKey
+            val rootState = CraftEngineBlocks.getCustomBlockState(bw.getBlockAt(pos.x(), pos.y(), pos.z()).blockData)
+            val expectedId = if (rootState != null) FishTankBehavior.ownerIdString(rootState) else "elitefantasy:aquarium_block"
+            val tankKey = FishTankBehavior.resolveTankKey(bw, ceWorld, pos, expectedId)
+
+            // REMOVE (empty bucket)
+            if (mat == Material.BUCKET) {
+                if (currentFish == FishType.none) return
+
+                val out = FishTankBehavior.bucketToGive(bw, tankKey, pos, currentFish)
+
+                val newState = state.with(fishProp, FishType.none)
+                ceWorld.setBlockState(pos, newState, UpdateOption.UPDATE_ALL.flags())
+
+                FishTankDataStore.removeCellSnapshot(tankKey, FishTankBehavior.packPos(pos))
+
+                FishTankBehavior.ensureTaskRunning()
+                FishTankBehavior.syncFishDisplay(ceWorld, pos, FishType.none, forceRescan = true)
+
+                if (player.gameMode != GameMode.CREATIVE) {
+                    // consume 1 empty bucket
+                    if (hand.amount > 1) {
+                        hand.amount -= 1
+                    } else {
+                        inv.setItemInMainHand(ItemStack(Material.AIR))
+                    }
+
+                    // give fish bucket (or drop)
+                    val leftover = inv.addItem(out).values
+                    leftover.forEach { player.world.dropItemNaturally(player.location, it) }
+                }
+
+                event.isCancelled = true
+                return
+            }
+
+            // INSERT / SWAP (fish bucket)
+            val fishFromBucket = FishTankBehavior.fishFromBucket(mat)
+            if (fishFromBucket != null) {
+
+                // snapshot of the bucket IN HAND
+                val inSnapshot = hand.clone().also { it.amount = 1 }
+
+                val out = if (currentFish == FishType.none) ItemStack(Material.BUCKET)
+                else FishTankBehavior.bucketToGive(bw, tankKey,pos,currentFish)
+
+                // set block
+                FishTankBehavior.suppressPos(ceWorld, pos)
+                val newState = state.with(fishProp, fishFromBucket)
+                ceWorld.setBlockState(pos, newState, UpdateOption.UPDATE_ALL.flags())
+
+                // sync display once
+                /*FishTankBehavior.ensureTaskRunning()
+                FishTankBehavior.syncFishDisplay(ceWorld, pos, fishFromBucket, inSnapshot)*/
+
+                FishTankBehavior.ensureTaskRunning()
+                FishTankBehavior.syncFishDisplay(ceWorld,
+                    pos, fishFromBucket,
+                    bucketSnapshot = inSnapshot, forceRescan = true)
+
+                if (player.gameMode != GameMode.CREATIVE) {
+                    // consumes 1 fish bucket
+                    if (hand.amount > 1) {
+                        hand.amount -= 1
+                        // give out bucket
+                        val leftover = inv.addItem(out).values
+                        leftover.forEach { player.world.dropItemNaturally(player.location, it) }
+                    } else {
+                        // replace in hand
+                        inv.setItemInMainHand(out)
+                    }
+                }
+
+                event.isCancelled = true
+                return
+            }
+        } catch (_: Throwable) {
+        }
     }
 
     @EventHandler
@@ -343,7 +457,7 @@ class CraftEngineImpl(
                         Bisected.Half.TOP -> block.getRelative(BlockFace.DOWN)
                     }
                     val relativeDoor = otherHalf.blockData as? Door ?: return
-                    //Bukkit.getConsoleSender().sendMessage("💾 [DEBUG] previousBlockState == null && blockData is Door")
+                    //Bukkit.getConsoleSender().sendMessage(" [DEBUG] previousBlockState == null && blockData is Door")
 
                     block.setType(Material.AIR, false)
                     otherHalf.setType(Material.AIR, false)
@@ -356,7 +470,7 @@ class CraftEngineImpl(
                     val newState2 = customBlock.getBlockState(properties2)
                     CraftEngineBlocks.place(otherHalf.location, newState2, UpdateOption.UPDATE_NONE, false)
                 }else{
-                    //Bukkit.getConsoleSender().sendMessage("💾 [DEBUG] previousBlockState == null && !(blockData is Door)")
+                    //Bukkit.getConsoleSender().sendMessage(" [DEBUG] previousBlockState == null && !(blockData is Door)")
                     CraftEngineBlocks.place(
                         loc,
                         Key.of(itemAdapterData.id.removePrefix("ce:")),
@@ -377,7 +491,7 @@ class CraftEngineImpl(
             }
 
             if (doubleBlockProperty != null) {
-                //Bukkit.getConsoleSender().sendMessage("💾 [DEBUG] doubleBlockProperty != null")
+                //Bukkit.getConsoleSender().sendMessage(" [DEBUG] doubleBlockProperty != null")
                 val half = previousBlockState.get(doubleBlockProperty) as DoubleBlockHalf;
                 when(half) {
                     DoubleBlockHalf.UPPER -> {
@@ -418,7 +532,7 @@ class CraftEngineImpl(
                     }
                 }
             }else{
-                //Bukkit.getConsoleSender().sendMessage("💾 [DEBUG] doubleBlockProperty == null")
+                //Bukkit.getConsoleSender().sendMessage(" [DEBUG] doubleBlockProperty == null")
                 val properties = previousBlockState.propertiesNbt()
                 if(properties != null){
                     //CraftEngineBlocks.remove(loc.block)
@@ -433,7 +547,7 @@ class CraftEngineImpl(
                 }
             }
         }else{
-            //Bukkit.getConsoleSender().sendMessage("💾 [DEBUG] state1 == null")
+            //Bukkit.getConsoleSender().sendMessage(" [DEBUG] state1 == null")
             CraftEngineBlocks.place(
                 loc,
                 Key.of(itemAdapterData.id.removePrefix("ce:")),

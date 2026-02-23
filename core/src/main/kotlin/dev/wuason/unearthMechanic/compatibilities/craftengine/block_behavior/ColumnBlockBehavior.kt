@@ -13,12 +13,12 @@ import net.momirealms.craftengine.core.block.ImmutableBlockState
 import net.momirealms.craftengine.core.block.UpdateOption
 import net.momirealms.craftengine.core.block.behavior.BlockBehaviorFactory
 import net.momirealms.craftengine.core.block.properties.Property
-import net.momirealms.craftengine.core.item.context.BlockPlaceContext
 import net.momirealms.craftengine.core.util.Direction
 import net.momirealms.craftengine.core.world.BlockHitResult
 import net.momirealms.craftengine.core.world.BlockPos
 import net.momirealms.craftengine.core.world.ExistingBlock
 import net.momirealms.craftengine.core.world.World
+import net.momirealms.craftengine.core.world.context.BlockPlaceContext
 import org.bukkit.Bukkit
 import java.util.concurrent.Callable
 
@@ -274,7 +274,7 @@ class ColumnBlockBehavior(
     companion object {
         val FACTORY = Factory()
 
-        class Factory : BlockBehaviorFactory {
+        class Factory : BlockBehaviorFactory<ColumnBlockBehavior> {
             override fun create(block: CustomBlock, arguments: Map<String, Any>): ColumnBlockBehavior {
                 val prop = block.getProperty("position")
                     ?: throw IllegalArgumentException("Missing 'position' property")

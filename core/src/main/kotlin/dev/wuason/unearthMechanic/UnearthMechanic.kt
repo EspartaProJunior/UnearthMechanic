@@ -4,8 +4,11 @@ import dev.wuason.mechanics.utils.AdventureUtils
 import dev.wuason.unearthMechanic.compatibilities.craftengine.CraftEngineComp
 import dev.wuason.unearthMechanic.compatibilities.craftengine.CraftEnginePlugin
 import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.ColumnBlockBehavior
+import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.fishtank.FishTankBehavior
+import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.fishtank.FishTankChunkListener
 import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.SofaConnectTileBehavior
 import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.WindowConnectTileBehavior
+import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.fishtank.FishTankDataStore
 import dev.wuason.unearthMechanic.compatibilities.craftengine.types.UneProperties
 import dev.wuason.unearthMechanic.compatibilities.luckperms.LuckPermsComp
 import dev.wuason.unearthMechanic.compatibilities.luckperms.LuckPermsPlugin
@@ -74,19 +77,27 @@ class UnearthMechanic : UnearthMechanicPlugin() {
 
         stageManager = StageManager(this)
         if(CraftEnginePlugin.isCraftEngineEnabled()){
-            BlockBehaviors.register(
-                Key.from("painter:column_block"),
-                ColumnBlockBehavior.FACTORY
-            )
-            BlockBehaviors.register(
-                Key.from("painter:window_connect_tile"),
-                WindowConnectTileBehavior.FACTORY
-            )
-            BlockBehaviors.register(
-                Key.from("painter:sofa_connect_tile"),
-                SofaConnectTileBehavior.FACTORY
-            )
-            UneProperties.registerAll()
+            try {
+                BlockBehaviors.register(Key.from("painter:column_block"), ColumnBlockBehavior.FACTORY)
+                BlockBehaviors.register(Key.from("painter:window_connect_tile"), WindowConnectTileBehavior.FACTORY)
+                BlockBehaviors.register(Key.from("painter:sofa_connect_tile"), SofaConnectTileBehavior.FACTORY)
+
+                BlockBehaviors.register(Key.from("painter:fish_tank"), FishTankBehavior.FACTORY);
+
+                UneProperties.registerAll()
+
+                FishTankDataStore.load()
+
+                Bukkit.getScheduler().runTaskLater(this, Runnable {
+                    FishTankBehavior.ensureTaskRunning()
+                    FishTankBehavior.resyncAllLoadedAquariums()
+                    Bukkit.getPluginManager().registerEvents(FishTankChunkListener(), this)
+                    //Bukkit.getLogger().info("[FishTank] resyncAllLoadedAquariums done onEnable")
+                }, 40L)
+            } catch (t: Throwable) {
+                logger.severe("[UnearthMechanic] CraftEngine hook failed: ${t.javaClass.name}: ${t.message}")
+                logger.severe("[UnearthMechanic] Disabling CraftEngine compatibility to avoid startup crash.")
+            }
 
             logger.info("Registered ColumnBlockBehavior for painter:column_block")
             logger.info("Registered WindowConnectTileBehavior for painter:window_connect_tile")
@@ -97,7 +108,9 @@ class UnearthMechanic : UnearthMechanicPlugin() {
     }
 
     override fun onMechanicDisable() {
-
+        if(CraftEnginePlugin.isCraftEngineEnabled()){
+            FishTankDataStore.flushSaveNow()
+        }
     }
 
     override fun getConfigManager(): ConfigManager {

@@ -19,3 +19,13 @@ enum class ColumnPosition {
     single,
     up, middle, down
 }
+
+enum class FishType {
+    none,
+    cod,
+    salmon,
+    tropical_fish,
+    pufferfish,
+    axolotl,
+    tadpole
+}

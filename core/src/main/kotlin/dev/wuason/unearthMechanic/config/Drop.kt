@@ -11,4 +11,7 @@ class Drop(private val adapterData: AdapterData, private val amount: String, pri
         return if (item != null) loc.world.dropItem(loc, item) else null
     }
 
+    fun rollItem(applyChance: Boolean): ItemStack? {
+        return if (applyChance) getItemStackChance() else getItemStack()
+    }
 }

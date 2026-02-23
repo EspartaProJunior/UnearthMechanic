@@ -11,10 +11,10 @@ import net.momirealms.craftengine.core.block.ImmutableBlockState
 import net.momirealms.craftengine.core.block.UpdateOption
 import net.momirealms.craftengine.core.block.behavior.BlockBehaviorFactory
 import net.momirealms.craftengine.core.block.properties.Property
-import net.momirealms.craftengine.core.item.context.BlockPlaceContext
 import net.momirealms.craftengine.core.registry.Holder
 import net.momirealms.craftengine.core.world.BlockPos
 import net.momirealms.craftengine.core.world.World
+import net.momirealms.craftengine.core.world.context.BlockPlaceContext
 import org.bukkit.Bukkit
 import java.util.concurrent.Callable
 import java.util.concurrent.ConcurrentHashMap
@@ -38,7 +38,7 @@ class WindowConnectTileBehavior(
         private val inBatch: ThreadLocal<Boolean> = ThreadLocal.withInitial { false }
 
         val FACTORY = Factory()
-        class Factory : BlockBehaviorFactory {
+        class Factory : BlockBehaviorFactory<WindowConnectTileBehavior> {
             override fun create(block: CustomBlock, arguments: Map<String, Any>): WindowConnectTileBehavior {
                 val prop = block.getProperty("tile")
                     ?: throw IllegalArgumentException("Missing 'tile' property")
@@ -51,13 +51,15 @@ class WindowConnectTileBehavior(
 
     // ================== Hooks ==================
     override fun updateShape(thisBlock: Any, args: Array<Any>, superMethod: Callable<Any>): Any {
+        if (inBatch.get() == true) return args[0]
+
         val world = args.getOrNull(3) as? World ?: return superMethod.call()
         val pos   = args.getOrNull(4) as? BlockPos ?: return superMethod.call()
         //log.info("[WindowTile] updateShape(): (${world.name()}:${pos.x()},${pos.y()},${pos.z()})")
 
         val optState = BlockStateUtils.getOptionalCustomBlockState(args[0]) ?: return superMethod.call()
         val state = optState.get()
-        val newTile = calculateTile(world, pos)
+        val newTile = calculateTile(world, pos, state)
         //log.info("[WindowTile] updateShape(): APPLY (${world.name()}:${pos.x()},${pos.y()},${pos.z()}) tile='$newTile'")
 
         return state.with(tileProperty, newTile)
@@ -69,7 +71,7 @@ class WindowConnectTileBehavior(
         val world = context.level
         val pos   = context.clickedPos
         //log.info("[WindowTile] updateStateForPlacement(): (${world.name()}:${pos.x()},${pos.y()},${pos.z()}) stateIn=${customBlock.id().asString()}")
-        val newTile = calculateTile(world, pos)
+        val newTile = calculateTile(world, pos, state)
         //log.info("[WindowTile] updateStateForPlacement(): (${world.name()}:${pos.x()},${pos.y()},${pos.z()}) → tile='$newTile'")
         return state.with(tileProperty, newTile)
     }
@@ -146,11 +148,111 @@ class WindowConnectTileBehavior(
 
     // ================== Connection logic ==================
 
-    private fun calculateTile(world: World, pos: BlockPos): WindowTile {
-        val n = isSame(world, pos.offset(0, 0, -1)) // N = -Z
-        val e = isSame(world, pos.offset(1, 0,  0)) // E = +X
-        val s = isSame(world, pos.offset(0, 0,  1)) // S = +Z
-        val w = isSame(world, pos.offset(-1,0,  0)) // W = -X
+    private fun calculateTile(world: World, pos: BlockPos, selfState: ImmutableBlockState? = null): WindowTile {
+        val originState = selfState ?: world.getBlock(pos).customBlockState()
+        val originId = ceStateId(originState) ?: return WindowTile.single
+        val ori = ceOrientation(originState)
+
+        val axis0 = normalizeAxis(propValue(originState, "axis"))
+        val facing0 = normalizeFacing(propValue(originState, "facing"))
+
+        fun isSameOriented(p: BlockPos): Boolean {
+            val st = world.getBlock(p).customBlockState() ?: return false
+            if (ceStateId(st) != originId) return false
+
+            val ax = normalizeAxis(propValue(st, "axis"))
+            val fc = normalizeFacing(propValue(st, "facing"))
+
+            if (axis0 != null && ax != axis0) return false
+            if (facing0 != null && fc != facing0) return false
+
+            return true
+        }
+
+        fun inferUseAxisZ(p: BlockPos): Boolean? {
+            val hasX = isSameOriented(p.offset( 1, 0, 0)) || isSameOriented(p.offset(-1, 0, 0))
+            val hasZ = isSameOriented(p.offset( 0, 0, 1)) || isSameOriented(p.offset( 0, 0,-1))
+            return when {
+                hasZ && !hasX -> true
+                hasX && !hasZ -> false
+                else -> null
+            }
+        }
+
+        val defaultUseAxisZ = when (ori.kind) {
+            OrientationKind.FACING -> (ori.value == "east" || ori.value == "west")
+            OrientationKind.AXIS -> when (ori.value) {
+                "x" -> true
+                "z" -> false
+                "y" -> false
+                else -> false
+            }
+            OrientationKind.NONE -> false
+        }
+
+        val hasFacing = (facing0 != null)
+        val useAxisZ = if (hasFacing) (facing0 == "east" || facing0 == "west")
+        else (inferUseAxisZ(pos) ?: defaultUseAxisZ)
+
+        var neg = if (useAxisZ) pos.offset(0,0,-1) else pos.offset(-1,0,0)
+        var posi= if (useAxisZ) pos.offset(0,0, 1) else pos.offset( 1,0,0)
+
+        if (hasFacing) {
+            val invertLR = if (!useAxisZ) (facing0 == "north") else (facing0 == "east")
+            if (invertLR) {
+                val tmp = neg; neg = posi; posi = tmp
+            }
+        }
+
+        val left  = isSameOriented(neg)
+        val right = isSameOriented(posi)
+
+        val up = isSameOriented(pos.offset(0, 1, 0))
+        val dn = isSameOriented(pos.offset(0,-1, 0))
+
+        val family = when {
+            up && dn  -> "middle"
+            dn && !up -> "up"
+            up && !dn -> "down"
+            else      -> "none"
+        }
+
+        // local tag (L/R/C)
+        var tag = when {
+            !left && !right -> "C"
+            !left && right  -> "L"
+            left && !right  -> "R"
+            else            -> "C"
+        }
+
+        val axisFlip = (!hasFacing && ori.kind == OrientationKind.AXIS && ori.value == "x")
+        if (axisFlip) tag = when (tag) { "L" -> "R"; "R" -> "L"; else -> "C" }
+
+        // investment only if there is facing
+        val invert = when {
+            facing0 == null -> false
+            !useAxisZ -> (facing0 == "south")
+            else      -> (facing0 == "west")
+        }
+
+        val baseFlipZ = useAxisZ
+        val doFlip = invert xor axisFlip xor baseFlipZ
+        if (doFlip) tag = when (tag) { "L" -> "R"; "R" -> "L"; else -> "C" }
+
+        fun tileFrom(fam: String, t: String): WindowTile = when (fam) {
+            "up"     -> when (t) { "L" -> WindowTile.up_left;   "R" -> WindowTile.up_right;   else -> WindowTile.up }
+            "down"   -> when (t) { "L" -> WindowTile.down_left; "R" -> WindowTile.down_right; else -> WindowTile.down }
+            "middle" -> when (t) { "L" -> WindowTile.left;      "R" -> WindowTile.right;      else -> WindowTile.middle }
+            else     -> if (t == "C") WindowTile.single else WindowTile.single
+        }
+
+        val fam2 = if (family == "none") "middle" else family
+        return tileFrom(fam2, tag)
+
+        /*val n = isSameOriented(pos.offset(0, 0, -1)) // N = -Z
+        val e = isSameOriented(pos.offset(1, 0,  0)) // E = +X
+        val s = isSameOriented(pos.offset(0, 0,  1)) // S = +Z
+        val w = isSameOriented(pos.offset(-1,0,  0)) // W = -X
 
         val hasH = e || w
         val hasV = n || s
@@ -172,13 +274,13 @@ class WindowConnectTileBehavior(
 
         if (!hasH && hasV) {
             return when {
-                s && !n -> WindowTile.down_left    // bloque de arriba
-                n && !s -> WindowTile.down_right   // bloque de abajo
+                s && !n -> WindowTile.down_left
+                n && !s -> WindowTile.down_right
                 else    -> WindowTile.middle
             }
         }
 
-        return WindowTile.single
+        return WindowTile.single*/
     }
 
     private fun isSame(world: World, pos: BlockPos): Boolean {
@@ -190,6 +292,9 @@ class WindowConnectTileBehavior(
     }
 
     // ---------------- Robust recalculation with flood-fill ----------------
+
+    private enum class OrientationKind { FACING, AXIS, NONE }
+    private data class Orientation(val kind: OrientationKind, val value: String)
 
     private fun ceStateId(state: ImmutableBlockState?): String? {
         if (state == null) return null
@@ -204,6 +309,79 @@ class WindowConnectTileBehavior(
                 .firstOrNull { it.key.name() == "facing" }
                 ?.value?.toString()?.lowercase() ?: fallback
         } catch (_: Throwable) { fallback }
+    }
+
+    private fun ceAxis(state: ImmutableBlockState?, fallback: String = "z"): String {
+        if (state == null) return fallback
+        return try {
+            state.propertyEntries().entries
+                .firstOrNull { it.key.name() == "axis" }
+                ?.value?.toString()?.lowercase() ?: fallback
+        } catch (_: Throwable) { fallback }
+    }
+
+    private fun propValue(state: ImmutableBlockState?, name: String): Any? {
+        if (state == null) return null
+        return try {
+            state.propertyEntries().entries
+                .firstOrNull { it.key.name().equals(name, ignoreCase = true) }
+                ?.value
+        } catch (_: Throwable) { null }
+    }
+
+    private fun normalizeAny(v: Any?): String? {
+        if (v == null) return null
+        val s = when (v) {
+            is Enum<*> -> v.name
+            else -> v.toString()
+        }.trim().lowercase()
+
+        // limpia wrappers típicos (Axis.X, minecraft:x, etc.)
+        return s.substringAfterLast('.')
+            .substringAfterLast(':')
+            .trim()
+    }
+
+    private fun normalizeAxis(v: Any?): String? {
+        val s = normalizeAny(v) ?: return null
+        return when (s) {
+            "x", "y", "z" -> s
+            else -> null
+        }
+    }
+
+    private fun normalizeFacing(v: Any?): String? {
+        val s = normalizeAny(v) ?: return null
+        return when (s) {
+            "north","south","east","west","up","down" -> s
+            else -> null
+        }
+    }
+
+    private fun shouldInvertLR(axis0: String?, facing0: String?, useAxisZ: Boolean): Boolean {
+        // If facing exists in the blockstate, we respect your original behavior:
+        if (facing0 != null) {
+            // runs in X => invert if north
+            // runs in Z => invert if west
+            return if (!useAxisZ) (facing0 == "south") else (facing0 == "west")
+        }
+
+        // If there is NO facing (only axis), we adjust according to how your models are:
+        return when (axis0) {
+            "x" -> true              // FIX: your axis=x models are mirrored (left/right)
+            "y" -> useAxisZ          // FIX: axis=y fails only on the “Z-run” axis (west/east)
+            else -> false            // z and others ok
+        }
+    }
+
+    private fun ceOrientation(state: ImmutableBlockState?): Orientation {
+        val facing = normalizeFacing(propValue(state, "facing"))
+        if (facing != null) return Orientation(OrientationKind.FACING, facing)
+
+        val axis = normalizeAxis(propValue(state, "axis"))
+        if (axis != null) return Orientation(OrientationKind.AXIS, axis)
+
+        return Orientation(OrientationKind.NONE, "")
     }
 
     private fun getTileNameFor(
@@ -246,7 +424,7 @@ class WindowConnectTileBehavior(
         val originState = world.getBlock(origin).customBlockState() ?: return
         //val originState = world.getBlockAt(origin).customBlockState() ?: return //OLD API METHOD
         val originId = ceStateId(originState) ?: return
-        val facing = ceFacing(originState, "south")
+        /*val facing = ceFacing(originState, "south")
 
         // E/W run in Z, N/S run in X
         val useAxisZ = (facing == "east" || facing == "west")
@@ -260,7 +438,46 @@ class WindowConnectTileBehavior(
             val st = world.getBlock(pos).customBlockState() ?: return false
             //val st = world.getBlockAt(pos).customBlockState() ?: return false
             return sameBlockId(st) && ceFacing(st, facing) == facing
+        }*/
+
+        val axis0 = normalizeAxis(propValue(originState, "axis"))
+        val facing0 = normalizeFacing(propValue(originState, "facing")) // can come even if there is axis
+
+        val ori = ceOrientation(originState)
+
+        val axisFlip = (facing0 == null && ori.kind == OrientationKind.AXIS && ori.value == "x")
+
+        fun sameBlockId(st: ImmutableBlockState?): Boolean = ceStateId(st) == originId
+
+        fun isSameAt(pos: BlockPos): Boolean {
+            val st = world.getBlock(pos).customBlockState() ?: return false
+            if (ceStateId(st) != originId) return false
+
+            val ax = normalizeAxis(propValue(st, "axis"))
+            val fc = normalizeFacing(propValue(st, "facing"))
+
+            if (axis0 != null && ax != axis0) return false
+            if (facing0 != null && fc != facing0) return false
+            return true
         }
+
+        fun inferUseAxisZ(p: BlockPos): Boolean? {
+            val hasX = isSameAt(p.offset( 1, 0, 0)) || isSameAt(p.offset(-1, 0, 0))
+            val hasZ = isSameAt(p.offset( 0, 0, 1)) || isSameAt(p.offset( 0, 0,-1))
+            return when {
+                hasZ && !hasX -> true   // Z
+                hasX && !hasZ -> false  // X
+                else -> null            // ambiguous (single or rare form)
+            }
+        }
+
+        // axis has no direction => we do not invert L/R
+
+        //val invertLR_X = ((ori.kind == OrientationKind.FACING && ori.value == "north") xor axisFlip)
+        //val invertLR_Z = ((ori.kind == OrientationKind.FACING && ori.value == "west")  xor axisFlip)
+
+        val invertLR_X = (facing0 == "south")
+        val invertLR_Z = (facing0 == "west")
 
         fun setTile(p: BlockPos, tile: WindowTile) {
             val state = world.getBlock(p).customBlockState() ?: return
@@ -304,8 +521,8 @@ class WindowConnectTileBehavior(
         }
 
         // Limit: 9x9 (radius 4) and ±2 in Y
-        val maxHr = 4  // 9 wide (4 on each side + center)
-        val maxVy = 2
+        val maxHr = 16 //4 // 9 wide (4 on each side + center)
+        val maxVy = 8 //2
 
         val comp = LinkedHashSet<BlockPos>()
         val q: ArrayDeque<BlockPos> = ArrayDeque()
@@ -333,6 +550,44 @@ class WindowConnectTileBehavior(
             }
         }
 
+        val defaultUseAxisZ: Boolean = when (ori.kind) {
+            OrientationKind.FACING -> (ori.value == "east" || ori.value == "west")
+            OrientationKind.AXIS -> when (ori.value) {
+                "x" -> true   // pared “tipo east/west” => runs en Z
+                "z" -> false  // pared “tipo north/south” => runs en X
+                "y" -> false
+                else -> false
+            }
+            OrientationKind.NONE -> false
+        }
+
+        val minX = comp.minOf { it.x() }
+        val maxX = comp.maxOf { it.x() }
+        val minZ = comp.minOf { it.z() }
+        val maxZ = comp.maxOf { it.z() }
+
+        val dx = maxX - minX
+        val dz = maxZ - minZ
+
+        val fallbackUseAxisZ =
+            if (facing0 != null) (facing0 == "east" || facing0 == "west")
+            else false
+
+        val useAxisZ = when {
+            dz > dx -> true
+            dx > dz -> false
+            else -> fallbackUseAxisZ
+        }
+
+        //val invertLR = shouldInvertLR(axis0, facing0, useAxisZ)
+        val invertLR =
+            if (facing0 != null) {
+                if (!useAxisZ) (facing0 == "north") else (facing0 == "east")
+            } else {
+                // Axis Only
+                shouldInvertLR(axis0, null, useAxisZ)
+            }
+
         // Plan by rows (by Y)
         val rowsByY = comp.groupBy { it.y() }
         //val plan = ArrayList<Pair<BlockPos, String>>()
@@ -352,7 +607,8 @@ class WindowConnectTileBehavior(
                         for ((idx, x) in run.withIndex()) {
                             val pos = BlockPos(x, y, z)
                             val fam = familyFor(pos)
-                            val tile = getTileNameFor(invertLR_X, idx, run.size, fam)
+                            //val tile = getTileNameFor(invertLR_X, idx, run.size, fam)
+                            val tile = getTileNameFor(invertLR, idx, run.size, fam)
                             plan.add(pos to tile)
                         }
                         i = j + 1
@@ -371,7 +627,7 @@ class WindowConnectTileBehavior(
                         for ((idx, z) in run.withIndex()) {
                             val pos = BlockPos(x, y, z)
                             val fam = familyFor(pos)
-                            val tile = getTileNameFor(invertLR_Z, idx, run.size, fam)
+                            val tile = getTileNameFor(invertLR, idx, run.size, fam)
                             plan.add(pos to tile)
                         }
                         i = j + 1

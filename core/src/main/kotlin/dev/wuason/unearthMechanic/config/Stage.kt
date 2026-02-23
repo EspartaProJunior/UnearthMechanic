@@ -91,7 +91,13 @@ open class Stage(
     override fun dropItems(loc: Location) {
         if(drops.isEmpty()) return
         if (isOnlyOneDrop()) {
-            drops[Random.nextInt(drops.size)].dropItem(loc, true)
+            val results = drops.filter { drop ->
+                drop.rollItem(true) != null
+            }
+            if (results.isEmpty()) return
+            results.random().dropItem(loc, false)
+
+            //drops[Random.nextInt(drops.size)].dropItem(loc, false)
             return
         }
         drops.forEach { it.dropItem(loc, true) }
