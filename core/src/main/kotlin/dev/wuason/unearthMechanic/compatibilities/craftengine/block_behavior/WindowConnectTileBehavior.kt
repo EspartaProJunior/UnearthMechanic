@@ -1,16 +1,17 @@
 package dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior
 
 import dev.wuason.unearthMechanic.compatibilities.craftengine.types.WindowTile
-import net.momirealms.craftengine.bukkit.api.BukkitAdaptors
+import net.momirealms.craftengine.bukkit.api.BukkitAdaptor
 import net.momirealms.craftengine.bukkit.block.behavior.BukkitBlockBehavior
 import net.momirealms.craftengine.bukkit.nms.FastNMS
 import net.momirealms.craftengine.bukkit.util.BlockStateUtils
 import net.momirealms.craftengine.bukkit.world.BukkitWorld
 import net.momirealms.craftengine.core.block.CustomBlock
 import net.momirealms.craftengine.core.block.ImmutableBlockState
-import net.momirealms.craftengine.core.block.UpdateOption
+import net.momirealms.craftengine.core.block.UpdateFlags
 import net.momirealms.craftengine.core.block.behavior.BlockBehaviorFactory
 import net.momirealms.craftengine.core.block.properties.Property
+import net.momirealms.craftengine.core.plugin.config.ConfigSection
 import net.momirealms.craftengine.core.registry.Holder
 import net.momirealms.craftengine.core.world.BlockPos
 import net.momirealms.craftengine.core.world.World
@@ -39,7 +40,7 @@ class WindowConnectTileBehavior(
 
         val FACTORY = Factory()
         class Factory : BlockBehaviorFactory<WindowConnectTileBehavior> {
-            override fun create(block: CustomBlock, arguments: Map<String, Any>): WindowConnectTileBehavior {
+            override fun create(block: CustomBlock, section: ConfigSection): WindowConnectTileBehavior {
                 val prop = block.getProperty("tile")
                     ?: throw IllegalArgumentException("Missing 'tile' property")
                 @Suppress("UNCHECKED_CAST")
@@ -91,17 +92,17 @@ class WindowConnectTileBehavior(
         val y = nmsPos.javaClass.getMethod("getY").invoke(nmsPos) as Int
         val z = nmsPos.javaClass.getMethod("getZ").invoke(nmsPos) as Int
 
-        val ceWorld = BukkitAdaptors.adapt(craftWorld)
+        val ceWorld = BukkitAdaptor.adapt(craftWorld)
         val cePos   = BlockPos(x, y, z)
         scheduleNeighborUpdate(ceWorld, cePos, 2L)
         superMethod.call()
     }
 
-    override fun onRemove(thisBlock: Any, args: Array<Any>, superMethod: Callable<Any>) {
+    /*override fun onRemove(thisBlock: Any, args: Array<Any>, superMethod: Callable<Any>) {
         if (inBatch.get() == true) { superMethod.call(); return }
         //log.info("[WindowTile] onRemove(): args.size=${args.size}")
         handleRemoval(thisBlock, args); superMethod.call()
-    }
+    }*/
 
     override fun affectNeighborsAfterRemoval(thisBlock: Any, args: Array<Any>, superMethod: Callable<Any>) {
         if (inBatch.get() == true) { superMethod.call(); return }
@@ -483,7 +484,7 @@ class WindowConnectTileBehavior(
             val state = world.getBlock(p).customBlockState() ?: return
 
             val newState = try { state.with(tileProperty, tile) } catch (_: Throwable) { return }
-            BukkitAdaptors.adapt(bWorld).setBlockState(p.x(), p.y(), p.z(), newState, UpdateOption.UPDATE_ALL.flags())
+            BukkitAdaptor.adapt(bWorld).setBlockState(p.x(), p.y(), p.z(), newState, UpdateFlags.UPDATE_ALL)
             //BukkitAdaptors.adapt(bWorld).setBlockAt(p.x(), p.y(), p.z(), newState, UpdateOption.UPDATE_ALL.flags()) //OLD API METHOD
             // log: "[WindowTile] (${p.x()},${p.y()},${p.z()}) tile='${tile.name.lowercase()}' facing=${facing}"
         }

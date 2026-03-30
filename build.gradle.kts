@@ -58,7 +58,7 @@ allprojects {
         maven("https://repo.momirealms.net/releases/") {
             name = "craftengine-releases"
         }
-        maven("https://repo.momirealms.net/snapshots") {
+        maven("https://repo.momirealms.net/snapshots/") {
             name = "craftengine-snapshots"
         }
 
@@ -208,8 +208,8 @@ subprojects {
         compileOnly("com.sk89q.worldguard:worldguard-bukkit:7.0.12-SNAPSHOT")
         compileOnly("com.nexomc:nexo:0.4.0:dev")
 
-        compileOnly("net.momirealms:craft-engine-core:0.0.67")
-        compileOnly("net.momirealms:craft-engine-bukkit:0.0.67")
+        compileOnly("net.momirealms:craft-engine-core:26.3-SNAPSHOT")
+        compileOnly("net.momirealms:craft-engine-bukkit:26.3-SNAPSHOT")
 
         compileOnly("net.momirealms:craft-engine-nms-helper:1.0.157")
 

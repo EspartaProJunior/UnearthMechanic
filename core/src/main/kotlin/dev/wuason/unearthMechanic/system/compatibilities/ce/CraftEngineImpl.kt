@@ -16,12 +16,12 @@ import dev.wuason.unearthMechanic.system.StageData
 import dev.wuason.unearthMechanic.system.StageManager
 import dev.wuason.unearthMechanic.system.compatibilities.ICompatibility
 import dev.wuason.unearthMechanic.utils.Utils
-import net.momirealms.craftengine.bukkit.api.BukkitAdaptors
+import net.momirealms.craftengine.bukkit.api.BukkitAdaptor
 import net.momirealms.craftengine.bukkit.api.CraftEngineBlocks
 import net.momirealms.craftengine.bukkit.api.CraftEngineFurniture
 import net.momirealms.craftengine.bukkit.api.event.*
 import net.momirealms.craftengine.core.block.ImmutableBlockState
-import net.momirealms.craftengine.core.block.UpdateOption
+import net.momirealms.craftengine.core.block.UpdateFlags
 import net.momirealms.craftengine.core.block.properties.Property
 import net.momirealms.craftengine.core.block.properties.type.DoubleBlockHalf
 import net.momirealms.craftengine.core.entity.furniture.AnchorType
@@ -44,7 +44,6 @@ import org.bukkit.event.EventPriority
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
 import java.util.*
-
 
 class CraftEngineImpl(
     pluginName: String,
@@ -208,7 +207,7 @@ class CraftEngineImpl(
             val loc = event.location()
             val bw = loc.world
 
-            val ceWorld = BukkitAdaptors.adapt(bw)
+            val ceWorld = BukkitAdaptor.adapt(bw)
             val pos = BlockPos(loc.blockX, loc.blockY, loc.blockZ)
 
             val fishPropAny = ownerBlock.getProperty("fish") ?: return
@@ -234,7 +233,7 @@ class CraftEngineImpl(
                 val out = FishTankBehavior.bucketToGive(bw, tankKey, pos, currentFish)
 
                 val newState = state.with(fishProp, FishType.none)
-                ceWorld.setBlockState(pos, newState, UpdateOption.UPDATE_ALL.flags())
+                ceWorld.setBlockState(pos, newState, UpdateFlags.UPDATE_ALL)
 
                 FishTankDataStore.removeCellSnapshot(tankKey, FishTankBehavior.packPos(pos))
 
@@ -271,7 +270,7 @@ class CraftEngineImpl(
                 // set block
                 FishTankBehavior.suppressPos(ceWorld, pos)
                 val newState = state.with(fishProp, fishFromBucket)
-                ceWorld.setBlockState(pos, newState, UpdateOption.UPDATE_ALL.flags())
+                ceWorld.setBlockState(pos, newState, UpdateFlags.UPDATE_ALL)
 
                 // sync display once
                 /*FishTankBehavior.ensureTaskRunning()
@@ -399,7 +398,7 @@ class CraftEngineImpl(
         } else if (stage is IFurnitureStage) {
             Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
                 handleFurnitureStage(player, itemAdapterData, event, loc, toolUsed, generic, stage)
-            }, 2L)
+            }, 1L)
         }
     }
 
@@ -464,11 +463,11 @@ class CraftEngineImpl(
 
                     val properties1 = createDoorProperties(blockData)
                     val newState1 = customBlock.getBlockState(properties1)
-                    CraftEngineBlocks.place(block.location, newState1, UpdateOption.UPDATE_NONE, false)
+                    CraftEngineBlocks.place(block.location, newState1, UpdateFlags.UPDATE_NONE, false)
 
                     val properties2 = createDoorProperties(relativeDoor)
                     val newState2 = customBlock.getBlockState(properties2)
-                    CraftEngineBlocks.place(otherHalf.location, newState2, UpdateOption.UPDATE_NONE, false)
+                    CraftEngineBlocks.place(otherHalf.location, newState2, UpdateFlags.UPDATE_NONE, false)
                 }else{
                     //Bukkit.getConsoleSender().sendMessage(" [DEBUG] previousBlockState == null && !(blockData is Door)")
                     CraftEngineBlocks.place(
@@ -509,10 +508,10 @@ class CraftEngineImpl(
                         CraftEngineBlocks.remove(lowerLoc.block)
 
                         if (newUpperState == null || newLowerState == null) return;
-                        BukkitAdaptors.adapt(loc.world).setBlockState(
+                        BukkitAdaptor.adapt(loc.world).setBlockState(
                             loc.blockX, loc.blockY, loc.blockZ, newUpperState, 512)
-                        BukkitAdaptors.adapt(lowerLoc.world).setBlockState(
-                            lowerLoc.blockX, lowerLoc.blockY, lowerLoc.blockZ, newLowerState, UpdateOption.UPDATE_ALL.flags())
+                        BukkitAdaptor.adapt(lowerLoc.world).setBlockState(
+                            lowerLoc.blockX, lowerLoc.blockY, lowerLoc.blockZ, newLowerState, UpdateFlags.UPDATE_ALL)
                     }
                     DoubleBlockHalf.LOWER -> {
                         val previousUpperState = ImmutableBlockState.with(previousBlockState, doubleBlockProperty, DoubleBlockHalf.UPPER)
@@ -526,9 +525,9 @@ class CraftEngineImpl(
                         val upperLoc = Location(loc.world, loc.x, loc.y + 1, loc.z)
 
                         if (newUpperState == null || newLowerState == null) return;
-                        BukkitAdaptors.adapt(loc.world).setBlockState(loc.blockX, loc.blockY, loc.blockZ, newLowerState, 512)
-                        BukkitAdaptors.adapt(loc.world).setBlockState(
-                            upperLoc.blockX, upperLoc.blockY, upperLoc.blockZ, newUpperState, UpdateOption.UPDATE_ALL.flags())
+                        BukkitAdaptor.adapt(loc.world).setBlockState(loc.blockX, loc.blockY, loc.blockZ, newLowerState, 512)
+                        BukkitAdaptor.adapt(loc.world).setBlockState(
+                            upperLoc.blockX, upperLoc.blockY, upperLoc.blockZ, newUpperState, UpdateFlags.UPDATE_ALL)
                     }
                 }
             }else{
@@ -584,12 +583,14 @@ class CraftEngineImpl(
                 return
             }
 
+            var breakloc = event.furniture().bukkitEntity.location.block.location
+
             if(isValid(loc, itemAdapterData.toString())){
                 CraftEngineFurniture.remove(event.furniture().bukkitEntity)
                 event.furniture().bukkitEntity.remove()
-                breakBlock(event.furniture().bukkitEntity.location.block.location)
+                breakBlock(breakloc)
             }else{
-                breakBlock(event.furniture().bukkitEntity.location.block.location)
+                breakBlock(breakloc)
             }
 
             // Spawn of the new furniture
@@ -622,8 +623,7 @@ class CraftEngineImpl(
             // Sequence System
             val furnitureId = Key.of(itemAdapterData.id.removePrefix("ce:"))
             val furniture = CraftEngineFurniture.byId(furnitureId)
-            //val anchor = furniture?.getAnyAnchorType() ?: AnchorType.GROUND
-            val anchor = furniture?.anyVariantName() ?: AnchorType.WALL.variantName()
+            val anchor = furniture?.anyVariantName() ?: AnchorType.GROUND.variantName()
 
             val rotation = rotationMap.remove(loc)
             val cachedFrameRotation = itemFrameRotationMap[loc]

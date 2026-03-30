@@ -3,7 +3,7 @@ package dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.fi
 
 import dev.wuason.unearthMechanic.UnearthMechanic
 import dev.wuason.unearthMechanic.compatibilities.craftengine.types.FishType
-import net.momirealms.craftengine.bukkit.api.BukkitAdaptors
+import net.momirealms.craftengine.bukkit.api.BukkitAdaptor
 import net.momirealms.craftengine.bukkit.api.CraftEngineBlocks
 import net.momirealms.craftengine.bukkit.block.behavior.BukkitBlockBehavior
 import net.momirealms.craftengine.bukkit.util.BlockStateUtils
@@ -11,6 +11,7 @@ import net.momirealms.craftengine.core.block.CustomBlock
 import net.momirealms.craftengine.core.block.ImmutableBlockState
 import net.momirealms.craftengine.core.block.behavior.BlockBehaviorFactory
 import net.momirealms.craftengine.core.block.properties.Property
+import net.momirealms.craftengine.core.plugin.config.ConfigSection
 import net.momirealms.craftengine.core.registry.Holder
 import net.momirealms.craftengine.core.world.BlockPos
 import net.momirealms.craftengine.core.world.World
@@ -50,7 +51,7 @@ class FishTankBehavior(
     companion object {
         val FACTORY = Factory()
         class Factory : BlockBehaviorFactory<FishTankBehavior> {
-            override fun create(block: CustomBlock, arguments: Map<String, Any>): FishTankBehavior {
+            override fun create(block: CustomBlock, section: ConfigSection): FishTankBehavior {
                 val prop = block.getProperty("fish")
                     ?: throw IllegalArgumentException("Missing 'fish' property")
                 @Suppress("UNCHECKED_CAST")
@@ -886,7 +887,7 @@ class FishTankBehavior(
             // -----------------------------
 
             // Resync (this deletes entities/YML if it is empty)
-            val ceWorld = BukkitAdaptors.adapt(bw)
+            val ceWorld = BukkitAdaptor.adapt(bw)
             ensureTaskRunning()
             syncFishDisplay(ceWorld, targetCell, FishType.none)
         }
@@ -1135,7 +1136,7 @@ class FishTankBehavior(
                             val fish = st.get(fishProp, FishType.none)
                             if (fish == FishType.none) continue
 
-                            val ceWorld = BukkitAdaptors.adapt(bw)
+                            val ceWorld = BukkitAdaptor.adapt(bw)
                             ensureTaskRunning()
                             syncFishDisplay(ceWorld, BlockPos(b.x, b.y, b.z), fish)
                         }
@@ -1170,7 +1171,7 @@ class FishTankBehavior(
                     val fish = st.get(fishProp, FishType.none)
                     if (fish == FishType.none) continue
 
-                    val ceWorld = BukkitAdaptors.adapt(bw)
+                    val ceWorld = BukkitAdaptor.adapt(bw)
                     syncFishDisplay(ceWorld, BlockPos(b.x, b.y, b.z), fish)
                 }
             }
@@ -1316,14 +1317,13 @@ class FishTankBehavior(
         superMethod.call()
     }
 
-    override fun onRemove(thisBlock: Any, args: Array<Any>, superMethod: Callable<Any>) {
-        // we try to clean the display
-        handleRemoval(thisBlock, args,superMethod);
-    }
-
-    /*override fun affectNeighborsAfterRemoval(thisBlock: Any, args: Array<Any>, superMethod: Callable<Any>) {
+    /*override fun onRemove(thisBlock: Any, args: Array<Any>, superMethod: Callable<Any>) {
         handleRemoval(thisBlock, args,superMethod);
     }*/
+
+    override fun affectNeighborsAfterRemoval(thisBlock: Any, args: Array<Any>, superMethod: Callable<Any>) {
+        handleRemoval(thisBlock, args,superMethod);
+    }
 
     private fun handleRemoval(thisBlock: Any, args: Array<Any>, superMethod: Callable<Any>) {
         try {
@@ -1346,7 +1346,7 @@ class FishTankBehavior(
                 val z = nmsPos.javaClass.getMethod("getZ").invoke(nmsPos) as Int
 
                 val bw = craftWorld
-                val ceWorld = BukkitAdaptors.adapt(bw)
+                val ceWorld = BukkitAdaptor.adapt(bw)
                 val removed = BlockPos(x, y, z)
                 val packedCell = pack(removed)
                 val worldName = bw.name

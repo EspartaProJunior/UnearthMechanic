@@ -26,6 +26,7 @@ import dev.wuason.unearthMechanic.utils.Utils
 import dev.wuason.unearthMechanic.utils.Utils.Companion.toAdapter
 import org.bukkit.Bukkit
 import org.bukkit.FluidCollisionMode
+import org.bukkit.GameMode
 import org.bukkit.Location
 import org.bukkit.block.BlockFace
 import org.bukkit.entity.Player
@@ -306,7 +307,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager {
                 val hasPermLuckPerms = if (LuckPermsPlugin.isLuckPermsEnabled()) {
                     core.getLuckPermsComb().hasPermission(player, permission)
                 } else { player.hasPermission(permission) || player.isOp }
-                //Bukkit.getConsoleSender().sendMessage("El jugador tiene el permiso $permission y es $hasPermLuckPerms de Tool")
+                //Bukkit.getConsoleSender().sendMessage("The player has the $permission permission and is $hasPermLuckPerms of Tool.)
                 if (!hasPermLuckPerms) return
             }
         }
@@ -316,19 +317,20 @@ class StageManager(private val core: UnearthMechanic) : IStageManager {
                 val hasPermLuckPerms = if (LuckPermsPlugin.isLuckPermsEnabled()) {
                     core.getLuckPermsComb().hasPermission(player, permission)
                 } else { player.hasPermission(permission) || player.isOp }
-                //Bukkit.getConsoleSender().sendMessage("El jugador tiene el permiso $permission y es $hasPermLuckPerms de Stage")
+                //Bukkit.getConsoleSender().sendMessage("The player has the $permission permission and is $hasPermLuckPerms from Stage.")
                 if (!hasPermLuckPerms) return
             }
         }
 
         if (activeSequences.contains(loc)) {
-            //Bukkit.getConsoleSender().sendMessage("[UM] Ya hay una secuencia activa en $loc, ignorando nuevo clic.")
+            //Bukkit.getConsoleSender().sendMessage("[UM] There is already an active sequence in $loc, ignoring new click.")
             return
         }
 
-        val currentTick = Bukkit.getCurrentTick().toLong()
-
-        val furnitureUuid = compatibility.getFurnitureUUID(loc)
+        if (stage.getReduceItemHand() > 0 && player.gameMode != GameMode.CREATIVE) {
+            val mainHand = toolUsed.getItemMainHand()
+            if (mainHand == null || mainHand.type.isAir || mainHand.amount < stage.getReduceItemHand()) return
+        }
 
         if ((validation != null && !validation.validate())
             || !toolUsed.isOriginalItem() || !toolUsed.isValid()

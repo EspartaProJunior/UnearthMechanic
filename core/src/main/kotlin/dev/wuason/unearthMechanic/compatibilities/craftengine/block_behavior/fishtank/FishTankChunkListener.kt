@@ -2,9 +2,9 @@ package dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.fi
 
 import dev.wuason.unearthMechanic.UnearthMechanic
 import dev.wuason.unearthMechanic.compatibilities.craftengine.types.FishType
-import net.momirealms.craftengine.bukkit.api.BukkitAdaptors
+import net.momirealms.craftengine.bukkit.api.BukkitAdaptor
 import net.momirealms.craftengine.bukkit.api.CraftEngineBlocks
-import net.momirealms.craftengine.core.block.UpdateOption
+import net.momirealms.craftengine.core.block.UpdateFlags
 import net.momirealms.craftengine.core.block.properties.Property
 import net.momirealms.craftengine.core.world.BlockPos
 import org.bukkit.Bukkit
@@ -92,7 +92,7 @@ class FishTankChunkListener : Listener {
     }
 
     private fun runTankInsertLikeCE(player: Player, tankBlock: Block, handItem: ItemStack, fishFromBucket: FishType) {
-        val ceWorld = BukkitAdaptors.adapt(tankBlock.world)
+        val ceWorld = BukkitAdaptor.adapt(tankBlock.world)
         val pos = BlockPos(tankBlock.x, tankBlock.y, tankBlock.z)
 
         val st = CraftEngineBlocks.getCustomBlockState(tankBlock.blockData) ?: return
@@ -118,7 +118,7 @@ class FishTankChunkListener : Listener {
 
         // set state
         val newState = st.with(fishProp, fishFromBucket)
-        ceWorld.setBlockState(pos, newState, UpdateOption.UPDATE_ALL.flags())
+        ceWorld.setBlockState(pos, newState, UpdateFlags.UPDATE_ALL)
 
         FishTankBehavior.ensureTaskRunning()
         FishTankBehavior.syncFishDisplay(ceWorld, pos, fishFromBucket, inSnapshot)

@@ -2,7 +2,7 @@ package dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior
 
 import dev.wuason.unearthMechanic.compatibilities.craftengine.types.ColumnPosition
 import dev.wuason.unearthMechanic.compatibilities.craftengine.types.WindowTile
-import net.momirealms.craftengine.bukkit.api.BukkitAdaptors
+import net.momirealms.craftengine.bukkit.api.BukkitAdaptor
 import net.momirealms.craftengine.bukkit.api.CraftEngineBlocks
 import net.momirealms.craftengine.bukkit.block.behavior.BukkitBlockBehavior
 import net.momirealms.craftengine.bukkit.util.BlockStateUtils
@@ -10,9 +10,10 @@ import net.momirealms.craftengine.bukkit.world.BukkitWorld
 import net.momirealms.craftengine.core.block.BlockStateWrapper
 import net.momirealms.craftengine.core.block.CustomBlock
 import net.momirealms.craftengine.core.block.ImmutableBlockState
-import net.momirealms.craftengine.core.block.UpdateOption
+import net.momirealms.craftengine.core.block.UpdateFlags
 import net.momirealms.craftengine.core.block.behavior.BlockBehaviorFactory
 import net.momirealms.craftengine.core.block.properties.Property
+import net.momirealms.craftengine.core.plugin.config.ConfigSection
 import net.momirealms.craftengine.core.util.Direction
 import net.momirealms.craftengine.core.world.BlockHitResult
 import net.momirealms.craftengine.core.world.BlockPos
@@ -95,7 +96,7 @@ class ColumnBlockBehavior(
 
         val cePos = net.momirealms.craftengine.core.world.BlockPos(x, y, z)
 
-        val ceWorld = BukkitAdaptors.adapt(craftWorld)
+        val ceWorld = BukkitAdaptor.adapt(craftWorld)
 
         //Bukkit.getConsoleSender().sendMessage("✅ CraftEngine.World y BlockPos convertidos correctamente (${craftWorld.name} @ $x, $y, $z)")
 
@@ -252,12 +253,12 @@ class ColumnBlockBehavior(
 
                 //Bukkit.getConsoleSender().sendMessage("Actualizando bloque en ${bukkitLoc.blockX}, ${bukkitLoc.blockY}, ${bukkitLoc.blockZ}")
 
-                BukkitAdaptors.adapt(bukkitLoc.world).setBlockState(
+                BukkitAdaptor.adapt(bukkitLoc.world).setBlockState(
                     bukkitLoc.blockX,
                     bukkitLoc.blockY,
                     bukkitLoc.blockZ,
                     updatedState,
-                    UpdateOption.UPDATE_ALL.flags()
+                    UpdateFlags.UPDATE_ALL
                 )
             }
         }
@@ -275,7 +276,7 @@ class ColumnBlockBehavior(
         val FACTORY = Factory()
 
         class Factory : BlockBehaviorFactory<ColumnBlockBehavior> {
-            override fun create(block: CustomBlock, arguments: Map<String, Any>): ColumnBlockBehavior {
+            override fun create(block: CustomBlock, section: ConfigSection): ColumnBlockBehavior {
                 val prop = block.getProperty("position")
                     ?: throw IllegalArgumentException("Missing 'position' property")
                 @Suppress("UNCHECKED_CAST")
