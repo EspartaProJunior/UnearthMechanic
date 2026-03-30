@@ -3,11 +3,14 @@ package dev.wuason.unearthMechanic
 import dev.wuason.mechanics.utils.AdventureUtils
 import dev.wuason.unearthMechanic.compatibilities.craftengine.CraftEngineComp
 import dev.wuason.unearthMechanic.compatibilities.craftengine.CraftEnginePlugin
+import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.AshesMergeBehavior
+import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.ashes.BurnToAshesListener
 import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.ColumnBlockBehavior
 import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.fishtank.FishTankBehavior
 import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.fishtank.FishTankChunkListener
 import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.SofaConnectTileBehavior
 import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.WindowConnectTileBehavior
+import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.ashes.AshesEnvironmentListener
 import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.fishtank.FishTankDataStore
 import dev.wuason.unearthMechanic.compatibilities.craftengine.types.UneProperties
 import dev.wuason.unearthMechanic.compatibilities.luckperms.LuckPermsComp
@@ -84,6 +87,8 @@ class UnearthMechanic : UnearthMechanicPlugin() {
 
                 BlockBehaviors.register(Key.from("painter:fish_tank"), FishTankBehavior.FACTORY);
 
+                BlockBehaviors.register(Key.from("painter:ashes_merge"), AshesMergeBehavior.FACTORY)
+
                 UneProperties.registerAll()
 
                 FishTankDataStore.load()
@@ -93,14 +98,27 @@ class UnearthMechanic : UnearthMechanicPlugin() {
                     FishTankBehavior.resyncAllLoadedAquariums()
                     Bukkit.getPluginManager().registerEvents(FishTankChunkListener(), this)
                     //Bukkit.getLogger().info("[FishTank] resyncAllLoadedAquariums done onEnable")
+
+                    val ashesEnvironmentListener = AshesEnvironmentListener(this)
+
+                    server.pluginManager.registerEvents(ashesEnvironmentListener, this)
+                    server.pluginManager.registerEvents(
+                        BurnToAshesListener(this, ashesEnvironmentListener),
+                        this
+                    )
                 }, 40L)
+
+                logger.info("Registered ColumnBlockBehavior for painter:column_block")
+                logger.info("Registered WindowConnectTileBehavior for painter:window_connect_tile")
+                logger.info("Registered SofaConnectTileBehavior for painter:sofa_connect_tile")
+                logger.info("Registered FishTankBehavior for painter:fish_tank")
+                logger.info("Registered AshesMergeBehavior for painter:ashes_merge")
+                logger.info("Registered BurnToAshesListener")
+
             } catch (t: Throwable) {
                 logger.severe("[UnearthMechanic] CraftEngine hook failed: ${t.javaClass.name}: ${t.message}")
                 logger.severe("[UnearthMechanic] Disabling CraftEngine compatibility to avoid startup crash.")
             }
-
-            logger.info("Registered ColumnBlockBehavior for painter:column_block")
-            logger.info("Registered WindowConnectTileBehavior for painter:window_connect_tile")
         }
         AdventureUtils.sendMessagePluginConsole(this, "<gray>-----------------------------------------------------------")
         AdventureUtils.sendMessagePluginConsole(this, "<gray>-----------------------------------------------------------")
