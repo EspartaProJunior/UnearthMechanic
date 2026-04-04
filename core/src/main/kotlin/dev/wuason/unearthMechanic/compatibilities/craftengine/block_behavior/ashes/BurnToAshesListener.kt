@@ -99,7 +99,12 @@ class BurnToAshesListener(
             return
         }
 
-        if (!block.type.isAir) return
+        if (!block.type.isAir) {
+            Bukkit.getScheduler().runTaskLater(core, Runnable {
+                tryPlaceBurnResult(location, result, attempt + 1)
+            }, 2L)
+            return
+        }
         if (hasWater(block)) return
 
         if (WorldGuardPlugin.isWorldGuardEnabled()) {

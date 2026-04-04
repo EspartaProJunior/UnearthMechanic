@@ -6,8 +6,11 @@ import net.momirealms.craftengine.core.util.Key
 import org.bukkit.Bukkit
 import org.bukkit.Chunk
 import org.bukkit.Location
+import org.bukkit.Material
 import org.bukkit.block.Block
+import org.bukkit.block.BlockFace
 import org.bukkit.entity.FallingBlock
+import org.bukkit.entity.LivingEntity
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
@@ -26,7 +29,6 @@ class AshesEnvironmentListener(
 ) : Listener {
 
     private val ashesId = "elitefantasy:ashes_block"
-    private val ashesKey = Key.of(ashesId)
 
     // position -> layers
     private val trackedAshes = hashMapOf<TrackedPos, Int>()
@@ -45,6 +47,7 @@ class AshesEnvironmentListener(
 
     fun trackAsh(location: Location, layers: Int) {
         if (layers <= 0) return
+        //core.logger.info("trackAsh layers=$layers loc=${location.blockX},${location.blockY},${location.blockZ}")
         trackedAshes[TrackedPos.from(location)] = layers
     }
 
@@ -71,71 +74,41 @@ class AshesEnvironmentListener(
         }
     }
 
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    fun onFallingBlockSpawn(event: EntitySpawnEvent) {
-        val falling = event.entity as? FallingBlock ?: return
-        val pos = TrackedPos.from(event.location)
+    private fun getAshLayersNearLanding(location: Location): Int? {
+        val world = location.world ?: return null
 
-        val layers =
-            trackedAshes.remove(pos)
-                ?: trackedAshes.remove(pos.up())
-                ?: trackedAshes.remove(pos.down())
-                ?: return
+        var maxLayers: Int? = null
 
-        ashFallingEntities[falling.uniqueId] = layers
+        for (x in (location.blockX - 1)..(location.blockX + 1)) {
+            for (z in (location.blockZ - 1)..(location.blockZ + 1)) {
+                for (y in (location.blockY - 1)..location.blockY) {
+                    val block = world.getBlockAt(x, y, z)
+                    val layers = getAshLayers(block) ?: continue
 
-        if (layers >= 2) {
-            falling.setHurtEntities(false)
-            falling.damagePerBlock = 0f
-            falling.maxDamage = 0
-        }
-    }
-
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
-    fun onAshesDamageByEntity(event: EntityDamageByEntityEvent) {
-        val falling = event.damager as? FallingBlock ?: return
-        val layers = ashFallingEntities[falling.uniqueId] ?: return
-
-        if (layers >= 2) {
-            event.isCancelled = true
-            falling.setHurtEntities(false)
-            falling.damagePerBlock = 0f
-            falling.maxDamage = 0
-        }
-    }
-
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
-    fun onAshesGenericDamage(event: EntityDamageEvent) {
-        if (event.cause != EntityDamageEvent.DamageCause.FALLING_BLOCK) return
-
-        val victim = event.entity
-
-        for (nearby in victim.world.getNearbyEntities(victim.location, 1.5, 2.5, 1.5)) {
-            val falling = nearby as? FallingBlock ?: continue
-            val layers = ashFallingEntities[falling.uniqueId] ?: continue
-
-            if (layers >= 2) {
-                event.isCancelled = true
-                falling.setHurtEntities(false)
-                falling.damagePerBlock = 0f
-                falling.maxDamage = 0
-                return
+                    if (maxLayers == null || layers > maxLayers) {
+                        maxLayers = layers
+                    }
+                }
             }
         }
+
+        return maxLayers
     }
 
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    fun onAshesLand(event: EntityChangeBlockEvent) {
-        val falling = event.entity as? FallingBlock ?: return
-        val layers = ashFallingEntities.remove(falling.uniqueId) ?: return
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    fun onAshLandingFallDamage(event: EntityDamageEvent) {
+        if (event.cause != EntityDamageEvent.DamageCause.FALL) return
 
-        if (event.to.isAir) return
+        val layers = getAshLayersNearLanding(event.entity.location) ?: return
+        if (layers < 2) return
 
-        Bukkit.getScheduler().runTask(core, Runnable {
-            val landedBlock = event.block
-            val actualLayers = getAshLayers(landedBlock) ?: layers
-            trackAsh(landedBlock.location, actualLayers)
-        })
+        event.isCancelled = true
+        event.damage = 0.0
+        event.entity.fallDistance = 0f
+
+        /*core.logger.info(
+            "Ash fall damage cancelled -> entity=${event.entity.type} layers=$layers loc=${event.entity.location}"
+        )*/
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -160,6 +133,7 @@ class AshesEnvironmentListener(
         val world = chunk.world
         val minY = world.minHeight
         val maxY = world.maxHeight
+        var found = 0
 
         for (x in 0 until 16) {
             for (z in 0 until 16) {
@@ -167,15 +141,33 @@ class AshesEnvironmentListener(
                     val block = chunk.getBlock(x, y, z)
                     val layers = getAshLayers(block) ?: continue
                     trackedAshes[TrackedPos.from(block.location)] = layers
+                    found++
                 }
             }
+        }
+
+        if (found > 0) {
+            //core.logger.info("scanChunk found=$found world=${world.name} chunk=${chunk.x},${chunk.z}")
         }
     }
 
     private fun startRainTask() {
         Bukkit.getScheduler().runTaskTimer(core, Runnable {
-            val snapshot = trackedAshes.entries.map { it.key to it.value }
+            var anyStorm = false
+            for (world in Bukkit.getWorlds()) {
+                if (world.hasStorm()) {
+                    anyStorm = true
+                    break
+                }
+            }
 
+            if (!anyStorm) return@Runnable
+
+            scanLoadedChunks()
+
+            if (trackedAshes.isEmpty()) return@Runnable
+
+            val snapshot = trackedAshes.toMap()
             val positionsToRemove = mutableSetOf<TrackedPos>()
             val positionsToUpdate = hashMapOf<TrackedPos, Int>()
 
@@ -186,9 +178,8 @@ class AshesEnvironmentListener(
                     continue
                 }
 
-                if (!world.isChunkLoaded(pos.x shr 4, pos.z shr 4)) {
-                    continue
-                }
+                if (!world.hasStorm()) continue
+                if (!world.isChunkLoaded(pos.x shr 4, pos.z shr 4)) continue
 
                 val block = world.getBlockAt(pos.x, pos.y, pos.z)
                 val actualLayers = getAshLayers(block)
@@ -202,12 +193,19 @@ class AshesEnvironmentListener(
                     positionsToUpdate[pos] = actualLayers
                 }
 
-                if (!isRainingOn(block)) {
+                val raining = isRainingOn(block)
+                //core.logger.info("Rain check -> pos=$pos layers=$actualLayers raining=$raining")
+
+                if (!raining) {
                     continue
                 }
 
-                CraftEngineBlocks.remove(block)
-                positionsToRemove += pos
+                val removed = CraftEngineBlocks.remove(block)
+                //core.logger.info("Rain remove ash -> removed=$removed pos=$pos layers=$actualLayers")
+
+                if (removed) {
+                    positionsToRemove += pos
+                }
             }
 
             for (pos in positionsToRemove) {
@@ -215,7 +213,7 @@ class AshesEnvironmentListener(
             }
 
             for ((pos, layers) in positionsToUpdate) {
-                if (!positionsToRemove.contains(pos)) {
+                if (pos !in positionsToRemove) {
                     trackedAshes[pos] = layers
                 }
             }
@@ -249,8 +247,18 @@ class AshesEnvironmentListener(
         val world = block.world
         if (!world.hasStorm()) return false
 
-        val highestY = world.getHighestBlockYAt(block.x, block.z)
-        return highestY <= block.y
+        val x = block.x
+        val z = block.z
+
+        // blocks rain if there is something solid or liquid above it
+        for (y in (block.y + 1) until world.maxHeight) {
+            val above = world.getBlockAt(x, y, z)
+            if (!above.type.isAir) {
+                return false
+            }
+        }
+
+        return true
     }
 
     private data class TrackedPos(

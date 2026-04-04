@@ -113,7 +113,7 @@ class UnearthMechanic : UnearthMechanicPlugin() {
                 logger.info("Registered SofaConnectTileBehavior for painter:sofa_connect_tile")
                 logger.info("Registered FishTankBehavior for painter:fish_tank")
                 logger.info("Registered AshesMergeBehavior for painter:ashes_merge")
-                logger.info("Registered BurnToAshesListener")
+                logger.info("Registered BurnToAshesListener & AshesEnvironmentListener")
 
             } catch (t: Throwable) {
                 logger.severe("[UnearthMechanic] CraftEngine hook failed: ${t.javaClass.name}: ${t.message}")
