@@ -1,9 +1,11 @@
 package dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior
 
+import dev.wuason.unearthMechanic.UnearthMechanic
+import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.ashes.AshesEnvironmentListener
 import net.momirealms.craftengine.bukkit.api.BukkitAdaptor
 import net.momirealms.craftengine.bukkit.api.CraftEngineBlocks
 import net.momirealms.craftengine.bukkit.block.behavior.BukkitBlockBehavior
-import net.momirealms.craftengine.core.block.CustomBlock
+import net.momirealms.craftengine.core.block.BlockDefinition
 import net.momirealms.craftengine.core.block.UpdateFlags
 import net.momirealms.craftengine.core.block.behavior.BlockBehaviorFactory
 import net.momirealms.craftengine.core.block.properties.Property
@@ -11,12 +13,13 @@ import net.momirealms.craftengine.core.plugin.config.ConfigSection
 import net.momirealms.craftengine.core.world.BlockPos
 import net.momirealms.craftengine.core.world.World
 import org.bukkit.Bukkit
+import org.bukkit.Location
 import org.bukkit.scheduler.BukkitRunnable
 import java.util.concurrent.Callable
 import java.util.concurrent.ConcurrentHashMap
 
 class AshesMergeBehavior(
-    customBlock: CustomBlock,
+    customBlock: BlockDefinition,
     private val layersProperty: Property<Int>
 ) : BukkitBlockBehavior(customBlock) {
 
@@ -29,7 +32,7 @@ class AshesMergeBehavior(
         val FACTORY = Factory()
 
         class Factory : BlockBehaviorFactory<AshesMergeBehavior> {
-            override fun create(block: CustomBlock, section: ConfigSection): AshesMergeBehavior {
+            override fun create(block: BlockDefinition, section: ConfigSection): AshesMergeBehavior {
                 val prop = block.getProperty("layers")
                     ?: throw IllegalArgumentException("Missing 'layers' property")
                 @Suppress("UNCHECKED_CAST")
@@ -61,6 +64,42 @@ class AshesMergeBehavior(
         val pos = BlockPos(x, y, z)
 
         startMergeWindow(ceWorld, pos)
+    }
+
+    private fun ashesEnvironmentListener(): AshesEnvironmentListener? {
+        val plugin = Bukkit.getPluginManager().getPlugin("UnearthMechanic") as? UnearthMechanic ?: return null
+        return plugin.ashesEnvironmentListener
+    }
+
+    private fun trackAsh(world: org.bukkit.World, pos: BlockPos, layers: Int) {
+        ashesEnvironmentListener()?.trackAsh(
+            Location(world, pos.x().toDouble(), pos.y().toDouble(), pos.z().toDouble()),
+            layers
+        )
+    }
+
+    private fun syncTrackedAsh(world: org.bukkit.World, pos: BlockPos) {
+        val ceWorld = BukkitAdaptor.adapt(world)
+        val block = ceWorld.getBlock(pos)
+        val wrapper = block.blockState()
+
+        if (wrapper == null || wrapper.ownerId() != blockDefinition.id()) {
+            trackAsh(world, pos, 0)
+            return
+        }
+
+        val state = block.customBlockState() ?: run {
+            trackAsh(world, pos, 0)
+            return
+        }
+
+        val layers = try {
+            state.get(layersProperty, 1)
+        } catch (_: Throwable) {
+            1
+        }
+
+        trackAsh(world, pos, layers)
     }
 
     override fun updateShape(thisBlock: Any, args: Array<Any>, superMethod: Callable<Any>): Any {
@@ -117,12 +156,12 @@ class AshesMergeBehavior(
     private fun mergeWithBelow(world: World, pos: BlockPos): Boolean {
         val selfBlock = world.getBlock(pos)
         val selfWrapper = selfBlock.blockState() ?: return false
-        if (selfWrapper.ownerId() != customBlock.id()) return false
+        if (selfWrapper.ownerId() != blockDefinition.id()) return false
 
         val belowPos = pos.offset(0, -1, 0)
         val belowBlock = world.getBlock(belowPos)
         val belowWrapper = belowBlock.blockState() ?: return false
-        if (belowWrapper.ownerId() != customBlock.id()) return false
+        if (belowWrapper.ownerId() != blockDefinition.id()) return false
 
         val selfState = selfBlock.customBlockState() ?: return false
         val belowState = belowBlock.customBlockState() ?: return false

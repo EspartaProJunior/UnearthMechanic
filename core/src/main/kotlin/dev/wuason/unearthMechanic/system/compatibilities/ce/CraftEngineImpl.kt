@@ -376,7 +376,7 @@ class CraftEngineImpl(
     }
 
     private fun replaceFurniture(adapterId: String, entity: Entity) {
-        //val customFurniture = CustomFurniture.byAlreadySpawned(entity)
+        val customFurniture = CraftEngineFurniture.getLoadedFurnitureByMetaEntity(entity)
         //customFurniture!!.replaceFurniture(adapterId.replace("ce:", ""))
     }
 
@@ -437,7 +437,7 @@ class CraftEngineImpl(
         generic: IGeneric,
         stage: IStage
     ) {
-        //Bukkit.getConsoleSender().sendMessage("💾 [DEBUG] handleBlockStage $loc:")
+        //Bukkit.getConsoleSender().sendMessage("[DEBUG] handleBlockStage $loc:")
         //val data = loc.block.blockData
         //lastBlockData[loc.block.location.block.location] = data
 
@@ -656,7 +656,7 @@ class CraftEngineImpl(
         generic: IGeneric,
         stage: IStage
     ) {
-        //Bukkit.getConsoleSender().sendMessage("🚨 [DEBUG] Se llamó a handleRemove con loc=$loc y event=${event::class.simpleName}")
+        //Bukkit.getConsoleSender().sendMessage("[DEBUG] Se llamó a handleRemove con loc=$loc y event=${event::class.simpleName}")
 
         if (event is CustomBlockInteractEvent) {
             breakBlock(loc)

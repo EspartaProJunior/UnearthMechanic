@@ -8,7 +8,7 @@ import net.momirealms.craftengine.bukkit.block.behavior.BukkitBlockBehavior
 import net.momirealms.craftengine.bukkit.util.BlockStateUtils
 import net.momirealms.craftengine.bukkit.world.BukkitWorld
 import net.momirealms.craftengine.core.block.BlockStateWrapper
-import net.momirealms.craftengine.core.block.CustomBlock
+import net.momirealms.craftengine.core.block.BlockDefinition
 import net.momirealms.craftengine.core.block.ImmutableBlockState
 import net.momirealms.craftengine.core.block.UpdateFlags
 import net.momirealms.craftengine.core.block.behavior.BlockBehaviorFactory
@@ -24,7 +24,7 @@ import org.bukkit.Bukkit
 import java.util.concurrent.Callable
 
 class ColumnBlockBehavior(
-    customBlock: CustomBlock,
+    customBlock: BlockDefinition,
     private val positionProperty: Property<ColumnPosition>
 ) : BukkitBlockBehavior(customBlock) {
 
@@ -44,7 +44,7 @@ class ColumnBlockBehavior(
         )
 
         val newPosition = calculateNewPosition(world, pos)
-        return state.with(positionProperty, newPosition).customBlockState().literalObject()
+        return state.with(positionProperty, newPosition).customBlockState().minecraftState()
     }
 
     override fun updateStateForPlacement(context: BlockPlaceContext, state: ImmutableBlockState): ImmutableBlockState {
@@ -265,18 +265,18 @@ class ColumnBlockBehavior(
     }
 
     private fun isSameBlockWrapper(wrapper: BlockStateWrapper?): Boolean {
-        return wrapper != null && wrapper.ownerId() == customBlock.id()
+        return wrapper != null && wrapper.ownerId() == blockDefinition.id()
     }
 
     private fun isSameBlock(state: BlockStateWrapper?): Boolean {
-        return state != null && state.ownerId() == customBlock.id()
+        return state != null && state.ownerId() == blockDefinition.id()
     }
 
     companion object {
         val FACTORY = Factory()
 
         class Factory : BlockBehaviorFactory<ColumnBlockBehavior> {
-            override fun create(block: CustomBlock, section: ConfigSection): ColumnBlockBehavior {
+            override fun create(block: BlockDefinition, section: ConfigSection): ColumnBlockBehavior {
                 val prop = block.getProperty("position")
                     ?: throw IllegalArgumentException("Missing 'position' property")
                 @Suppress("UNCHECKED_CAST")

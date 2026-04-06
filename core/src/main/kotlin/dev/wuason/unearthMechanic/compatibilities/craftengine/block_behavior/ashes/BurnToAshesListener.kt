@@ -25,7 +25,7 @@ class BurnToAshesListener(
     private val ashesKey = Key.of("elitefantasy:ashes_block")
     private val burnedLogKey = Key.of("elitefantasy:burned_log")
 
-    private val ashesSpawnChance = 0.5
+    private val ashesSpawnChance = 0.3
 
     private data class BurnResult(
         val key: Key,
@@ -77,8 +77,6 @@ class BurnToAshesListener(
     }
 
     private fun isFlammableLog(type: Material): Boolean {
-        if (!type.isBurnable) return false
-
         val name = type.name
         return name.endsWith("_LOG") || name.endsWith("_WOOD")
     }
@@ -87,25 +85,33 @@ class BurnToAshesListener(
         return ThreadLocalRandom.current().nextDouble() < ashesSpawnChance
     }
 
+    private companion object {
+        const val MAX_PLACE_ATTEMPTS = 6
+        const val RETRY_DELAY_TICKS = 2L
+    }
+
     private fun tryPlaceBurnResult(location: Location, result: BurnResult, attempt: Int) {
-        if (attempt >= 6) return
+        if (attempt >= MAX_PLACE_ATTEMPTS) return
 
-        val block = location.block
+        val world = location.world ?: return
+        val blockX = location.blockX
+        val blockY = location.blockY
+        val blockZ = location.blockZ
 
-        if (block.type == Material.FIRE || block.type == Material.SOUL_FIRE) {
+        if (!world.isChunkLoaded(blockX shr 4, blockZ shr 4)) return
+
+        val block = world.getBlockAt(blockX, blockY, blockZ)
+        val type = block.type
+
+        if (type == Material.FIRE || type == Material.SOUL_FIRE) {
             Bukkit.getScheduler().runTaskLater(core, Runnable {
                 tryPlaceBurnResult(location, result, attempt + 1)
-            }, 2L)
+            }, RETRY_DELAY_TICKS)
             return
         }
 
-        if (!block.type.isAir) {
-            Bukkit.getScheduler().runTaskLater(core, Runnable {
-                tryPlaceBurnResult(location, result, attempt + 1)
-            }, 2L)
-            return
-        }
         if (hasWater(block)) return
+        if (!type.isAir) return
 
         if (WorldGuardPlugin.isWorldGuardEnabled()) {
             val wg = core.getWorldGuardComp() ?: return

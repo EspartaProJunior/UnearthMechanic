@@ -6,7 +6,7 @@ import net.momirealms.craftengine.bukkit.block.behavior.BukkitBlockBehavior
 import net.momirealms.craftengine.bukkit.nms.FastNMS
 import net.momirealms.craftengine.bukkit.util.BlockStateUtils
 import net.momirealms.craftengine.bukkit.world.BukkitWorld
-import net.momirealms.craftengine.core.block.CustomBlock
+import net.momirealms.craftengine.core.block.BlockDefinition
 import net.momirealms.craftengine.core.block.ImmutableBlockState
 import net.momirealms.craftengine.core.block.UpdateFlags
 import net.momirealms.craftengine.core.block.behavior.BlockBehaviorFactory
@@ -25,7 +25,7 @@ import java.util.concurrent.ConcurrentHashMap
  * Values: single, up_left, up, up_right, left, middle, right, down_left, down, down_right
  */
 class WindowConnectTileBehavior(
-    customBlock: CustomBlock,
+    customBlock: BlockDefinition,
     private val tileProperty: Property<WindowTile>
 ) : BukkitBlockBehavior(customBlock) {
 
@@ -40,7 +40,7 @@ class WindowConnectTileBehavior(
 
         val FACTORY = Factory()
         class Factory : BlockBehaviorFactory<WindowConnectTileBehavior> {
-            override fun create(block: CustomBlock, section: ConfigSection): WindowConnectTileBehavior {
+            override fun create(block: BlockDefinition, section: ConfigSection): WindowConnectTileBehavior {
                 val prop = block.getProperty("tile")
                     ?: throw IllegalArgumentException("Missing 'tile' property")
                 @Suppress("UNCHECKED_CAST")
@@ -65,7 +65,7 @@ class WindowConnectTileBehavior(
 
         return state.with(tileProperty, newTile)
             .customBlockState()
-            .literalObject()
+            .minecraftState()
     }
 
     override fun updateStateForPlacement(context: BlockPlaceContext, state: ImmutableBlockState): ImmutableBlockState {
@@ -288,7 +288,7 @@ class WindowConnectTileBehavior(
         val wrap = world.getBlockState(pos) ?: return false
         //val wrap = world.getBlockAt(pos).blockState() ?: return false
         val neighborStr = try { wrap.ownerId()?.toString() } catch (_: Throwable) { null }
-        val selfStr     = try { customBlock.id().asString() } catch (_: Throwable) { customBlock.id().toString() }
+        val selfStr     = try { blockDefinition.id().asString() } catch (_: Throwable) { blockDefinition.id().toString() }
         return neighborStr != null && neighborStr == selfStr
     }
 
@@ -299,7 +299,7 @@ class WindowConnectTileBehavior(
 
     private fun ceStateId(state: ImmutableBlockState?): String? {
         if (state == null) return null
-        val ref = state.owner() as? Holder.Reference<CustomBlock> ?: return null
+        val ref = state.owner() as? Holder.Reference<BlockDefinition> ?: return null
         return try { ref.key().location().asString() } catch (_: Throwable) { null }
     }
 

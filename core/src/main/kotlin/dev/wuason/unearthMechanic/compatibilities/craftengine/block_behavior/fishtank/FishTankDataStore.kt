@@ -32,10 +32,66 @@ object FishTankDataStore {
     data class TankData(
         val cellSnapshots: MutableMap<Long, CellSnapshot> = ConcurrentHashMap(),
         val legacyByType: MutableMap<String, String> = ConcurrentHashMap(),
+        val chunkKeys: MutableSet<String> = ConcurrentHashMap.newKeySet(),
         var updatedAt: Long = 0L
     )
 
     private val cache = ConcurrentHashMap<String, TankData>()
+    private val chunkIndex = ConcurrentHashMap<String, MutableSet<String>>()
+
+    private fun chunkKey(worldName: String, chunkX: Int, chunkZ: Int): String =
+        "$worldName:$chunkX,$chunkZ"
+
+    private fun addToChunkIndex(chunkKey: String, tankKey: String) {
+        chunkIndex.computeIfAbsent(chunkKey) { ConcurrentHashMap.newKeySet() }.add(tankKey)
+    }
+
+    private fun removeFromChunkIndex(chunkKey: String, tankKey: String) {
+        val set = chunkIndex[chunkKey] ?: return
+        set.remove(tankKey)
+        if (set.isEmpty()) {
+            chunkIndex.remove(chunkKey, set)
+        }
+    }
+
+    private fun unpackSigned(raw: Long, bits: Int): Int {
+        val shift = 64 - bits
+        return (raw shl shift shr shift).toInt()
+    }
+
+    private fun unpackPackedPos(packed: Long): Triple<Int, Int, Int> {
+        val x = unpackSigned((packed ushr 38) and 0x3FFFFFF, 26)
+        val y = unpackSigned(packed and 0xFFF, 12)
+        val z = unpackSigned((packed ushr 12) and 0x3FFFFFF, 26)
+        return Triple(x, y, z)
+    }
+
+    private fun deriveChunkKeysFromSnapshots(worldName: String, td: TankData): Set<String> {
+        val out = LinkedHashSet<String>()
+        for (packed in td.cellSnapshots.keys) {
+            val (x, _, z) = unpackPackedPos(packed)
+            out.add(chunkKey(worldName, x shr 4, z shr 4))
+        }
+        return out
+    }
+
+    private fun reindexTank(tankKey: String, td: TankData, oldChunkKeys: Collection<String> = emptySet()) {
+        for (old in oldChunkKeys) {
+            removeFromChunkIndex(old, tankKey)
+        }
+
+        val worldName = tankKey.substringBefore(':')
+        val effectiveChunkKeys =
+            if (td.chunkKeys.isNotEmpty()) td.chunkKeys.toSet()
+            else deriveChunkKeysFromSnapshots(worldName, td)
+
+        td.chunkKeys.clear()
+        td.chunkKeys.addAll(effectiveChunkKeys)
+
+        for (ck in effectiveChunkKeys) {
+            addToChunkIndex(ck, tankKey)
+        }
+    }
 
     private val dirty = AtomicBoolean(false)
     @Volatile private var saveTaskId: Int = -1
@@ -54,6 +110,7 @@ object FishTankDataStore {
         )
 
         cache.clear()
+        chunkIndex.clear()
         val root = yml.getSection("fish-tank-data") ?: return
 
         for (tankKey in root.getRoutesAsStrings(false)) {
@@ -91,7 +148,13 @@ object FishTankDataStore {
                 }
             }
 
+            val storedChunks = s.getStringList("chunks")
+            if (storedChunks != null) {
+                td.chunkKeys.addAll(storedChunks)
+            }
+
             cache[tankKey] = td
+            reindexTank(tankKey, td)
         }
     }
 
@@ -123,6 +186,7 @@ object FishTankDataStore {
 
         for ((tankKey, v) in cache) {
             val s = root.createSection(tankKey)
+            s.set("chunks", v.chunkKeys.toList().sorted())
 
             // cell_snapshots
             val cs = s.createSection("cell_snapshots")
@@ -144,6 +208,9 @@ object FishTankDataStore {
     fun setCellBucketSnapshotB64(tankKey: String, packedCell: Long, fishType: FishType, b64: String) {
         val d = get(tankKey)
         val snap = d.cellSnapshots.computeIfAbsent(packedCell) { CellSnapshot() }
+
+        if (snap.fishType == fishType.name && snap.bucketB64 == b64) return
+
         snap.fishType = fishType.name
         snap.bucketB64 = b64
         d.updatedAt = System.currentTimeMillis()
@@ -164,7 +231,10 @@ object FishTankDataStore {
     fun setCellEntityUuid(tankKey: String, packedCell: Long, uuid: UUID?) {
         val d = get(tankKey)
         val snap = d.cellSnapshots.computeIfAbsent(packedCell) { CellSnapshot() }
-        snap.entityUuid = uuid?.toString()
+        val newValue = uuid?.toString()
+        if (snap.entityUuid == newValue) return
+
+        snap.entityUuid = newValue
         d.updatedAt = System.currentTimeMillis()
         scheduleSave()
     }
@@ -181,14 +251,74 @@ object FishTankDataStore {
     }
 
     fun removeTank(tankKey: String) {
-        cache.remove(tankKey)
+        val removed = cache.remove(tankKey) ?: return
+        val oldChunkKeys =
+            if (removed.chunkKeys.isNotEmpty()) removed.chunkKeys.toList()
+            else deriveChunkKeysFromSnapshots(tankKey.substringBefore(':'), removed).toList()
+
+        for (ck in oldChunkKeys) {
+            removeFromChunkIndex(ck, tankKey)
+        }
+
         scheduleSave()
     }
 
     fun migrateKey(oldKey: String, newKey: String) {
         if (oldKey == newKey) return
+
         val old = cache.remove(oldKey) ?: return
+
+        val oldChunkKeys =
+            if (old.chunkKeys.isNotEmpty()) old.chunkKeys.toList()
+            else deriveChunkKeysFromSnapshots(oldKey.substringBefore(':'), old).toList()
+
+        for (ck in oldChunkKeys) {
+            removeFromChunkIndex(ck, oldKey)
+        }
+
         cache[newKey] = old
+        reindexTank(newKey, old)
         scheduleSave()
+    }
+
+    fun setTankChunkKeys(tankKey: String, chunkKeys: Collection<String>) {
+        val d = get(tankKey)
+        val newChunkKeys = chunkKeys.toSet()
+
+        if (d.chunkKeys.size == newChunkKeys.size && d.chunkKeys.containsAll(newChunkKeys)) {
+            return
+        }
+
+        val oldChunkKeys = d.chunkKeys.toList()
+
+        d.chunkKeys.clear()
+        d.chunkKeys.addAll(newChunkKeys)
+
+        reindexTank(tankKey, d, oldChunkKeys)
+        d.updatedAt = System.currentTimeMillis()
+        scheduleSave()
+    }
+
+    fun getTankKeysForChunk(worldName: String, chunkX: Int, chunkZ: Int): Set<String> {
+        return chunkIndex[chunkKey(worldName, chunkX, chunkZ)]?.toSet() ?: emptySet()
+    }
+
+    fun findAnchorCellInChunk(tankKey: String, chunkX: Int, chunkZ: Int): Long? {
+        val td = cache[tankKey] ?: return null
+
+        for ((packed, snap) in td.cellSnapshots) {
+            if (snap.fishType == null) continue
+            val (x, _, z) = unpackPackedPos(packed)
+            if ((x shr 4) == chunkX && (z shr 4) == chunkZ) {
+                return packed
+            }
+        }
+
+        return null
+    }
+
+    fun findAnyAnchorCell(tankKey: String): Long? {
+        val td = cache[tankKey] ?: return null
+        return td.cellSnapshots.entries.firstOrNull { it.value.fishType != null }?.key
     }
 }

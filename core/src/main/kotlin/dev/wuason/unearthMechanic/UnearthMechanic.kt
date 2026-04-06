@@ -61,6 +61,9 @@ class UnearthMechanic : UnearthMechanicPlugin() {
         if(CraftEnginePlugin.isCraftEngineLoaded()) craftEngineComb = CraftEngineComp(this)
     }
 
+    lateinit var ashesEnvironmentListener: AshesEnvironmentListener
+        private set
+
     override fun onMechanicEnable() {
 
         AdventureUtils.sendMessagePluginConsole(this, " <gold>Starting UnearthMechanic...")
@@ -99,13 +102,8 @@ class UnearthMechanic : UnearthMechanicPlugin() {
                     Bukkit.getPluginManager().registerEvents(FishTankChunkListener(), this)
                     //Bukkit.getLogger().info("[FishTank] resyncAllLoadedAquariums done onEnable")
 
-                    val ashesEnvironmentListener = AshesEnvironmentListener(this)
-
+                    ashesEnvironmentListener = AshesEnvironmentListener(this)
                     server.pluginManager.registerEvents(ashesEnvironmentListener, this)
-                    server.pluginManager.registerEvents(
-                        BurnToAshesListener(this, ashesEnvironmentListener),
-                        this
-                    )
                 }, 40L)
 
                 logger.info("Registered ColumnBlockBehavior for painter:column_block")

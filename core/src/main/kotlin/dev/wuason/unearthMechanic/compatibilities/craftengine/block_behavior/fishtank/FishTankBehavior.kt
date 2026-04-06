@@ -7,7 +7,7 @@ import net.momirealms.craftengine.bukkit.api.BukkitAdaptor
 import net.momirealms.craftengine.bukkit.api.CraftEngineBlocks
 import net.momirealms.craftengine.bukkit.block.behavior.BukkitBlockBehavior
 import net.momirealms.craftengine.bukkit.util.BlockStateUtils
-import net.momirealms.craftengine.core.block.CustomBlock
+import net.momirealms.craftengine.core.block.BlockDefinition
 import net.momirealms.craftengine.core.block.ImmutableBlockState
 import net.momirealms.craftengine.core.block.behavior.BlockBehaviorFactory
 import net.momirealms.craftengine.core.block.properties.Property
@@ -37,21 +37,19 @@ import org.bukkit.inventory.meta.AxolotlBucketMeta
 import org.bukkit.inventory.meta.TropicalFishBucketMeta
 import org.bukkit.persistence.PersistentDataType
 import java.util.Base64
-import java.util.EnumMap
 import java.util.concurrent.ThreadLocalRandom
-import kotlin.collections.iterator
-import kotlin.math.atan2
 import kotlin.math.sqrt
+import java.util.concurrent.ConcurrentLinkedQueue
 
 class FishTankBehavior(
-    customBlock: CustomBlock,
+    customBlock: BlockDefinition,
     private val fishProperty: Property<FishType>
 ) : BukkitBlockBehavior(customBlock) {
 
     companion object {
         val FACTORY = Factory()
         class Factory : BlockBehaviorFactory<FishTankBehavior> {
-            override fun create(block: CustomBlock, section: ConfigSection): FishTankBehavior {
+            override fun create(block: BlockDefinition, section: ConfigSection): FishTankBehavior {
                 val prop = block.getProperty("fish")
                     ?: throw IllegalArgumentException("Missing 'fish' property")
                 @Suppress("UNCHECKED_CAST")
@@ -108,17 +106,52 @@ class FishTankBehavior(
             return true
         }
 
-        // Fallback by nearby entity: reads PDC and returns tankKey if applicable
-        private fun tankKeyFromNearbyEntity(bw: org.bukkit.World, center: Location, expectedId: String): String? {
-            return bw.getNearbyEntities(center, 6.0, 6.0, 6.0)
-                .asSequence()
-                .mapNotNull { it as? LivingEntity }
-                .firstOrNull { it.scoreboardTags.contains(TAG_FISHTANK) }
-                ?.let { ent ->
-                    val k = readTankKey(ent) ?: return@let null
-                    val ref = tanks[k] ?: return@let k // si aún no hay ref, igual sirve para reusar key
-                    if (ref.expectedId == expectedId) k else null
-                }
+        private data class PendingChunkResync(
+            val worldName: String,
+            val chunkX: Int,
+            val chunkZ: Int,
+            val tankKey: String
+        ) {
+            fun token(): String = "$worldName:$chunkX,$chunkZ|$tankKey"
+        }
+
+        private val pendingChunkResyncs = ConcurrentLinkedQueue<PendingChunkResync>()
+        private val pendingChunkResyncSet = ConcurrentHashMap.newKeySet<String>()
+
+        @Volatile private var chunkResyncTaskStarted = false
+        private const val MAX_CHUNK_RESYNCS_PER_TICK = 8
+
+        private fun unpackSigned(raw: Long, bits: Int): Int {
+            val shift = 64 - bits
+            return (raw shl shift shr shift).toInt()
+        }
+
+        private fun unpackPackedToBlockPos(packed: Long): BlockPos {
+            val x = unpackSigned((packed ushr 38) and 0x3FFFFFF, 26)
+            val y = unpackSigned(packed and 0xFFF, 12)
+            val z = unpackSigned((packed ushr 12) and 0x3FFFFFF, 26)
+            return BlockPos(x, y, z)
+        }
+
+        private fun parseTankKeyRoot(tankKey: String): BlockPos? {
+            val idx = tankKey.indexOf(':')
+            if (idx <= 0 || idx >= tankKey.length - 1) return null
+
+            val parts = tankKey.substring(idx + 1).split(',')
+            if (parts.size != 3) return null
+
+            val x = parts[0].toIntOrNull() ?: return null
+            val y = parts[1].toIntOrNull() ?: return null
+            val z = parts[2].toIntOrNull() ?: return null
+            return BlockPos(x, y, z)
+        }
+
+        private fun chunkKeysOf(worldName: String, cells: List<BlockPos>): Set<String> {
+            val out = LinkedHashSet<String>()
+            for (c in cells) {
+                out.add("$worldName:${c.x() shr 4},${c.z() shr 4}")
+            }
+            return out
         }
 
         // task global
@@ -381,6 +414,7 @@ class FishTankBehavior(
                             ref.cellSet = HashSet(ref.cells.size * 2)
                             for (c in ref.cells) ref.cellSet.add(pack(c))
                             cacheTankCells(ref.worldName, tankKey, ref.cells)
+                            FishTankDataStore.setTankChunkKeys(tankKey, chunkKeysOf(ref.worldName, ref.cells))
 
                             ref.target = null
                             ref.lastCell = null
@@ -477,7 +511,6 @@ class FishTankBehavior(
             var dbgLastLog: Long = 0L,
 
             var forceRescanCooldownUntil: Long = 0L,
-            var bucketSnapshot: ItemStack? = null,
             var brokenLogCooldownUntil: Long = 0L
             )
 
@@ -523,27 +556,6 @@ class FishTankBehavior(
             else -> FishType.none
         }
 
-        private fun buildDesiredCount(
-            bw: org.bukkit.World,
-            cells: List<BlockPos>
-        ): EnumMap<FishType, Int> {
-            val desired = EnumMap<FishType, Int>(FishType::class.java)
-
-            for (c in cells) {
-                val b = bw.getBlockAt(c.x(), c.y(), c.z())
-                val st = CraftEngineBlocks.getCustomBlockState(b.blockData) ?: continue
-                val owner = st.owner().value() ?: continue
-                val propAny = owner.getProperty("fish") ?: continue
-                @Suppress("UNCHECKED_CAST")
-                val prop = propAny as Property<FishType>
-
-                val f = st.get(prop, FishType.none)
-                if (f != FishType.none) desired[f] = (desired[f] ?: 0) + 1
-            }
-
-            return desired
-        }
-
         private fun purgeTankOrphans(
             bw: org.bukkit.World,
             center: Location,
@@ -561,10 +573,15 @@ class FishTankBehavior(
             }
         }
 
-        fun syncFishDisplay(world: World, pos: BlockPos, fish: FishType, bucketSnapshot: ItemStack? = null, forceRescan: Boolean = false) {
+        fun syncFishDisplay(
+            world: World,
+            pos: BlockPos,
+            fish: FishType,
+            bucketSnapshot: ItemStack? = null,
+            forceRescan: Boolean = false,
+            mutateSnapshots: Boolean = true
+        ) {
             val bw = Bukkit.getWorld(world.name()) ?: return
-
-            val baseLoc = Location(bw, pos.x() + 0.5, pos.y() + 0.5, pos.z() + 0.5)
 
             val rootBlock = bw.getBlockAt(pos.x(), pos.y(), pos.z())
             val rootState = CraftEngineBlocks.getCustomBlockState(rootBlock.blockData)
@@ -573,10 +590,12 @@ class FishTankBehavior(
             var tankKey = resolveTankKey(bw, world, pos, expectedId)
             val ref = tanks[tankKey] ?: TankRef(world.name(), pos, fish)
 
-            if (fish == FishType.none) {
-                FishTankDataStore.removeCellSnapshot(tankKey, pack(pos))
-            } else if (bucketSnapshot != null) {
-                writeBucketSnapshot(tankKey, pos, fish, bucketSnapshot)
+            if (mutateSnapshots) {
+                if (fish == FishType.none) {
+                    FishTankDataStore.removeCellSnapshot(tankKey, pack(pos))
+                } else if (bucketSnapshot != null) {
+                    writeBucketSnapshot(tankKey, pos, fish, bucketSnapshot)
+                }
             }
 
             if (forceRescan) ref.rescanAt = 0L
@@ -586,11 +605,6 @@ class FishTankBehavior(
             // TankRef base
             val now = System.currentTimeMillis()
             ref.fish = fish
-
-            // if a bucketSnapshot arrives, save it to apply meta to new spawns
-            if (bucketSnapshot != null) {
-                ref.bucketSnapshot = bucketSnapshot.clone().also { it.amount = 1 }
-            }
 
             // rescan each 3s or if empty
             if (ref.cells.isEmpty() || now >= ref.rescanAt) {
@@ -617,7 +631,7 @@ class FishTankBehavior(
                     fishEntities.remove(tankKey)?.let { set -> fishEntities[newKey] = set }
                     tanks.remove(tankKey)?.let { tr -> tanks[newKey] = tr }
 
-                    // actualizar PDC de las entidades existentes del tanque
+                    // Update the PDC for existing tank entities
                     fishEntities[newKey]?.let { set ->
                         for (id in set) {
                             val ent = bw.getEntity(id) as? LivingEntity ?: continue
@@ -633,83 +647,17 @@ class FishTankBehavior(
 
                 adoptOrPurgeEntities(bw, ref, tankKey)
 
-                // Build desiredCount by type, based on ALL cells in the tank
-                val desiredCount = buildDesiredCount(bw, ref.cells)
-
-                // If there are no fish in any block, clear EVERYTHING from the tank and exit.
-                if (desiredCount.isEmpty()) {
-                    val center = Location(bw, ref.root.x() + 0.5, ref.root.y() + 0.5, ref.root.z() + 0.5)
-
-                    val ids0 = fishEntities.remove(tankKey)
-                    if (ids0 != null) {
-                        for (id in ids0) bw.getEntity(id)?.remove()
-                    }
-                    cleanupTankEntities(bw, center, tankKey, null)
-
-                    if (ref.cells.isNotEmpty()) uncacheTankCells(ref.worldName, tankKey, ref.cells)
-                    tanks.remove(tankKey)
-                    FishTankDataStore.removeTank(tankKey)
-                    return
-                }
-
-                // Global limit (optional)
-                val maxFish = 20
-                var totalWant = 0
-                for ((_, v) in desiredCount) totalWant += v
-                if (totalWant > maxFish) {
-                    // Cut it out simply: cut by iteration (if you want something more professional, we'll do that later).
-                    var remaining = maxFish
-                    val it = desiredCount.entries.iterator()
-                    while (it.hasNext()) {
-                        val e = it.next()
-                        if (remaining <= 0) { it.remove(); continue }
-                        val take = minOf(e.value, remaining)
-                        if (take <= 0) it.remove() else e.setValue(take)
-                        remaining -= take
-                    }
-                }
-
-                // Current tank ID set
                 val ids = getIdSet(tankKey)
+                val keep = HashSet<UUID>()
+                var hasAnyFish = false
 
-                // 1 cleans dead IDs
+                // clean dead ids
                 run {
                     val it = ids.iterator()
                     while (it.hasNext()) {
                         val id = it.next()
                         val e = bw.getEntity(id)
                         if (e == null || e.isDead) it.remove()
-                    }
-                }
-
-                val keep = HashSet<UUID>()
-
-                // 2 groups current ones by type
-                val currentByType = EnumMap<FishType, MutableList<UUID>>(FishType::class.java)
-                for (id in ids) {
-                    val e = bw.getEntity(id) as? LivingEntity ?: continue
-                    val t = fishTypeOfEntity(e)
-                    if (t == FishType.none) continue
-                    currentByType.computeIfAbsent(t) { mutableListOf() }.add(id)
-                }
-
-                // 3 DELETE EXTRAS by type
-                for ((type, list) in currentByType) {
-                    val want = desiredCount[type] ?: 0
-                    while (list.size > want) {
-                        val id = list.removeAt(list.size - 1)
-                        ids.remove(id)
-                        bw.getEntity(id)?.remove()
-                    }
-                }
-
-                val desiredCellsByType = EnumMap<FishType, MutableList<BlockPos>>(FishType::class.java)
-
-                for ((type, cellList) in desiredCellsByType) {
-                    val want = desiredCount[type] ?: 0
-                    if (cellList.size > want) {
-                        // deja solo las primeras 'want' (o random si prefieres)
-                        while (cellList.size > want) cellList.removeAt(cellList.size - 1)
                     }
                 }
 
@@ -721,6 +669,10 @@ class FishTankBehavior(
                     @Suppress("UNCHECKED_CAST")
                     val prop = propAny as Property<FishType>
                     val fish = st.get(prop, FishType.none)
+
+                    if (fish != FishType.none) {
+                        hasAnyFish = true
+                    }
 
                     val packedCell = pack(c)
 
@@ -792,54 +744,24 @@ class FishTankBehavior(
                     }
                 }
 
-                // 4 MISSING SPAWNS per type
-                for ((type, cellList) in desiredCellsByType) {
-                    val want = cellList.size
-                    val listIds = currentByType[type] ?: mutableListOf()
+                if (!hasAnyFish) {
+                    val center = Location(bw, ref.root.x() + 0.5, ref.root.y() + 0.5, ref.root.z() + 0.5)
 
-                    // 1) delete extras if there are any left over
-                    while (listIds.size > want) {
-                        val id = listIds.removeAt(listIds.size - 1)
-                        ids.remove(id)
-                        bw.getEntity(id)?.remove()
+                    val ids0 = fishEntities.remove(tankKey)
+                    if (ids0 != null) {
+                        for (id in ids0) bw.getEntity(id)?.remove()
                     }
 
-                    // 2) prepare desired snapshots (one per cell)
-                    val snaps = cellList.map { cell ->
-                        readBucketSnapshot(tankKey, pack(cell), type)?.takeIf { it.type == bucketForFish(type) }
-                    }
+                    cleanupTankEntities(bw, center, tankKey, null)
 
-                    // 3) apply goal to existing ones
-                    for (i in 0 until minOf(listIds.size, want)) {
-                        val ent = bw.getEntity(listIds[i]) as? LivingEntity ?: continue
-                        val snapItem = snaps[i]
-                        if (snapItem != null) {
-                            try { applyBucketMetaToEntity(ent, snapItem) } catch (_: Throwable) {}
-                        }
-                    }
-
-                    // 4) spawnear missing and apply its snapshot
-                    var missing = want - listIds.size
-                    var idx = listIds.size
-                    while (missing > 0) {
-                        val ent = spawnFishEntity(bw, baseLoc, type) ?: break
-                        markAsTankEntity(ent, tankKey)
-
-                        val snapItem = snaps.getOrNull(idx)
-                        if (snapItem != null) {
-                            try { applyBucketMetaToEntity(ent, snapItem) } catch (_: Throwable) {}
-                        }
-
-                        ids.add(ent.uniqueId)
-                        listIds.add(ent.uniqueId)
-                        missing--
-                        idx++
-                    }
-
-                    currentByType[type] = listIds
+                    if (ref.cells.isNotEmpty()) uncacheTankCells(ref.worldName, tankKey, ref.cells)
+                    tanks.remove(tankKey)
+                    FishTankDataStore.removeTank(tankKey)
+                    return
                 }
 
                 cacheTankCells(ref.worldName, tankKey, ref.cells)
+                FishTankDataStore.setTankChunkKeys(tankKey, chunkKeysOf(ref.worldName, ref.cells))
                 val center = tankCenter(ref, bw)
                 val radius = tankRadius(ref)
                 purgeTankOrphans(bw, center, radius, tankKey, ids.toSet())
@@ -989,7 +911,7 @@ class FishTankBehavior(
             intArrayOf(0, 0, 1), intArrayOf(0, 0, -1)
         )
         fun ownerIdString(state: ImmutableBlockState): String {
-            val ref = state.owner() as? Holder.Reference<CustomBlock>
+            val ref = state.owner() as? Holder.Reference<BlockDefinition>
             if (ref != null) return ref.key().location().asString()
             return state.toString().substringBefore('[')
         }
@@ -1115,32 +1037,11 @@ class FishTankBehavior(
         }
 
         fun resyncAllLoadedAquariums() {
+            ensureTaskRunning()
+
             for (bw in Bukkit.getWorlds()) {
                 for (chunk in bw.loadedChunks) {
-                    val bx = chunk.x shl 4
-                    val bz = chunk.z shl 4
-                    for (x in 0..15) for (z in 0..15) {
-                        for (y in bw.minHeight until bw.maxHeight) {
-                            val b = bw.getBlockAt(bx + x, y, bz + z)
-                            val opt = BlockStateUtils.getOptionalCustomBlockState(b) ?: continue
-                            if (opt.isEmpty) continue
-                            val st = opt.get()
-
-                            // filter only aquarium block
-                            if (st.toString().substringBefore('[') != "elitefantasy:aquarium_block") continue
-
-                            val owner = st.owner().value() ?: continue
-                            val fishPropAny = owner.getProperty("fish") ?: continue
-                            @Suppress("UNCHECKED_CAST")
-                            val fishProp = fishPropAny as Property<FishType>
-                            val fish = st.get(fishProp, FishType.none)
-                            if (fish == FishType.none) continue
-
-                            val ceWorld = BukkitAdaptor.adapt(bw)
-                            ensureTaskRunning()
-                            syncFishDisplay(ceWorld, BlockPos(b.x, b.y, b.z), fish)
-                        }
-                    }
+                    enqueueChunkResync(bw, chunk)
                 }
             }
         }
@@ -1152,29 +1053,73 @@ class FishTankBehavior(
             return id == expectedId
         }
 
-        fun resyncChunkAquariums(bw: org.bukkit.World, chunk: Chunk) {
-            val bx = chunk.x shl 4
-            val bz = chunk.z shl 4
+        fun enqueueChunkResync(bw: org.bukkit.World, chunk: Chunk) {
+            val tankKeys = FishTankDataStore.getTankKeysForChunk(bw.name, chunk.x, chunk.z)
+            if (tankKeys.isEmpty()) return
 
-            for (x in 0..15) for (z in 0..15) {
-                for (y in bw.minHeight until bw.maxHeight) {
-                    val b = bw.getBlockAt(bx + x, y, bz + z)
-
-                    val st = CraftEngineBlocks.getCustomBlockState(b.blockData) ?: continue
-                    if (st.toString().substringBefore('[') != "elitefantasy:aquarium_block") continue
-
-                    val owner = st.owner().value() ?: continue
-                    val fishPropAny = owner.getProperty("fish") ?: continue
-                    @Suppress("UNCHECKED_CAST")
-                    val fishProp = fishPropAny as Property<FishType>
-
-                    val fish = st.get(fishProp, FishType.none)
-                    if (fish == FishType.none) continue
-
-                    val ceWorld = BukkitAdaptor.adapt(bw)
-                    syncFishDisplay(ceWorld, BlockPos(b.x, b.y, b.z), fish)
+            for (tankKey in tankKeys) {
+                val job = PendingChunkResync(bw.name, chunk.x, chunk.z, tankKey)
+                if (pendingChunkResyncSet.add(job.token())) {
+                    pendingChunkResyncs.add(job)
                 }
             }
+
+            ensureChunkResyncTaskRunning()
+        }
+
+        private fun ensureChunkResyncTaskRunning() {
+            if (chunkResyncTaskStarted) return
+
+            val plugin = Bukkit.getPluginManager().getPlugin("UnearthMechanic") ?: return
+            chunkResyncTaskStarted = true
+
+            Bukkit.getScheduler().runTaskTimer(plugin, Runnable {
+                repeat(MAX_CHUNK_RESYNCS_PER_TICK) {
+                    val job = pendingChunkResyncs.poll() ?: return@Runnable
+                    pendingChunkResyncSet.remove(job.token())
+
+                    val bw = Bukkit.getWorld(job.worldName) ?: return@repeat
+                    if (!bw.isChunkLoaded(job.chunkX, job.chunkZ)) return@repeat
+
+                    resyncTankFromQueue(bw, job.chunkX, job.chunkZ, job.tankKey)
+                }
+            }, 1L, 1L)
+        }
+
+        private fun resyncTankFromQueue(
+            bw: org.bukkit.World,
+            chunkX: Int,
+            chunkZ: Int,
+            tankKey: String
+        ) {
+            val ceWorld = BukkitAdaptor.adapt(bw)
+
+            val packedAnchor =
+                FishTankDataStore.findAnchorCellInChunk(tankKey, chunkX, chunkZ)
+                    ?: FishTankDataStore.findAnyAnchorCell(tankKey)
+
+            val anchor =
+                if (packedAnchor != null) unpackPackedToBlockPos(packedAnchor)
+                else parseTankKeyRoot(tankKey)
+                    ?: return
+
+            if (!bw.isChunkLoaded(anchor.x() shr 4, anchor.z() shr 4)) {
+                return
+            }
+
+            ensureTaskRunning()
+            syncFishDisplay(
+                ceWorld,
+                anchor,
+                FishType.none,
+                bucketSnapshot = null,
+                forceRescan = true,
+                mutateSnapshots = false
+            )
+        }
+
+        fun resyncChunkAquariums(bw: org.bukkit.World, chunk: Chunk) {
+            enqueueChunkResync(bw, chunk)
         }
 
         fun bucketToGive(bw: org.bukkit.World, tankKey: String, cellPos: BlockPos, fish: FishType): ItemStack {
@@ -1258,7 +1203,6 @@ class FishTankBehavior(
 
         fun resolveTankKey(bw: org.bukkit.World, ceWorld: World, clicked: BlockPos, expectedId: String): String {
             val worldName = bw.name
-            val center = Location(bw, clicked.x() + 0.5, clicked.y() + 0.5, clicked.z() + 0.5)
 
             // Cache per cell -> tankKey
             val cached = cellToTankKey[worldName]?.get(pack(clicked))

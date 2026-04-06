@@ -2,24 +2,16 @@ package dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.as
 
 import dev.wuason.unearthMechanic.UnearthMechanic
 import net.momirealms.craftengine.bukkit.api.CraftEngineBlocks
-import net.momirealms.craftengine.core.util.Key
 import org.bukkit.Bukkit
 import org.bukkit.Chunk
 import org.bukkit.Location
-import org.bukkit.Material
 import org.bukkit.block.Block
-import org.bukkit.block.BlockFace
-import org.bukkit.entity.FallingBlock
-import org.bukkit.entity.LivingEntity
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
 import org.bukkit.event.block.BlockBreakEvent
 import org.bukkit.event.block.BlockPlaceEvent
-import org.bukkit.event.entity.EntityChangeBlockEvent
-import org.bukkit.event.entity.EntityDamageByEntityEvent
 import org.bukkit.event.entity.EntityDamageEvent
-import org.bukkit.event.entity.EntitySpawnEvent
 import org.bukkit.event.world.ChunkLoadEvent
 import org.bukkit.event.world.ChunkUnloadEvent
 import java.util.UUID
@@ -32,9 +24,23 @@ class AshesEnvironmentListener(
 
     // position -> layers
     private val trackedAshes = hashMapOf<TrackedPos, Int>()
+    private val ashesByChunk = hashMapOf<TrackedChunk, MutableSet<TrackedPos>>()
 
-    // falling entity -> layers
-    private val ashFallingEntities = hashMapOf<UUID, Int>()
+    private data class TrackedChunk(
+        val worldId: UUID,
+        val chunkX: Int,
+        val chunkZ: Int
+    ) {
+        companion object {
+            fun of(pos: TrackedPos): TrackedChunk {
+                return TrackedChunk(
+                    pos.worldId,
+                    pos.x shr 4,
+                    pos.z shr 4
+                )
+            }
+        }
+    }
 
     init {
         startRainTask()
@@ -46,9 +52,35 @@ class AshesEnvironmentListener(
     }
 
     fun trackAsh(location: Location, layers: Int) {
-        if (layers <= 0) return
         //core.logger.info("trackAsh layers=$layers loc=${location.blockX},${location.blockY},${location.blockZ}")
-        trackedAshes[TrackedPos.from(location)] = layers
+        updateAsh(TrackedPos.from(location), layers)
+    }
+
+    private fun putAsh(pos: TrackedPos, layers: Int) {
+        trackedAshes[pos] = layers
+        ashesByChunk
+            .getOrPut(TrackedChunk.of(pos)) { hashSetOf() }
+            .add(pos)
+    }
+
+    private fun removeAsh(pos: TrackedPos) {
+        trackedAshes.remove(pos)
+
+        val chunk = TrackedChunk.of(pos)
+        val positions = ashesByChunk[chunk] ?: return
+        positions.remove(pos)
+
+        if (positions.isEmpty()) {
+            ashesByChunk.remove(chunk)
+        }
+    }
+
+    private fun updateAsh(pos: TrackedPos, layers: Int) {
+        if (layers <= 0) {
+            removeAsh(pos)
+            return
+        }
+        putAsh(pos, layers)
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -58,19 +90,15 @@ class AshesEnvironmentListener(
 
     @EventHandler(ignoreCancelled = true)
     fun onChunkUnload(event: ChunkUnloadEvent) {
-        val chunk = event.chunk
-        val worldId = chunk.world.uid
-        val chunkX = chunk.x
-        val chunkZ = chunk.z
+        val chunkPos = TrackedChunk(
+            event.chunk.world.uid,
+            event.chunk.x,
+            event.chunk.z
+        )
 
-        val iterator = trackedAshes.entries.iterator()
-        while (iterator.hasNext()) {
-            val entry = iterator.next()
-            val pos = entry.key
-
-            if (pos.worldId == worldId && (pos.x shr 4) == chunkX && (pos.z shr 4) == chunkZ) {
-                iterator.remove()
-            }
+        val positions = ashesByChunk.remove(chunkPos) ?: return
+        for (pos in positions) {
+            trackedAshes.remove(pos)
         }
     }
 
@@ -113,12 +141,12 @@ class AshesEnvironmentListener(
 
     @EventHandler(ignoreCancelled = true)
     fun onBlockBreak(event: BlockBreakEvent) {
-        trackedAshes.remove(TrackedPos.from(event.block.location))
+        removeAsh(TrackedPos.from(event.block.location))
     }
 
     @EventHandler(ignoreCancelled = true)
     fun onBlockPlace(event: BlockPlaceEvent) {
-        trackedAshes.remove(TrackedPos.from(event.block.location))
+        removeAsh(TrackedPos.from(event.block.location))
     }
 
     private fun scanLoadedChunks() {
@@ -140,7 +168,7 @@ class AshesEnvironmentListener(
                 for (y in minY until maxY) {
                     val block = chunk.getBlock(x, y, z)
                     val layers = getAshLayers(block) ?: continue
-                    trackedAshes[TrackedPos.from(block.location)] = layers
+                    putAsh(TrackedPos.from(block.location), layers)
                     found++
                 }
             }
@@ -151,73 +179,64 @@ class AshesEnvironmentListener(
         }
     }
 
+    private fun removeAshFromIterator(
+        iterator: MutableIterator<MutableMap.MutableEntry<TrackedPos, Int>>,
+        pos: TrackedPos
+    ) {
+        iterator.remove()
+
+        val chunk = TrackedChunk.of(pos)
+        val positions = ashesByChunk[chunk]
+        positions?.remove(pos)
+        if (positions != null && positions.isEmpty()) {
+            ashesByChunk.remove(chunk)
+        }
+    }
+
     private fun startRainTask() {
         Bukkit.getScheduler().runTaskTimer(core, Runnable {
-            var anyStorm = false
-            for (world in Bukkit.getWorlds()) {
-                if (world.hasStorm()) {
-                    anyStorm = true
-                    break
-                }
-            }
-
-            if (!anyStorm) return@Runnable
-
-            scanLoadedChunks()
-
             if (trackedAshes.isEmpty()) return@Runnable
+            if (Bukkit.getWorlds().none { it.hasStorm() }) return@Runnable
 
-            val snapshot = trackedAshes.toMap()
-            val positionsToRemove = mutableSetOf<TrackedPos>()
-            val positionsToUpdate = hashMapOf<TrackedPos, Int>()
+            val iterator = trackedAshes.entries.iterator()
+            while (iterator.hasNext()) {
+                val entry = iterator.next()
+                val pos = entry.key
+                val trackedLayers = entry.value
 
-            for ((pos, trackedLayers) in snapshot) {
                 val world = Bukkit.getWorld(pos.worldId)
-                if (world == null) {
-                    positionsToRemove += pos
+
+                if(world == null){
+                    removeAshFromIterator(iterator, pos)
                     continue
                 }
 
                 if (!world.hasStorm()) continue
-                if (!world.isChunkLoaded(pos.x shr 4, pos.z shr 4)) continue
+
+                if (!world.isChunkLoaded(pos.x shr 4, pos.z shr 4)) {
+                    removeAshFromIterator(iterator, pos)
+                    continue
+                }
 
                 val block = world.getBlockAt(pos.x, pos.y, pos.z)
                 val actualLayers = getAshLayers(block)
 
                 if (actualLayers == null) {
-                    positionsToRemove += pos
+                    removeAshFromIterator(iterator, pos)
                     continue
                 }
 
                 if (actualLayers != trackedLayers) {
-                    positionsToUpdate[pos] = actualLayers
+                    entry.setValue(actualLayers)
                 }
 
-                val raining = isRainingOn(block)
-                //core.logger.info("Rain check -> pos=$pos layers=$actualLayers raining=$raining")
+                if (!isRainingOn(block)) continue
 
-                if (!raining) {
-                    continue
-                }
-
-                val removed = CraftEngineBlocks.remove(block)
-                //core.logger.info("Rain remove ash -> removed=$removed pos=$pos layers=$actualLayers")
-
-                if (removed) {
-                    positionsToRemove += pos
+                if (CraftEngineBlocks.remove(block)) {
+                    removeAshFromIterator(iterator, pos)
                 }
             }
-
-            for (pos in positionsToRemove) {
-                trackedAshes.remove(pos)
-            }
-
-            for ((pos, layers) in positionsToUpdate) {
-                if (pos !in positionsToRemove) {
-                    trackedAshes[pos] = layers
-                }
-            }
-        }, 40L, 40L)
+        }, 400L, 600L)
     }
 
     private fun getAshLayers(block: Block): Int? {
@@ -246,19 +265,7 @@ class AshesEnvironmentListener(
     private fun isRainingOn(block: Block): Boolean {
         val world = block.world
         if (!world.hasStorm()) return false
-
-        val x = block.x
-        val z = block.z
-
-        // blocks rain if there is something solid or liquid above it
-        for (y in (block.y + 1) until world.maxHeight) {
-            val above = world.getBlockAt(x, y, z)
-            if (!above.type.isAir) {
-                return false
-            }
-        }
-
-        return true
+        return world.getHighestBlockYAt(block.x, block.z) <= block.y
     }
 
     private data class TrackedPos(
@@ -267,9 +274,6 @@ class AshesEnvironmentListener(
         val y: Int,
         val z: Int
     ) {
-        fun up(): TrackedPos = copy(y = y + 1)
-        fun down(): TrackedPos = copy(y = y - 1)
-
         companion object {
             fun from(location: Location): TrackedPos {
                 val world = location.world ?: error("Location without world")

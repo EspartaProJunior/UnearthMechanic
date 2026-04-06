@@ -33,7 +33,7 @@ class FishTankChunkListener : Listener {
             UnearthMechanic.getInstance(),
             Runnable {
                 FishTankBehavior.ensureTaskRunning()
-                FishTankBehavior.resyncChunkAquariums(e.world, e.chunk)
+                FishTankBehavior.enqueueChunkResync(e.world, e.chunk)
             },
             20L
         )
@@ -68,15 +68,15 @@ class FishTankChunkListener : Listener {
         val clicked = e.clickedBlock ?: return
         val placed = clicked.getRelative(e.blockFace)
 
-        // encuentra el bloque FishTank real cerca (clicked puede ser BRICKS/GLASS/etc)
+        // Find the actual FishTank block nearby
         val tankBlock = findTankBlockNear(clicked) ?: findTankBlockNear(placed) ?: return
 
-        // ✅ Cancela vanilla (esto evita agua/spawn)
+        // Vanilla block (this prevents water/spawn)
         e.isCancelled = true
         e.setUseItemInHand(Event.Result.DENY)
         e.setUseInteractedBlock(Event.Result.DENY)
 
-        // ✅ Ejecuta tu lógica de insert/swap manualmente
+        // Execute your insert/swap logic manually
         runTankInsertLikeCE(e.player, tankBlock, item, fishType)
     }
 
