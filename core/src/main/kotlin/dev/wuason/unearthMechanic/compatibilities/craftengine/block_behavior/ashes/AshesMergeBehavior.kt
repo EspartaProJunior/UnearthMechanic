@@ -15,7 +15,6 @@ import net.momirealms.craftengine.core.world.World
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.scheduler.BukkitRunnable
-import java.util.concurrent.Callable
 import java.util.concurrent.ConcurrentHashMap
 
 class AshesMergeBehavior(

@@ -26,6 +26,12 @@ class AshesEnvironmentListener(
     private val trackedAshes = hashMapOf<TrackedPos, Int>()
     private val ashesByChunk = hashMapOf<TrackedChunk, MutableSet<TrackedPos>>()
 
+    companion object {
+        private const val MIN_ASH_SCAN_Y = 40
+        private const val ASH_SCAN_RADIUS = 1
+        private const val ASH_SCAN_DEPTH = 4
+    }
+
     private data class TrackedChunk(
         val worldId: UUID,
         val chunkX: Int,
@@ -46,9 +52,9 @@ class AshesEnvironmentListener(
         startRainTask()
 
         // Reindex existing ashes once the plugin has finished loading
-        Bukkit.getScheduler().runTask(core, Runnable {
+        /*Bukkit.getScheduler().runTask(core, Runnable {
             scanLoadedChunks()
-        })
+        })*/
     }
 
     fun trackAsh(location: Location, layers: Int) {
@@ -83,10 +89,10 @@ class AshesEnvironmentListener(
         putAsh(pos, layers)
     }
 
-    @EventHandler(ignoreCancelled = true)
+    /*@EventHandler(ignoreCancelled = true)
     fun onChunkLoad(event: ChunkLoadEvent) {
         scanChunk(event.chunk)
-    }
+    }*/
 
     @EventHandler(ignoreCancelled = true)
     fun onChunkUnload(event: ChunkUnloadEvent) {
@@ -104,23 +110,62 @@ class AshesEnvironmentListener(
 
     private fun getAshLayersNearLanding(location: Location): Int? {
         val world = location.world ?: return null
+        if (location.blockY < MIN_ASH_SCAN_Y) return null
+
+        val minX = location.blockX - ASH_SCAN_RADIUS
+        val maxX = location.blockX + ASH_SCAN_RADIUS
+        val minZ = location.blockZ - ASH_SCAN_RADIUS
+        val maxZ = location.blockZ + ASH_SCAN_RADIUS
+
+        val topY = location.blockY + 1
+        val bottomY = maxOf(location.blockY - ASH_SCAN_DEPTH, MIN_ASH_SCAN_Y)
 
         var maxLayers: Int? = null
 
-        for (x in (location.blockX - 1)..(location.blockX + 1)) {
-            for (z in (location.blockZ - 1)..(location.blockZ + 1)) {
-                for (y in (location.blockY - 1)..location.blockY) {
+        for (y in topY downTo bottomY) {
+            for (x in minX..maxX) {
+                for (z in minZ..maxZ) {
                     val block = world.getBlockAt(x, y, z)
-                    val layers = getAshLayers(block) ?: continue
 
+                    if (block.type.isAir) continue
+                    if (block.isLiquid) continue
+
+                    val layers = getAshLayersFast(block) ?: continue
                     if (maxLayers == null || layers > maxLayers) {
                         maxLayers = layers
                     }
                 }
             }
+
+            if (maxLayers != null) return maxLayers
         }
 
-        return maxLayers
+        return null
+    }
+
+    private fun getAshLayersFast(block: Block): Int? {
+        val type = block.type
+        if (type.isAir) return null
+        if (block.isLiquid) return null
+
+        val state = CraftEngineBlocks.getCustomBlockState(block) ?: return null
+
+        val stateId = state.owner().keyOptional()
+            .map { it.location().asString() }
+            .orElse(null) ?: return null
+
+        if (stateId != ashesId) return null
+
+        for ((property, value) in state.propertyEntries()) {
+            if (property.name() != "layers") continue
+
+            return when (value) {
+                is Number -> value.toInt()
+                else -> value.toString().toIntOrNull()
+            }
+        }
+
+        return 1
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)

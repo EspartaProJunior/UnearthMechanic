@@ -7,9 +7,10 @@ import dev.wuason.unearthMechanic.compatibilities.craftengine.CraftEngineComp
 import dev.wuason.unearthMechanic.compatibilities.craftengine.CraftEnginePlugin
 import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.*
 import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.ashes.AshesEnvironmentListener
+import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.ashes.BurnToAshesListener
 import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.fishtank.FishTankBehavior
-import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.fishtank.FishTankChunkListener
 import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.fishtank.FishTankDataStore
+import dev.wuason.unearthMechanic.compatibilities.craftengine.types.UneKeys
 import dev.wuason.unearthMechanic.compatibilities.craftengine.types.UneProperties
 import dev.wuason.unearthMechanic.compatibilities.luckperms.LuckPermsComp
 import dev.wuason.unearthMechanic.compatibilities.luckperms.LuckPermsPlugin
@@ -104,26 +105,52 @@ class UnearthMechanic : UnearthMechanicPlugin() {
         logger.info("CraftEngine is ready. Loading CraftEngine compatibility...")
 
         try {
-            BlockBehaviors.register(Key.from("painter:column_block"), ColumnBlockBehavior.FACTORY)
-            BlockBehaviors.register(Key.from("painter:window_connect_tile"), WindowConnectTileBehavior.FACTORY)
-            BlockBehaviors.register(Key.from("painter:sofa_connect_tile"), SofaConnectTileBehavior.FACTORY)
-            BlockBehaviors.register(Key.from("painter:fish_tank"), FishTankBehavior.FACTORY)
-            BlockBehaviors.register(Key.from("painter:ashes_merge"), AshesMergeBehavior.FACTORY)
-            BlockBehaviors.register(Key.from("painter:curtain_block"), CurtainBlockBehavior.FACTORY)
+            registerSafely(UneKeys.COLUMN_BLOCK_BEHAVIOR.asString()){
+                BlockBehaviors.register(UneKeys.COLUMN_BLOCK_BEHAVIOR, ColumnBlockBehavior.FACTORY)
+            }
+            registerSafely(UneKeys.WINDOW_CONNECT_TILE_BEHAVIOR.asString()){
+                BlockBehaviors.register(UneKeys.WINDOW_CONNECT_TILE_BEHAVIOR, WindowConnectTileBehavior.FACTORY)
+            }
+            registerSafely(UneKeys.SOFA_CONNECT_TILE_BEHAVIOR.asString()){
+                BlockBehaviors.register(UneKeys.SOFA_CONNECT_TILE_BEHAVIOR, SofaConnectTileBehavior.FACTORY)
+            }
+            registerSafely(UneKeys.FISH_TANK_BEHAVIOR.asString()){
+                BlockBehaviors.register(UneKeys.FISH_TANK_BEHAVIOR, FishTankBehavior.FACTORY)
+            }
+            registerSafely(UneKeys.ASHES_MERGE_BEHAVIOR.asString()){
+                BlockBehaviors.register(UneKeys.ASHES_MERGE_BEHAVIOR, AshesMergeBehavior.FACTORY)
+            }
+            registerSafely(UneKeys.CURTAIN_BEHAVIOR.asString()){
+                BlockBehaviors.register(UneKeys.CURTAIN_BEHAVIOR, CurtainBlockBehavior.FACTORY)
+            }
 
             UneProperties.registerAll()
             FishTankDataStore.load()
 
             Bukkit.getScheduler().runTaskLater(this, Runnable {
-                FishTankBehavior.ensureTaskRunning()
-                FishTankBehavior.resyncAllLoadedAquariums()
-                Bukkit.getPluginManager().registerEvents(FishTankChunkListener(), this)
-
                 ashesEnvironmentListener = AshesEnvironmentListener(this)
+
+                server.pluginManager.registerEvents(BurnToAshesListener(this,ashesEnvironmentListener), this)
                 server.pluginManager.registerEvents(ashesEnvironmentListener, this)
+
+                runCatching {
+                    FishTankBehavior.ensureTaskRunning()
+                    FishTankBehavior.resyncAllLoadedAquariums()
+                }.onFailure { t ->
+                    logger.severe("FishTank init failed: ${t.javaClass.name}: ${t.message}")
+                    t.printStackTrace()
+                }
             }, 40L)
         } catch (t: Throwable) {
             logger.severe("[UnearthMechanic] CraftEngine hook failed: ${t.javaClass.name}: ${t.message}")
+        }
+    }
+
+    private fun registerSafely(label: String, action: () -> Unit) {
+        runCatching(action).onSuccess {
+            logger.info("Registered $label")
+        }.onFailure { error ->
+            logger.fine("Skipped $label: ${error.message}")
         }
     }
 
