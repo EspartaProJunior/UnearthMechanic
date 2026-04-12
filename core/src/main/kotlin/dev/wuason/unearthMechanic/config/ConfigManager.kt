@@ -1,15 +1,16 @@
 package dev.wuason.unearthMechanic.config
 
-import dev.wuason.libs.adapter.Adapter
-import dev.wuason.libs.adapter.AdapterData
-import dev.wuason.libs.boostedyaml.YamlDocument
-import dev.wuason.libs.boostedyaml.block.implementation.Section
-import dev.wuason.libs.boostedyaml.settings.dumper.DumperSettings
-import dev.wuason.libs.boostedyaml.settings.general.GeneralSettings
-import dev.wuason.libs.boostedyaml.settings.loader.LoaderSettings
-import dev.wuason.libs.boostedyaml.settings.updater.UpdaterSettings
-import dev.wuason.mechanics.utils.AdventureUtils
+import dev.dejvokep.boostedyaml.YamlDocument
+import dev.dejvokep.boostedyaml.block.implementation.Section
+import dev.dejvokep.boostedyaml.settings.dumper.DumperSettings
+import dev.dejvokep.boostedyaml.settings.general.GeneralSettings
+import dev.dejvokep.boostedyaml.settings.loader.LoaderSettings
+import dev.dejvokep.boostedyaml.settings.updater.UpdaterSettings
+import dev.wuason.adapter.Adapter
+import dev.wuason.adapter.AdapterData
 import dev.wuason.unearthMechanic.UnearthMechanic
+import dev.wuason.unearthMechanic.compatibilities.craftengine.CraftEnginePlugin
+import dev.wuason.unearthMechanic.utils.AdventureUtils
 import dev.wuason.unearthMechanic.utils.Utils.Companion.toAdapter
 import org.bukkit.Bukkit
 import java.io.File
@@ -66,7 +67,20 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
 
                     val notProtected: Boolean = sectionGeneric.getBoolean("no_protect", false)
 
-                    val tools: Set<ITool> = sectionGeneric.getStringList("tool", listOf("mc:air")).map { Tool.parseTool(it) }.toSet()
+                    // Delay CraftEngine Loading
+                    val toolStrings = sectionGeneric.getStringList("tool", listOf("mc:air"))
+
+                    val normalTools = mutableSetOf<ITool>()
+
+                    for (toolString in toolStrings) {
+                        val adapterId = toolString.substringBefore(";").trim()
+
+                        if (adapterId.startsWith("ce:") && !CraftEnginePlugin.isCraftEngineEnabled()) {
+                            continue
+                        }
+
+                        Tool.parseTool(toolString)?.let { normalTools.add(it) }
+                    }
 
                     val stages: MutableList<IStage> = mutableListOf()
 
@@ -88,9 +102,22 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
                         val stageAdapterData: AdapterData? = itemStageId?.let { Adapter.getAdapterData(it).getOrNull() }
 
                         val remove: Boolean = sectionStage.getBoolean("remove", false)
-                        val drops: List<Drop> = sectionStage.getStringList("drops", emptyList()).map {
-                            val split: List<String> = it.split(";")
-                            Drop(Adapter.getAdapterData(split[0]).getOrNull()?: throw NullPointerException("The adapter id: ${split[0]} is not valid!"), split[1], split[2].toInt())
+                        val drops: List<Drop> = sectionStage.getStringList("drops", emptyList()).mapNotNull {
+                            try {
+                                val split = it.split(";")
+                                val adapter = Adapter.getAdapterData(split[0]).getOrNull()
+
+                                val adapterId = split[0]
+                                if (adapter == null) {
+                                    core.logger.warning("Skipping invalid drop '$it' in generic '$id': unknown adapter '$adapterId'")
+                                    null
+                                } else {
+                                    Drop(adapter, split[1], split[2].toInt())
+                                }
+                            } catch (ex: Exception) {
+                                core.logger.warning("Skipping invalid drop '$it' in generic '$id': ${ex.message}")
+                                null
+                            }
                         }
                         val removeItemMainHand: Boolean = sectionStage.getBoolean("remove_item_main_hand", false)
                         val durabilityToRemove = sectionStage.getInt("reduce_durability", 0)
@@ -101,9 +128,22 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
                         val reduceItemMainHand: Int = sectionStage.getInt("reduce_item_main_hand", 0)
                         val delay: Long = sectionStage.getLong("delay", 0)
                         val toolAnimDelay = sectionStage.getBoolean("tool_anim_on_delay", false)
-                        val items: List<Item> = sectionStage.getStringList("items_add", emptyList()).map {
-                            val split: List<String> = it.split(";")
-                            Item(Adapter.getAdapterData(split[0]).getOrNull()?: throw NullPointerException("The adapter id: ${split[0]} is not valid!"), split[1], split[2].toInt())
+                        val items: List<Item> = sectionStage.getStringList("items_add", emptyList()).mapNotNull {
+                            try {
+                                val split = it.split(";")
+                                val adapter = Adapter.getAdapterData(split[0]).getOrNull()
+
+                                val adapterId = split[0]
+                                if (adapter == null) {
+                                    core.logger.warning("Skipping invalid drop '$it' in generic '$id': unknown adapter '$adapterId'")
+                                    null
+                                } else {
+                                    Item(adapter, split[1], split[2].toInt())
+                                }
+                            } catch (ex: Exception) {
+                                core.logger.warning("Skipping invalid item '$it' in generic '$id': ${ex.message}")
+                                null
+                            }
                         }
                         val sounds: List<Sound> = sectionStage.getMapList("sounds", emptyList()).filter {
                             it.containsKey("sound") && it["sound"] is String && (it["sound"] as String).isNotBlank()
@@ -220,7 +260,7 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
                             false
                         ) as Stage
 
-                        val generic: IGeneric = constructor.newInstance(cid, tools, baseStage, stages, notProtected) as IGeneric
+                        val generic: IGeneric = constructor.newInstance(cid, normalTools.toSet(), baseStage, stages, notProtected) as IGeneric
 
                         generics[generic.getId()] = generic
 

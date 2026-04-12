@@ -1,9 +1,6 @@
 package dev.wuason.unearthMechanic.config
 
-import dev.wuason.libs.adapter.AdapterData
-import org.bukkit.Location
-import org.bukkit.entity.Player
-import org.bukkit.event.Event
+import dev.wuason.adapter.AdapterData
 
 open class Generic(private val id: String, private val tools: Set<ITool>, private val baseStage: IStage, private val stages: List<IStage> = mutableListOf(), private val notProtected: Boolean): IGeneric {
 

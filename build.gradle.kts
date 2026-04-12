@@ -8,7 +8,7 @@ import java.net.URI
 plugins {
     java
     kotlin("jvm") version "2.0.20-RC2"
-    id("com.github.johnrengelman.shadow") version "8.1.1"
+    id("com.gradleup.shadow") version "8.3.10"
     id("maven-publish")
     id("org.jetbrains.dokka") version "1.9.20"
 }
@@ -22,7 +22,7 @@ allprojects {
 
     //apply kotlin jvm plugin
     apply(plugin = "kotlin")
-    apply(plugin = "com.github.johnrengelman.shadow")
+    apply(plugin = "com.gradleup.shadow")
     apply(plugin = "maven-publish")
 
     repositories {
@@ -65,7 +65,19 @@ allprojects {
         maven("https://repo.techmc.es/releases") {
             name = "techmc-repository"
         }
-        
+
+        maven("https://repo.codemc.org/repository/maven-public/") {
+            name = "codemc-repository"
+        }
+
+        maven("https://mvn.lumine.io/repository/maven-public/") {
+            name = "lumine-repository"
+        }
+
+        maven("https://repo.helpch.at/releases/") {
+            name = "placeholderapi-repository"
+        }
+
     }
 
     kotlin {
@@ -189,7 +201,7 @@ project(":core") {
         val props = mapOf("version" to rootProject.version)
         inputs.properties(props)
         filteringCharset = "UTF-8"
-        filesMatching("plugin.yml") {
+        filesMatching("paper-plugin.yml") {
             expand(props)
         }
     }
@@ -202,7 +214,7 @@ project(":core") {
 subprojects {
     dependencies {
         compileOnly("io.papermc.paper:paper-api:1.20.6-R0.1-SNAPSHOT")
-        compileOnly("dev.wuason:mechanics:1.0.4.1")
+        //compileOnly("dev.wuason:mechanics:1.0.4.2")
         compileOnly("io.th0rgal:oraxen:1.189.0") // 1.174.0 supported version
         compileOnly("dev.lone:api-itemsadder:4.0.2-beta-release-11")
         compileOnly("com.sk89q.worldguard:worldguard-bukkit:7.0.12-SNAPSHOT")
@@ -214,7 +226,19 @@ subprojects {
         compileOnly("net.momirealms:craft-engine-nms-helper:1.0.157")
 
         compileOnly("net.luckperms:api:5.4")
-        compileOnly("dev.wuason:adapter:1.0.6.3")
+        implementation("dev.wuason:adapter:1.0.6.3")
+
+        implementation("dev.jorel:commandapi-paper-shade:11.2.0")
+
+        compileOnly("io.lumine:Mythic-Dist:5.6.1")
+
+        compileOnly("me.clip:placeholderapi:2.12.2")
+        implementation("com.jeff-media:custom-block-data:2.2.4")
+        implementation("com.jeff-media:MorePersistentDataTypes:2.4.0")
+        implementation("dev.dejvokep:boosted-yaml:1.3.6")
+        implementation("de.tr7zw:item-nbt-api:2.15.5")
+        implementation("net.momirealms:antigrieflib:0.16")
+        implementation(kotlin("stdlib"))
     }
 }
 
@@ -223,10 +247,38 @@ dependencies {
     implementation(project(":core"))
 }
 
+tasks.processResources {
+    val props = mapOf(
+        "version" to project.version
+    )
+    inputs.properties(props)
+    filteringCharset = "UTF-8"
+
+    filesMatching(listOf("plugin.yml", "paper-plugin.yml")) {
+        expand(props)
+    }
+}
+
+tasks.jar {
+    manifest {
+        attributes["paperweight-mappings-namespace"] = "mojang"
+    }
+}
+
 tasks.shadowJar {
     archiveFileName.set("UnearthMechanic-${project.version}.jar")
     archiveClassifier.set("")
     destinationDirectory.set(file("target"))
+
+    relocate("dev.jorel.commandapi", "dev.wuason.libs.commandapi")
+    relocate("net.momirealms.antigrieflib", "dev.wuason.libs.antigrieflib")
+    relocate("com.jeff_media.morepersistentdatatypes", "dev.wuason.libs.jeffmedia.morepersistentdatatypes")
+    relocate("dev.wuason.adapter", "dev.wuason.libs.adapter")
+    relocate ("com.jeff_media.customblockdata", "dev.wuason.libs.jeff_media.customblockdata")
+
+    manifest {
+        attributes["paperweight-mappings-namespace"] = "mojang"
+    }
 }
 
 tasks {

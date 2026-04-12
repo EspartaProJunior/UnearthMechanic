@@ -1,16 +1,16 @@
 package dev.wuason.unearthMechanic
 
-import dev.wuason.mechanics.mechanics.MechanicAddon
 import dev.wuason.unearthMechanic.config.IConfigManager
 import dev.wuason.unearthMechanic.system.IStageManager
 import org.bukkit.inventory.ItemStack
+import org.bukkit.plugin.java.JavaPlugin
 
 /**
  * UnearthMechanicPlugin serves as an abstract base class for managing core components
  * such as configuration, commands, and stages within the plugin.
  * It extends MechanicAddon and provides infrastructure for plugin lifecycle and component management.
  */
-abstract class UnearthMechanicPlugin : MechanicAddon(23153) {
+abstract class UnearthMechanicPlugin : JavaPlugin() {
     /**
      * This companion object holds a singleton instance of the UnearthMechanicPlugin and provides a method to access it.
      */

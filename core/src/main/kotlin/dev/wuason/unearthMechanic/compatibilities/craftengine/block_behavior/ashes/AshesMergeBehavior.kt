@@ -45,8 +45,8 @@ class AshesMergeBehavior(
         }
     }
 
-    override fun onPlace(thisBlock: Any, args: Array<Any>, superMethod: Callable<Any>) {
-        superMethod.call()
+    override fun onPlace(thisBlock: Any, args: Array<Any>) {
+        super.onPlace(thisBlock, args)
 
         val nmsWorld = args.getOrNull(1) ?: return
         val nmsPos = args.getOrNull(2) ?: return
@@ -63,12 +63,13 @@ class AshesMergeBehavior(
         val ceWorld = BukkitAdaptor.adapt(craftWorld)
         val pos = BlockPos(x, y, z)
 
+        syncTrackedAsh(craftWorld, pos)
         startMergeWindow(ceWorld, pos)
     }
 
     private fun ashesEnvironmentListener(): AshesEnvironmentListener? {
         val plugin = Bukkit.getPluginManager().getPlugin("UnearthMechanic") as? UnearthMechanic ?: return null
-        return plugin.ashesEnvironmentListener
+        return runCatching { plugin.ashesEnvironmentListener }.getOrNull()
     }
 
     private fun trackAsh(world: org.bukkit.World, pos: BlockPos, layers: Int) {
@@ -102,11 +103,16 @@ class AshesMergeBehavior(
         trackAsh(world, pos, layers)
     }
 
-    override fun updateShape(thisBlock: Any, args: Array<Any>, superMethod: Callable<Any>): Any {
-        val result = superMethod.call()
+    override fun updateShape(thisBlock: Any, args: Array<Any>): Any {
+        val result = super.updateShape(thisBlock, args)
 
         val world = args.getOrNull(3) as? World ?: return result
         val pos = args.getOrNull(4) as? BlockPos ?: return result
+
+        val bukkitWorld = Bukkit.getWorld(world.name())
+        if (bukkitWorld != null) {
+            syncTrackedAsh(bukkitWorld, pos)
+        }
 
         startMergeWindow(world, pos)
         return result
@@ -196,9 +202,17 @@ class AshesMergeBehavior(
             newBelowState,
             UpdateFlags.UPDATE_ALL
         )
+        trackAsh(bukkitWorld, belowPos, newBelowLayers)
 
         if (overflow <= 0) {
-            CraftEngineBlocks.remove(bukkitWorld.getBlockAt(pos.x(), pos.y(), pos.z()))
+            val removed = CraftEngineBlocks.remove(
+                bukkitWorld.getBlockAt(pos.x(), pos.y(), pos.z())
+            )
+            if (removed) {
+                trackAsh(bukkitWorld, pos, 0)
+            } else {
+                syncTrackedAsh(bukkitWorld, pos)
+            }
         } else {
             val newSelfState = selfState.with(layersProperty, overflow)
             ceWorld.setBlockState(
@@ -208,6 +222,7 @@ class AshesMergeBehavior(
                 newSelfState,
                 UpdateFlags.UPDATE_ALL
             )
+            trackAsh(bukkitWorld, pos, overflow)
         }
 
         return true

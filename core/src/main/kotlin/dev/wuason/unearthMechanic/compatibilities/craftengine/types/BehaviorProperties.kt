@@ -29,3 +29,10 @@ enum class FishType {
     axolotl,
     tadpole
 }
+
+enum class CurtainYPos {
+    single,
+    bottom,
+    middle,
+    top
+}

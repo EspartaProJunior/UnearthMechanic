@@ -1,7 +1,7 @@
 package dev.wuason.unearthMechanic.system.compatibilities
 
-import dev.wuason.libs.adapter.AdapterComp
-import dev.wuason.libs.adapter.AdapterData
+import dev.wuason.adapter.AdapterComp
+import dev.wuason.adapter.AdapterData
 import dev.wuason.unearthMechanic.config.IGeneric
 import dev.wuason.unearthMechanic.config.IStage
 import dev.wuason.unearthMechanic.system.ILiveTool

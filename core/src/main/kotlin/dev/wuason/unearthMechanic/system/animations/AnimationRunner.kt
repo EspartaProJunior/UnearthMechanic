@@ -1,12 +1,10 @@
 package dev.wuason.unearthMechanic.system.animations
-
-import dev.wuason.libs.adapter.Adapter
-import dev.wuason.libs.jeffmedia.morepersistentdatatypes.DataType
-import dev.wuason.mechanics.items.ItemBuilder
-import dev.wuason.mechanics.utils.StorageUtils
+import com.jeff_media.morepersistentdatatypes.DataType
 import dev.wuason.unearthMechanic.UnearthMechanic
 import dev.wuason.unearthMechanic.config.Animation
 import dev.wuason.unearthMechanic.config.IAnimation
+import dev.wuason.unearthMechanic.utils.ItemBuilder
+import dev.wuason.unearthMechanic.utils.StorageUtils
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack

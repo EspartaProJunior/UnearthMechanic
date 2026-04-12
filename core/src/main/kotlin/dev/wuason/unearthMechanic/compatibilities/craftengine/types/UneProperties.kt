@@ -11,6 +11,8 @@ object UneProperties {
 
     val FISH_TYPE_KEY: Key = Key.of("painter:fish_type")
 
+    val CURTAIN_TYPE_KEY: Key = Key.of("painter:curtain_ypos")
+
     fun registerAll() {
         // Register enum properties so that CraftEngine can use them in configs
         Properties.register(WINDOW_TILE_KEY, EnumProperty.factory(WindowTile::class.java))
@@ -18,5 +20,7 @@ object UneProperties {
         Properties.register(SOFA_TILE_KEY, EnumProperty.factory(SofaTile::class.java))
 
         Properties.register(FISH_TYPE_KEY, EnumProperty.factory(FishType::class.java))
+
+        Properties.register(CURTAIN_TYPE_KEY, EnumProperty.factory(CurtainYPos::class.java))
     }
 }

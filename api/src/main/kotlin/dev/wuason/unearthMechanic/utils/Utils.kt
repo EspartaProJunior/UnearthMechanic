@@ -1,7 +1,7 @@
 package dev.wuason.unearthMechanic.utils
 
-import dev.wuason.libs.adapter.Adapter
-import dev.wuason.libs.adapter.AdapterData
+import dev.wuason.adapter.Adapter
+import dev.wuason.adapter.AdapterData
 import dev.wuason.unearthMechanic.config.IGeneric
 import dev.wuason.unearthMechanic.config.IStage
 import dev.wuason.unearthMechanic.system.StageData

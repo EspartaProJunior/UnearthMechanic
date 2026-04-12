@@ -94,13 +94,13 @@ class SofaConnectTileBehavior(
 
 
     // ================== Hooks ==================
-    override fun updateShape(thisBlock: Any, args: Array<Any>, superMethod: Callable<Any>): Any {
-        val world = args.getOrNull(3) as? World ?: return superMethod.call()
-        val pos = args.getOrNull(4) as? BlockPos ?: return superMethod.call()
+    override fun updateShape(thisBlock: Any, args: Array<Any>): Any {
+        val world = args.getOrNull(3) as? World ?: return super.updateShape(thisBlock, args)
+        val pos = args.getOrNull(4) as? BlockPos ?: return super.updateShape(thisBlock, args)
 
 
         val optState = net.momirealms.craftengine.bukkit.util.BlockStateUtils.getOptionalCustomBlockState(args[0])
-            ?: return superMethod.call()
+            ?: return super.updateShape(thisBlock, args)
         val state = optState.get()
         val newTile = calculateTile(world, pos)
         return state.with(tileProperty, newTile)
@@ -116,7 +116,7 @@ class SofaConnectTileBehavior(
     }
 
     private fun updateNeighbors(world: World, origin: BlockPos) {
-// Solo recalcula este bloque y sus 4 vecinos cardinales si son del mismo tipo.
+        // Recalculate only this block and its four cardinal neighbors if they are of the same type.
         if (world !is BukkitWorld) return
         val bWorld = Bukkit.getWorld(world.name()) ?: return
 
@@ -168,16 +168,16 @@ class SofaConnectTileBehavior(
         scheduleNeighborUpdate(ceWorld, cePos, delay)
     }
 
-    override fun onPlace(thisBlock: Any, args: Array<Any>, superMethod: Callable<Any>) {
-        if (inBatch.get() == true) { superMethod.call(); return }
-        val nmsWorld = args.getOrNull(1) ?: run { superMethod.call(); return }
-        val nmsPos = args.getOrNull(2) ?: run { superMethod.call(); return }
+    override fun onPlace(thisBlock: Any, args: Array<Any>) {
+        if (inBatch.get() == true) { super.onPlace(thisBlock, args); return }
+        val nmsWorld = args.getOrNull(1) ?: run { super.onPlace(thisBlock, args); return }
+        val nmsPos = args.getOrNull(2) ?: run { super.onPlace(thisBlock, args); return }
 
 
         val craftWorld = Bukkit.getWorlds().firstOrNull { w ->
             val handle = w.javaClass.getMethod("getHandle").invoke(w)
             handle == nmsWorld
-        } ?: run { superMethod.call(); return }
+        } ?: run { super.onPlace(thisBlock, args); return }
 
 
         val x = nmsPos.javaClass.getMethod("getX").invoke(nmsPos) as Int
@@ -189,7 +189,7 @@ class SofaConnectTileBehavior(
         val cePos = BlockPos(x, y, z)
         scheduleFromNMS(args, 1L)
         //scheduleNeighborUpdate(ceWorld, cePos, 1L)
-        superMethod.call()
+        super.onPlace(thisBlock, args)
     }
 
     /*override fun onRemove(thisBlock: Any, args: Array<Any>, superMethod: Callable<Any>) {
@@ -198,10 +198,10 @@ class SofaConnectTileBehavior(
         handleRemoval(thisBlock, args); superMethod.call()
     }*/
 
-    override fun affectNeighborsAfterRemoval(thisBlock: Any, args: Array<Any>, superMethod: Callable<Any>) {
-        if (inBatch.get() == true) { superMethod.call(); return }
+    override fun affectNeighborsAfterRemoval(thisBlock: Any, args: Array<Any>) {
+        if (inBatch.get() == true) { super.affectNeighborsAfterRemoval(thisBlock, args); return }
         scheduleFromNMS(args, 1L)
-        handleRemoval(thisBlock, args); superMethod.call()
+        handleRemoval(thisBlock, args); super.affectNeighborsAfterRemoval(thisBlock, args)
     }
 
 

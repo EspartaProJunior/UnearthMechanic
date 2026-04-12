@@ -1,14 +1,14 @@
 package dev.wuason.unearthMechanic
 
-import dev.wuason.libs.commandapi.CommandAPICommand
-import dev.wuason.libs.commandapi.arguments.BlockStateArgument
-import dev.wuason.libs.commandapi.arguments.IntegerArgument
-import dev.wuason.libs.commandapi.executors.CommandArguments
-import dev.wuason.libs.commandapi.executors.CommandExecutor
-import dev.wuason.libs.commandapi.executors.PlayerCommandExecutor
-import dev.wuason.mechanics.utils.AdventureUtils
+import dev.jorel.commandapi.CommandAPICommand
+import dev.jorel.commandapi.arguments.BlockStateArgument
+import dev.jorel.commandapi.arguments.IntegerArgument
+import dev.jorel.commandapi.executors.CommandArguments
+import dev.jorel.commandapi.executors.CommandExecutor
+import dev.jorel.commandapi.executors.PlayerCommandExecutor
 import dev.wuason.unearthMechanic.config.Furniture
 import dev.wuason.unearthMechanic.system.StageData
+import dev.wuason.unearthMechanic.utils.AdventureUtils
 import dev.wuason.unearthMechanic.utils.Utils
 import org.bukkit.block.Block
 import org.bukkit.block.BlockFace
@@ -37,11 +37,26 @@ class CommandManager(private val core: UnearthMechanic) : ICommandManager {
                         CommandAPICommand("info")
                             .executes(CommandExecutor { commandSender: CommandSender?, commandArguments: CommandArguments? ->
                                 AdventureUtils.sendMessage(commandSender, "<yellow>Debug Info:")
-                                AdventureUtils.sendMessage(commandSender, "<yellow>Engine: <aqua> ${core.checkCompatibility()?: "<red>None"}")
-                                AdventureUtils.sendMessage(commandSender, "<yellow>Configs: <aqua>" + core.getConfigManager().getGenerics().size)
-                                AdventureUtils.sendMessage(commandSender, "<yellow>Configs block: <aqua>" + core.getConfigManager().getGenerics().count { it.value is dev.wuason.unearthMechanic.config.Block })
-                                AdventureUtils.sendMessage(commandSender, "<yellow>Configs furniture: <aqua>" + core.getConfigManager().getGenerics().count { it.value is Furniture })
-                                AdventureUtils.sendMessage(commandSender, "<yellow>Version: <aqua>" + core.description.version)
+                                AdventureUtils.sendMessage(
+                                    commandSender,
+                                    "<yellow>Engine: <aqua> ${core.checkCompatibility() ?: "<red>None"}"
+                                )
+                                AdventureUtils.sendMessage(
+                                    commandSender,
+                                    "<yellow>Configs: <aqua>" + core.getConfigManager().getGenerics().size
+                                )
+                                AdventureUtils.sendMessage(
+                                    commandSender,
+                                    "<yellow>Configs block: <aqua>" + core.getConfigManager().getGenerics()
+                                        .count { it.value is dev.wuason.unearthMechanic.config.Block })
+                                AdventureUtils.sendMessage(
+                                    commandSender,
+                                    "<yellow>Configs furniture: <aqua>" + core.getConfigManager().getGenerics()
+                                        .count { it.value is Furniture })
+                                AdventureUtils.sendMessage(
+                                    commandSender,
+                                    "<yellow>Version: <aqua>" + core.description.version
+                                )
                             })
                         ,
                         CommandAPICommand("block_info")
@@ -73,15 +88,18 @@ class CommandManager(private val core: UnearthMechanic) : ICommandManager {
                                 val deep: Int = args["deep"] as Int
                                 val depth: Int = args["depth"] as Int
                                 val blockData: BlockData = args["block"] as BlockData
-                                val rayCast: RayTraceResult = player.rayTraceBlocks(10.0)?: run {
-                                    AdventureUtils.sendMessage(player, "<red>You need to look at a block in 10 blocks range")
+                                val rayCast: RayTraceResult = player.rayTraceBlocks(10.0) ?: run {
+                                    AdventureUtils.sendMessage(
+                                        player,
+                                        "<red>You need to look at a block in 10 blocks range"
+                                    )
                                     return@PlayerCommandExecutor
                                 }
-                                val block: Block = rayCast.hitBlock?: run {
+                                val block: Block = rayCast.hitBlock ?: run {
                                     AdventureUtils.sendMessage(player, "<red>You need to look at a block")
                                     return@PlayerCommandExecutor
                                 }
-                                val blockFace: BlockFace = rayCast.hitBlockFace?: run {
+                                val blockFace: BlockFace = rayCast.hitBlockFace ?: run {
                                     AdventureUtils.sendMessage(player, "<red>You need to look at a block face")
                                     return@PlayerCommandExecutor
                                 }

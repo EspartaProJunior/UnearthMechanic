@@ -1,5 +1,6 @@
 package dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior
 
+import dev.wuason.unearthMechanic.UnearthMechanic
 import dev.wuason.unearthMechanic.compatibilities.craftengine.types.ColumnPosition
 import dev.wuason.unearthMechanic.compatibilities.craftengine.types.WindowTile
 import net.momirealms.craftengine.bukkit.api.BukkitAdaptor
@@ -14,34 +15,26 @@ import net.momirealms.craftengine.core.block.UpdateFlags
 import net.momirealms.craftengine.core.block.behavior.BlockBehaviorFactory
 import net.momirealms.craftengine.core.block.properties.Property
 import net.momirealms.craftengine.core.plugin.config.ConfigSection
-import net.momirealms.craftengine.core.util.Direction
-import net.momirealms.craftengine.core.world.BlockHitResult
 import net.momirealms.craftengine.core.world.BlockPos
-import net.momirealms.craftengine.core.world.ExistingBlock
 import net.momirealms.craftengine.core.world.World
 import net.momirealms.craftengine.core.world.context.BlockPlaceContext
 import org.bukkit.Bukkit
-import java.util.concurrent.Callable
 
 class ColumnBlockBehavior(
     customBlock: BlockDefinition,
     private val positionProperty: Property<ColumnPosition>
 ) : BukkitBlockBehavior(customBlock) {
 
-    override fun updateShape(thisBlock: Any, args: Array<Any>, superMethod: Callable<Any>): Any {
-        val optionalState = BlockStateUtils.getOptionalCustomBlockState(args[0]) ?: return superMethod.call()
+    override fun updateShape(thisBlock: Any, args: Array<Any>): Any {
+        val optionalState = BlockStateUtils.getOptionalCustomBlockState(args[0]) ?: return super.updateShape(thisBlock, args)
         val state = optionalState.get()
 
-        val world = args[3] as? World ?: return superMethod.call()
-        val pos = args[4] as? BlockPos ?: return superMethod.call()
+        val world = args[3] as? World ?: return super.updateShape(thisBlock, args)
+        val pos = args[4] as? BlockPos ?: return super.updateShape(thisBlock, args)
 
-        Bukkit.getScheduler().runTaskLater(
-            Bukkit.getPluginManager().getPlugin("UnearthMechanic")!!,
-            Runnable {
+        Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
                 updateNeighbors(world, pos)
-            },
-            1L
-        )
+            }, 1L)
 
         val newPosition = calculateNewPosition(world, pos)
         return state.with(positionProperty, newPosition).customBlockState().minecraftState()
@@ -62,31 +55,31 @@ class ColumnBlockBehavior(
         return state.with(positionProperty, newPosition)
     }
 
-    override fun onPlace(thisBlock: Any, args: Array<Any>, superMethod: Callable<Any>) {
-        //Bukkit.getConsoleSender().sendMessage("⚠️ onPlace() fue llamado con args=${args.contentToString()}")
+    override fun onPlace(thisBlock: Any, args: Array<Any>) {
+        //Bukkit.getConsoleSender().sendMessage("⚠onPlace() fue llamado con args=${args.contentToString()}")
 
         /*args.forEachIndexed { index, arg ->
-            Bukkit.getConsoleSender().sendMessage("🧪 Arg[$index] = ${arg::class.qualifiedName} -> $arg")
+            Bukkit.getConsoleSender().sendMessage(" Arg[$index] = ${arg::class.qualifiedName} -> $arg")
         }*/
 
         val nmsWorld = args.getOrNull(1)
         val nmsPos = args.getOrNull(2)
 
         if (nmsWorld == null || nmsPos == null) {
-            //Bukkit.getConsoleSender().sendMessage("❌ No se pudo extraer el ServerLevel o el NMS BlockPos.")
-            superMethod.call()
+            //Bukkit.getConsoleSender().sendMessage("No se pudo extraer el ServerLevel o el NMS BlockPos.")
+            super.onPlace(thisBlock, args)
             return
         }
 
-        // Buscar el BukkitWorld correspondiente al ServerLevel
+        // Find the BukkitWorld corresponding to the ServerLevel
         val craftWorld = Bukkit.getWorlds().firstOrNull { world ->
             val handle = world.javaClass.getMethod("getHandle").invoke(world)
             handle == nmsWorld
         }
 
         if (craftWorld == null) {
-            //Bukkit.getConsoleSender().sendMessage("❌ No se pudo encontrar un CraftWorld para el ServerLevel dado.")
-            superMethod.call()
+            //Bukkit.getConsoleSender().sendMessage("No se pudo encontrar un CraftWorld para el ServerLevel dado.")
+            super.onPlace(thisBlock, args)
             return
         }
 
@@ -98,9 +91,9 @@ class ColumnBlockBehavior(
 
         val ceWorld = BukkitAdaptor.adapt(craftWorld)
 
-        //Bukkit.getConsoleSender().sendMessage("✅ CraftEngine.World y BlockPos convertidos correctamente (${craftWorld.name} @ $x, $y, $z)")
+        //Bukkit.getConsoleSender().sendMessage("CraftEngine.World y BlockPos convertidos correctamente (${craftWorld.name} @ $x, $y, $z)")
 
-        // Ejecutar updateNeighbors un tick después
+        // Run updateNeighbors one tick later
         Bukkit.getScheduler().runTaskLater(
             Bukkit.getPluginManager().getPlugin("UnearthMechanic")!!,
             Runnable {
@@ -109,7 +102,7 @@ class ColumnBlockBehavior(
             1L
         )
 
-        superMethod.call()
+        super.onPlace(thisBlock, args)
     }
 
     /*override fun affectNeighborsAfterRemoval(thisBlock: Any, args: Array<Any>, superMethod: Callable<Any>) {

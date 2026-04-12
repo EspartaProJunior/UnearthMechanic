@@ -1240,42 +1240,42 @@ class FishTankBehavior(
 
     // Hook that is definitely present in your behaviors: updateShape.
     // Every time something changes around you, resync.
-    override fun updateShape(thisBlock: Any, args: Array<Any>, superMethod: Callable<Any>): Any {
-        val world = args.getOrNull(3) as? World ?: return superMethod.call()
-        val pos   = args.getOrNull(4) as? BlockPos ?: return superMethod.call()
+    override fun updateShape(thisBlock: Any, args: Array<Any>): Any {
+        val world = args.getOrNull(3) as? World ?: return super.updateShape(thisBlock, args)
+        val pos   = args.getOrNull(4) as? BlockPos ?: return super.updateShape(thisBlock, args)
 
-        if (isSuppressed(world, pos)) return superMethod.call()
+        if (isSuppressed(world, pos)) return super.updateShape(thisBlock, args)
 
-        val opt = BlockStateUtils.getOptionalCustomBlockState(args[0]) ?: return superMethod.call()
-        if (opt.isEmpty) return superMethod.call()
+        val opt = BlockStateUtils.getOptionalCustomBlockState(args[0]) ?: return super.updateShape(thisBlock, args)
+        if (opt.isEmpty) return super.updateShape(thisBlock, args)
         val state = opt.get()
         val fish = try { state.get(fishProperty) } catch (_: Throwable) { FishType.none }
 
         // in case there was trash with the local
         ensureTaskRunning()
         syncFishDisplay(world, pos, fish)
-        return superMethod.call()
+        return super.updateShape(thisBlock, args)
     }
 
-    override fun onPlace(thisBlock: Any, args: Array<Any>, superMethod: Callable<Any>) {
-        superMethod.call()
+    override fun onPlace(thisBlock: Any, args: Array<Any>) {
+        super.onPlace(thisBlock, args)
     }
 
     /*override fun onRemove(thisBlock: Any, args: Array<Any>, superMethod: Callable<Any>) {
         handleRemoval(thisBlock, args,superMethod);
     }*/
 
-    override fun affectNeighborsAfterRemoval(thisBlock: Any, args: Array<Any>, superMethod: Callable<Any>) {
-        handleRemoval(thisBlock, args,superMethod);
+    override fun affectNeighborsAfterRemoval(thisBlock: Any, args: Array<Any>) {
+        handleRemoval(thisBlock, args);
     }
 
-    private fun handleRemoval(thisBlock: Any, args: Array<Any>, superMethod: Callable<Any>) {
+    private fun handleRemoval(thisBlock: Any, args: Array<Any>) {
         try {
             val nmsWorld = args.getOrNull(1)
             val nmsPos = args.getOrNull(2)
 
             if (nmsWorld == null || nmsPos == null) {
-                superMethod.call()
+                super.affectNeighborsAfterRemoval(thisBlock,args)
                 return
             }
 
@@ -1415,6 +1415,6 @@ class FishTankBehavior(
                 }*/
             }
         } catch (_: Throwable) { }
-        superMethod.call()
+        super.affectNeighborsAfterRemoval(thisBlock,args)
     }
 }

@@ -1,9 +1,9 @@
 package dev.wuason.unearthMechanic.system.animations
 
-import dev.wuason.libs.jeffmedia.morepersistentdatatypes.DataType
-import dev.wuason.mechanics.items.remover.ItemRemoverManager
+import com.jeff_media.morepersistentdatatypes.DataType
 import dev.wuason.unearthMechanic.UnearthMechanic
 import dev.wuason.unearthMechanic.config.IAnimation
+import dev.wuason.unearthMechanic.utils.ItemRemoverManager
 import org.bukkit.NamespacedKey
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler

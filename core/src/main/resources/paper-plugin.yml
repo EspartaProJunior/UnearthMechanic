@@ -1,0 +1,47 @@
+name: UnearthMechanic
+version: '${version}'
+main: dev.wuason.unearthMechanic.UnearthMechanic
+api-version: '1.20'
+authors: [ Wuason ]
+website: wiki.techmc.es
+dependencies:
+  #- Mechanics
+  server:
+    CraftEngine:
+      load: BEFORE
+      required: false
+      join-classpath: true
+    ItemsAdder:
+      load: BEFORE
+      required: false
+      join-classpath: true
+    Nexo:
+      load: BEFORE
+      required: false
+      join-classpath: true
+    Oraxen:
+      load: BEFORE
+      required: false
+      join-classpath: true
+    WorldGuard:
+      load: BEFORE
+      required: false
+      join-classpath: true
+    LuckPerms:
+      load: BEFORE
+      required: false
+      join-classpath: true
+    MythicCrucible:
+      load: BEFORE
+      required: false
+      join-classpath: true
+    PlaceHolderAPI:
+      load: BEFORE
+      required: false
+      join-classpath: true
+libraries:
+  - "org.jetbrains.kotlin:kotlin-stdlib:2.0.20"
+permissions:
+  unearthMechanic.bypass:
+    description: Allows the player to bypass the UnearthMechanic
+    default: op

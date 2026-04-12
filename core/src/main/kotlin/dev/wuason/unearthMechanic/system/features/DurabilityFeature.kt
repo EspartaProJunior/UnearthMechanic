@@ -1,14 +1,12 @@
 package dev.wuason.unearthMechanic.system.features
 
-import dev.wuason.libs.adapter.Adapter
-import dev.wuason.mechanics.items.ItemBuilder
-import dev.wuason.mechanics.utils.VersionDetector
-import dev.wuason.mechanics.utils.VersionDetector.ServerVersion
 import dev.wuason.unearthMechanic.UnearthMechanic
 import dev.wuason.unearthMechanic.config.IGeneric
 import dev.wuason.unearthMechanic.config.IStage
 import dev.wuason.unearthMechanic.system.ILiveTool
 import dev.wuason.unearthMechanic.system.compatibilities.ICompatibility
+import dev.wuason.unearthMechanic.utils.ItemBuilder
+import dev.wuason.unearthMechanic.utils.VersionDetector
 import org.bukkit.GameMode
 import org.bukkit.Location
 import org.bukkit.Material
@@ -35,7 +33,7 @@ class DurabilityFeature: AbstractFeature() {
                 itemMainHand.editMeta { meta ->
                     if (meta is Damageable) {
 
-                        if (VersionDetector.getServerVersion().isLessThan(ServerVersion.v1_20_5)) {
+                        if (VersionDetector.getServerVersion().isLessThan(VersionDetector.ServerVersion.v1_20_5)) {
                             meta.damage += stage.getDurabilityToRemove()
                             if (meta.damage >= itemMainHand.type.maxDurability) {
                                 toolUsed.getITool().getReplaceOnBreak()?.let {

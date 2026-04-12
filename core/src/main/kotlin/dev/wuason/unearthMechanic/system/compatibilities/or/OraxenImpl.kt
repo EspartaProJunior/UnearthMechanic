@@ -1,7 +1,7 @@
 package dev.wuason.unearthMechanic.system.compatibilities.or
 
-import dev.wuason.libs.adapter.AdapterComp
-import dev.wuason.libs.adapter.AdapterData
+import dev.wuason.adapter.AdapterComp
+import dev.wuason.adapter.AdapterData
 import dev.wuason.unearthMechanic.UnearthMechanic
 import dev.wuason.unearthMechanic.UnearthMechanicPlugin
 import dev.wuason.unearthMechanic.config.*

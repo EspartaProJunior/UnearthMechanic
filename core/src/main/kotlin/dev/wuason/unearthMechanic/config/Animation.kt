@@ -1,7 +1,7 @@
 package dev.wuason.unearthMechanic.config
 
-import dev.wuason.mechanics.items.ItemBuilder
 import dev.wuason.unearthMechanic.system.animations.AnimationManager
+import dev.wuason.unearthMechanic.utils.ItemBuilder
 import org.bukkit.inventory.ItemStack
 
 class Animation(

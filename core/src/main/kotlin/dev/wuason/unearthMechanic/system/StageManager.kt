@@ -1,7 +1,7 @@
 package dev.wuason.unearthMechanic.system
 
-import dev.wuason.libs.adapter.Adapter
-import dev.wuason.libs.adapter.AdapterData
+import dev.wuason.adapter.Adapter
+import dev.wuason.adapter.AdapterData
 import dev.wuason.unearthMechanic.UnearthMechanic
 import dev.wuason.unearthMechanic.compatibilities.luckperms.LuckPermsPlugin
 import dev.wuason.unearthMechanic.compatibilities.worldguard.WorldGuardPlugin
@@ -14,6 +14,8 @@ import dev.wuason.unearthMechanic.system.animations.IAnimationManager
 import dev.wuason.unearthMechanic.system.compatibilities.ICompatibility
 import dev.wuason.unearthMechanic.system.compatibilities.MinecraftImpl
 import dev.wuason.unearthMechanic.system.compatibilities.ce.CraftEngineImpl
+import dev.wuason.unearthMechanic.system.compatibilities.crucible.CrucibleBridgeImpl
+import dev.wuason.unearthMechanic.system.compatibilities.crucible.MythicCrucibleImpl
 import dev.wuason.unearthMechanic.system.compatibilities.ia.ItemsAdderImpl
 import dev.wuason.unearthMechanic.system.compatibilities.nexo.NexoImpl
 import dev.wuason.unearthMechanic.system.compatibilities.or.OraxenImpl
@@ -84,6 +86,11 @@ class StageManager(private val core: UnearthMechanic) : IStageManager {
         compCreator("CraftEngine") { pluginName ->
             CraftEngineImpl(pluginName, core, this, Adapter.getAdapterByName(pluginName))
         } ?.let { compatibilitiesLoaded.add(it) }
+
+        compCreator("MythicCrucible") { pluginName ->
+            MythicCrucibleImpl(pluginName, core, this, Adapter.getAdapterByName(pluginName),
+                CrucibleBridgeImpl())
+        }?.let { compatibilitiesLoaded.add(it) }
 
         compatibilitiesLoaded.forEach { compatibility ->
             Bukkit.getPluginManager().registerEvents(compatibility, core)
@@ -157,6 +164,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager {
         stageData: StageData,
         core: UnearthMechanic
     ): Boolean {
+
         val generic = stageData.getGeneric()
 
         return player.isOp
@@ -164,11 +172,11 @@ class StageManager(private val core: UnearthMechanic) : IStageManager {
                 || player.hasPermission("unearthMechanic.bypass")
                 || generic.isNotProtect()
                 || (
-                !WorldGuardPlugin.isWorldGuardEnabled() && core.mechanics.antiGriefLib.canInteract(player, location)
+                !WorldGuardPlugin.isWorldGuardEnabled() && core.getAntiGriefLib().canInteract(player, location)
                 )
                 || (
                 WorldGuardPlugin.isWorldGuardEnabled()
-                        && core.mechanics.antiGriefLib.canInteract(player, location)
+                        && core.getAntiGriefLib().canInteract(player, location)
                         && core.getWorldGuardComp().canInteractCustom(player, location)
                 )
     }
@@ -211,11 +219,11 @@ class StageManager(private val core: UnearthMechanic) : IStageManager {
                 || player.hasPermission("unearthMechanic.bypass")
                 || generic.isNotProtect()
                 || (
-                !WorldGuardPlugin.isWorldGuardEnabled() && core.mechanics.antiGriefLib.canInteract(player, location)
+                !WorldGuardPlugin.isWorldGuardEnabled() && core.getAntiGriefLib().canInteract(player, location)
                 )
                 || (
                 WorldGuardPlugin.isWorldGuardEnabled()
-                        && core.mechanics.antiGriefLib.canInteract(player, location)
+                        && core.getAntiGriefLib().canInteract(player, location)
                         && core.getWorldGuardComp().canInteractCustom(player, location)
                 )
     }

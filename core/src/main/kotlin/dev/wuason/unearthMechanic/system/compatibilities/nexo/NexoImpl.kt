@@ -10,8 +10,8 @@ import com.nexomc.nexo.api.events.furniture.NexoFurnitureBreakEvent
 import com.nexomc.nexo.api.events.furniture.NexoFurnitureInteractEvent
 import com.nexomc.nexo.api.events.furniture.NexoFurniturePlaceEvent
 import com.nexomc.nexo.utils.drops.Drop
-import dev.wuason.libs.adapter.AdapterComp
-import dev.wuason.libs.adapter.AdapterData
+import dev.wuason.adapter.AdapterComp
+import dev.wuason.adapter.AdapterData
 import dev.wuason.unearthMechanic.UnearthMechanic
 import dev.wuason.unearthMechanic.UnearthMechanicPlugin
 import dev.wuason.unearthMechanic.config.*

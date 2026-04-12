@@ -51,14 +51,14 @@ class WindowConnectTileBehavior(
     }
 
     // ================== Hooks ==================
-    override fun updateShape(thisBlock: Any, args: Array<Any>, superMethod: Callable<Any>): Any {
+    override fun updateShape(thisBlock: Any, args: Array<Any>): Any {
         if (inBatch.get() == true) return args[0]
 
-        val world = args.getOrNull(3) as? World ?: return superMethod.call()
-        val pos   = args.getOrNull(4) as? BlockPos ?: return superMethod.call()
+        val world = args.getOrNull(3) as? World ?: return super.updateShape(thisBlock, args)
+        val pos   = args.getOrNull(4) as? BlockPos ?: return super.updateShape(thisBlock, args)
         //log.info("[WindowTile] updateShape(): (${world.name()}:${pos.x()},${pos.y()},${pos.z()})")
 
-        val optState = BlockStateUtils.getOptionalCustomBlockState(args[0]) ?: return superMethod.call()
+        val optState = BlockStateUtils.getOptionalCustomBlockState(args[0]) ?: return super.updateShape(thisBlock, args)
         val state = optState.get()
         val newTile = calculateTile(world, pos, state)
         //log.info("[WindowTile] updateShape(): APPLY (${world.name()}:${pos.x()},${pos.y()},${pos.z()}) tile='$newTile'")
@@ -77,16 +77,16 @@ class WindowConnectTileBehavior(
         return state.with(tileProperty, newTile)
     }
 
-    override fun onPlace(thisBlock: Any, args: Array<Any>, superMethod: Callable<Any>) {
-        if (inBatch.get() == true) { superMethod.call(); return }
+    override fun onPlace(thisBlock: Any, args: Array<Any>) {
+        if (inBatch.get() == true) { super.onPlace(thisBlock, args); return }
         //log.info("[WindowTile] onPlace(): args.size=${args.size}")
-        val nmsWorld = args.getOrNull(1) ?: run { superMethod.call(); return }
-        val nmsPos   = args.getOrNull(2) ?: run { superMethod.call(); return }
+        val nmsWorld = args.getOrNull(1) ?: run { super.onPlace(thisBlock, args); return }
+        val nmsPos   = args.getOrNull(2) ?: run { super.onPlace(thisBlock, args); return }
 
         val craftWorld = Bukkit.getWorlds().firstOrNull { w ->
             val handle = w.javaClass.getMethod("getHandle").invoke(w)
             handle == nmsWorld
-        } ?: run { superMethod.call(); return }
+        } ?: run { super.onPlace(thisBlock, args); return }
 
         val x = nmsPos.javaClass.getMethod("getX").invoke(nmsPos) as Int
         val y = nmsPos.javaClass.getMethod("getY").invoke(nmsPos) as Int
@@ -95,7 +95,7 @@ class WindowConnectTileBehavior(
         val ceWorld = BukkitAdaptor.adapt(craftWorld)
         val cePos   = BlockPos(x, y, z)
         scheduleNeighborUpdate(ceWorld, cePos, 2L)
-        superMethod.call()
+        super.onPlace(thisBlock, args)
     }
 
     /*override fun onRemove(thisBlock: Any, args: Array<Any>, superMethod: Callable<Any>) {
@@ -104,10 +104,10 @@ class WindowConnectTileBehavior(
         handleRemoval(thisBlock, args); superMethod.call()
     }*/
 
-    override fun affectNeighborsAfterRemoval(thisBlock: Any, args: Array<Any>, superMethod: Callable<Any>) {
-        if (inBatch.get() == true) { superMethod.call(); return }
+    override fun affectNeighborsAfterRemoval(thisBlock: Any, args: Array<Any>) {
+        if (inBatch.get() == true) { super.affectNeighborsAfterRemoval(thisBlock, args); return }
         //log.info("[WindowTile] affectNeighborsAfterRemoval(): args.size=${args.size}")
-        handleRemoval(thisBlock, args); superMethod.call()
+        handleRemoval(thisBlock, args); super.affectNeighborsAfterRemoval(thisBlock, args)
     }
 
     private fun handleRemoval(thisBlock: Any, args: Array<Any>) {

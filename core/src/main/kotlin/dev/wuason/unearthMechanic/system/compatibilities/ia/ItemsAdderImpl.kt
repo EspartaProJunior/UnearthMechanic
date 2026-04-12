@@ -7,8 +7,8 @@ import dev.lone.itemsadder.api.Events.CustomBlockInteractEvent
 import dev.lone.itemsadder.api.Events.FurnitureBreakEvent
 import dev.lone.itemsadder.api.Events.FurnitureInteractEvent
 import dev.lone.itemsadder.api.Events.FurniturePlaceEvent
-import dev.wuason.libs.adapter.AdapterComp
-import dev.wuason.libs.adapter.AdapterData
+import dev.wuason.adapter.AdapterComp
+import dev.wuason.adapter.AdapterData
 import dev.wuason.unearthMechanic.UnearthMechanic
 import dev.wuason.unearthMechanic.UnearthMechanicPlugin
 import dev.wuason.unearthMechanic.config.*
@@ -16,11 +16,8 @@ import dev.wuason.unearthMechanic.system.ILiveTool
 import dev.wuason.unearthMechanic.system.StageData
 import dev.wuason.unearthMechanic.system.StageManager
 import dev.wuason.unearthMechanic.system.compatibilities.ICompatibility
-import dev.wuason.unearthMechanic.system.compatibilities.ce.CraftEngineImpl
 import dev.wuason.unearthMechanic.utils.Utils
-import net.momirealms.craftengine.bukkit.api.CraftEngineFurniture
 import org.bukkit.Bukkit
-import org.bukkit.Color
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
@@ -39,8 +36,6 @@ import org.bukkit.event.block.Action
 import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
-import org.bukkit.inventory.meta.LeatherArmorMeta
-import org.bukkit.persistence.PersistentDataType
 import java.util.Collections
 import java.util.UUID
 import kotlin.collections.set

@@ -1,16 +1,14 @@
 package dev.wuason.unearthMechanic
 
-import dev.wuason.mechanics.utils.AdventureUtils
+import dev.jorel.commandapi.CommandAPI
+import dev.jorel.commandapi.CommandAPIPaperConfig
+import dev.wuason.adapter.Adapter
 import dev.wuason.unearthMechanic.compatibilities.craftengine.CraftEngineComp
 import dev.wuason.unearthMechanic.compatibilities.craftengine.CraftEnginePlugin
-import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.AshesMergeBehavior
-import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.ashes.BurnToAshesListener
-import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.ColumnBlockBehavior
+import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.*
+import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.ashes.AshesEnvironmentListener
 import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.fishtank.FishTankBehavior
 import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.fishtank.FishTankChunkListener
-import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.SofaConnectTileBehavior
-import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.WindowConnectTileBehavior
-import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.ashes.AshesEnvironmentListener
 import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.fishtank.FishTankDataStore
 import dev.wuason.unearthMechanic.compatibilities.craftengine.types.UneProperties
 import dev.wuason.unearthMechanic.compatibilities.luckperms.LuckPermsComp
@@ -20,6 +18,9 @@ import dev.wuason.unearthMechanic.compatibilities.worldguard.WorldGuardPlugin
 import dev.wuason.unearthMechanic.config.ConfigManager
 import dev.wuason.unearthMechanic.system.IStageManager
 import dev.wuason.unearthMechanic.system.StageManager
+import dev.wuason.unearthMechanic.utils.AdventureUtils
+import dev.wuason.unearthMechanic.utils.ItemRemoverManager
+import net.momirealms.antigrieflib.AntiGriefLib
 import net.momirealms.craftengine.core.block.behavior.BlockBehaviors
 import net.momirealms.craftengine.core.util.Key
 import org.bukkit.Bukkit
@@ -33,6 +34,7 @@ class UnearthMechanic : UnearthMechanicPlugin() {
             "Oraxen",
             "Nexo",
             "CraftEngine",
+            "MythicCrucible",
             "Vanilla"
         )
 
@@ -55,8 +57,11 @@ class UnearthMechanic : UnearthMechanicPlugin() {
     private lateinit var luckPermsComb: LuckPermsComp
     private lateinit var craftEngineComb: CraftEngineComp
 
-    override fun onMechanicLoad() {
-        if (WorldGuardPlugin.isWorldGuardLoaded()) worldGuardComp = WorldGuardComp(this)
+    private var antiGriefLib: AntiGriefLib? = null
+
+    override fun onLoad() {
+        CommandAPI.onLoad(CommandAPIPaperConfig(this).verboseOutput(false))
+        if(WorldGuardPlugin.isWorldGuardLoaded()) worldGuardComp = WorldGuardComp(this)
         if(LuckPermsPlugin.isLuckPermsLoaded()) luckPermsComb = LuckPermsComp(this)
         if(CraftEnginePlugin.isCraftEngineLoaded()) craftEngineComb = CraftEngineComp(this)
     }
@@ -64,7 +69,7 @@ class UnearthMechanic : UnearthMechanicPlugin() {
     lateinit var ashesEnvironmentListener: AshesEnvironmentListener
         private set
 
-    override fun onMechanicEnable() {
+    override fun onEnable(){
 
         AdventureUtils.sendMessagePluginConsole(this, " <gold>Starting UnearthMechanic...")
         AdventureUtils.sendMessagePluginConsole(this, "<gray>-----------------------------------------------------------")
@@ -74,56 +79,56 @@ class UnearthMechanic : UnearthMechanicPlugin() {
         AdventureUtils.sendMessagePluginConsole(this, "<gold> Selected compatibility: <aqua>${checkCompatibility()}");
 
         //if (check()) return
-
+        Adapter.init(this);
         configManager = ConfigManager(this)
         configManager.loadConfig()
 
+        CommandAPI.onEnable()
         commandManager = CommandManager(this)
         commandManager.loadCommands()
 
         stageManager = StageManager(this)
-        if(CraftEnginePlugin.isCraftEngineEnabled()){
-            try {
-                BlockBehaviors.register(Key.from("painter:column_block"), ColumnBlockBehavior.FACTORY)
-                BlockBehaviors.register(Key.from("painter:window_connect_tile"), WindowConnectTileBehavior.FACTORY)
-                BlockBehaviors.register(Key.from("painter:sofa_connect_tile"), SofaConnectTileBehavior.FACTORY)
 
-                BlockBehaviors.register(Key.from("painter:fish_tank"), FishTankBehavior.FACTORY);
+        Bukkit.getPluginManager().registerEvents(ItemRemoverManager(this), this)
 
-                BlockBehaviors.register(Key.from("painter:ashes_merge"), AshesMergeBehavior.FACTORY)
-
-                UneProperties.registerAll()
-
-                FishTankDataStore.load()
-
-                Bukkit.getScheduler().runTaskLater(this, Runnable {
-                    FishTankBehavior.ensureTaskRunning()
-                    FishTankBehavior.resyncAllLoadedAquariums()
-                    Bukkit.getPluginManager().registerEvents(FishTankChunkListener(), this)
-                    //Bukkit.getLogger().info("[FishTank] resyncAllLoadedAquariums done onEnable")
-
-                    ashesEnvironmentListener = AshesEnvironmentListener(this)
-                    server.pluginManager.registerEvents(ashesEnvironmentListener, this)
-                }, 40L)
-
-                logger.info("Registered ColumnBlockBehavior for painter:column_block")
-                logger.info("Registered WindowConnectTileBehavior for painter:window_connect_tile")
-                logger.info("Registered SofaConnectTileBehavior for painter:sofa_connect_tile")
-                logger.info("Registered FishTankBehavior for painter:fish_tank")
-                logger.info("Registered AshesMergeBehavior for painter:ashes_merge")
-                logger.info("Registered BurnToAshesListener & AshesEnvironmentListener")
-
-            } catch (t: Throwable) {
-                logger.severe("[UnearthMechanic] CraftEngine hook failed: ${t.javaClass.name}: ${t.message}")
-                logger.severe("[UnearthMechanic] Disabling CraftEngine compatibility to avoid startup crash.")
-            }
+        if (CraftEnginePlugin.isCraftEngineEnabled()) {
+            onCraftEngineReady();
         }
+
         AdventureUtils.sendMessagePluginConsole(this, "<gray>-----------------------------------------------------------")
         AdventureUtils.sendMessagePluginConsole(this, "<gray>-----------------------------------------------------------")
 
     }
 
-    override fun onMechanicDisable() {
+    private fun onCraftEngineReady() {
+        logger.info("CraftEngine is ready. Loading CraftEngine compatibility...")
+
+        try {
+            BlockBehaviors.register(Key.from("painter:column_block"), ColumnBlockBehavior.FACTORY)
+            BlockBehaviors.register(Key.from("painter:window_connect_tile"), WindowConnectTileBehavior.FACTORY)
+            BlockBehaviors.register(Key.from("painter:sofa_connect_tile"), SofaConnectTileBehavior.FACTORY)
+            BlockBehaviors.register(Key.from("painter:fish_tank"), FishTankBehavior.FACTORY)
+            BlockBehaviors.register(Key.from("painter:ashes_merge"), AshesMergeBehavior.FACTORY)
+            BlockBehaviors.register(Key.from("painter:curtain_block"), CurtainBlockBehavior.FACTORY)
+
+            UneProperties.registerAll()
+            FishTankDataStore.load()
+
+            Bukkit.getScheduler().runTaskLater(this, Runnable {
+                FishTankBehavior.ensureTaskRunning()
+                FishTankBehavior.resyncAllLoadedAquariums()
+                Bukkit.getPluginManager().registerEvents(FishTankChunkListener(), this)
+
+                ashesEnvironmentListener = AshesEnvironmentListener(this)
+                server.pluginManager.registerEvents(ashesEnvironmentListener, this)
+            }, 40L)
+        } catch (t: Throwable) {
+            logger.severe("[UnearthMechanic] CraftEngine hook failed: ${t.javaClass.name}: ${t.message}")
+        }
+    }
+
+    override fun onDisable() {
+        CommandAPI.onDisable()
         if(CraftEnginePlugin.isCraftEngineEnabled()){
             FishTankDataStore.flushSaveNow()
         }
@@ -160,6 +165,16 @@ class UnearthMechanic : UnearthMechanicPlugin() {
             }
         }
         return null
+    }
+
+    fun getAntiGriefLib(): AntiGriefLib {
+        if (antiGriefLib == null) {
+            antiGriefLib = AntiGriefLib.builder(this)
+                .ignoreOP(true)
+                .silentLogs(false)
+                .build()
+        }
+        return antiGriefLib!!
     }
 
     private fun check(): Boolean {

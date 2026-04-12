@@ -1,6 +1,6 @@
 package dev.wuason.unearthMechanic.config
 
-import dev.wuason.libs.adapter.AdapterData
+import dev.wuason.adapter.AdapterData
 
 /**
  * Represents a generic interface that provides various methods to access and manage generic items.

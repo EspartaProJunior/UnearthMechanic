@@ -1,9 +1,9 @@
 package dev.wuason.unearthMechanic.config
 
-import dev.wuason.libs.adapter.AdapterData
-import dev.wuason.mechanics.items.ItemBuilder
-import dev.wuason.mechanics.utils.MathUtils
-import dev.wuason.mechanics.utils.StorageUtils
+import dev.wuason.adapter.AdapterData
+import dev.wuason.unearthMechanic.utils.ItemBuilder
+import dev.wuason.unearthMechanic.utils.MathUtils
+import dev.wuason.unearthMechanic.utils.StorageUtils
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 

@@ -1,10 +1,10 @@
 package dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.fishtank
 
-import dev.wuason.libs.boostedyaml.YamlDocument
-import dev.wuason.libs.boostedyaml.settings.dumper.DumperSettings
-import dev.wuason.libs.boostedyaml.settings.general.GeneralSettings
-import dev.wuason.libs.boostedyaml.settings.loader.LoaderSettings
-import dev.wuason.libs.boostedyaml.settings.updater.UpdaterSettings
+import dev.dejvokep.boostedyaml.YamlDocument
+import dev.dejvokep.boostedyaml.settings.dumper.DumperSettings
+import dev.dejvokep.boostedyaml.settings.general.GeneralSettings
+import dev.dejvokep.boostedyaml.settings.loader.LoaderSettings
+import dev.dejvokep.boostedyaml.settings.updater.UpdaterSettings
 import dev.wuason.unearthMechanic.UnearthMechanic
 import dev.wuason.unearthMechanic.compatibilities.craftengine.types.FishType
 import org.bukkit.Bukkit

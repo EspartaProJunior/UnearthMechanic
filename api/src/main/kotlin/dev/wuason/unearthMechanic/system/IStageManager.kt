@@ -1,6 +1,6 @@
 package dev.wuason.unearthMechanic.system
 
-import dev.wuason.libs.adapter.AdapterData
+import dev.wuason.adapter.AdapterData
 import dev.wuason.unearthMechanic.system.animations.IAnimationManager
 import dev.wuason.unearthMechanic.system.compatibilities.ICompatibility
 
