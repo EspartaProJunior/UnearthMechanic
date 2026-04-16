@@ -160,9 +160,16 @@ abstract class ICompatibility(
      * @param location The location to validate.
      * @return true if valid, false otherwise.
      */
-    open fun isValidUUID(loc: Location, expectedAdapterId: String?, expectedUuid: UUID?): Boolean = true
+    open fun isValidUUID(loc: Location, expectedAdapterId: String?, expectedUuid: UUID?): Boolean = false
 
-    open fun isValid(loc: Location, expectedAdapterId: String?): Boolean = true
+    open fun isValid(loc: Location, expectedAdapterId: String?): Boolean {
+        return isValidFurniture(loc, expectedAdapterId) || isValidBlock(loc, expectedAdapterId)
+    }
+
+    open fun isValidFurniture(loc: Location, expectedAdapterId: String?): Boolean = false
+    open fun isValidBlock(loc: Location, expectedAdapterId: String?): Boolean = false
+
+    open fun removeFurnitureByUUID(loc: Location, uuid: UUID?): Boolean = false
 
     /**
      * Indicates if the current given UUID is in the process of being removed (e.g., a furniture entity).

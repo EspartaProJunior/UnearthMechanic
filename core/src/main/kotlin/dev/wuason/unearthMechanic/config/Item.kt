@@ -33,4 +33,8 @@ open class Item(private val adapterData: AdapterData, private val amount: String
         if (applyChance) StorageUtils.addItemToInventoryOrDrop(player, getItemStackChance()?: return)
         else StorageUtils.addItemToInventoryOrDrop(player, getItemStack())
     }
+
+    open fun rollItem(applyChance: Boolean): ItemStack? {
+        return if (applyChance) getItemStackChance() else getItemStack()
+    }
 }

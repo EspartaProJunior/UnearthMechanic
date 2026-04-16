@@ -1,5 +1,6 @@
 package dev.wuason.unearthMechanic.system.compatibilities.or
 
+import com.nexomc.nexo.api.NexoFurniture
 import dev.wuason.adapter.AdapterComp
 import dev.wuason.adapter.AdapterData
 import dev.wuason.unearthMechanic.UnearthMechanic
@@ -90,64 +91,110 @@ class OraxenImpl(
     override fun isValidUUID(loc: Location, expectedAdapterId: String?, expectedUuid: UUID?): Boolean {
         val keyLoc = loc.block.location
         val world = keyLoc.world ?: return false
-
-
+        val cleanId = expectedAdapterId?.removePrefix("oraxen:")
         val center = keyLoc.clone().add(0.5, 0.5, 0.5)
         val nearby = world.getNearbyEntities(center, 1.5, 1.5, 1.5)
 
-
         for (entity in nearby) {
-            val entityBlock = entity.location.block.location
-            if (entityBlock != keyLoc) continue
+            if (entity.location.block.location != keyLoc) continue
             if (!entity.isValid || entity.isDead) continue
+            if (!OraxenFurniture.isFurniture(entity)) continue
 
-
-            var adapterId: String? = null
-
-
-            for (key in entity.persistentDataContainer.keys) {
-                val value = try {
-                    entity.persistentDataContainer.get(key, PersistentDataType.STRING)
-                } catch (ex: IllegalArgumentException) {
-                    null
-                }
-
-
-                if (value != null && adapterId == null) {
-                    adapterId = value
-                }
+            if (expectedUuid != null) {
+                if (entity.uniqueId == expectedUuid) return true
+                continue
             }
 
-
-            if (expectedUuid != null && entity.uniqueId == expectedUuid) return true
-            if (expectedAdapterId != null && adapterId != null && adapterId.equals(expectedAdapterId.removePrefix("oraxen:"), ignoreCase = true)) return true
+            val mechanic = try { OraxenFurniture.getFurnitureMechanic(entity) } catch (_: Throwable) { null }
+            if (cleanId != null && mechanic != null && mechanic.itemID.equals(cleanId, ignoreCase = true)) {
+                return true
+            }
         }
-
 
         return false
     }
 
-    override fun isValid(loc: Location, expectedAdapterId: String?): Boolean {
-        val world = loc.world ?: return false
-        val nearby = world.getNearbyEntities(loc, 0.5, 1.0, 0.5)
+    override fun isValidFurniture(loc: Location, expectedAdapterId: String?): Boolean {
+        val keyLoc = loc.block.location
+        val world = keyLoc.world ?: return false
+        val cleanId = expectedAdapterId?.removePrefix("oraxen:")
+        val center = keyLoc.clone().add(0.5, 0.5, 0.5)
+        val nearby = world.getNearbyEntities(center, 1.5, 1.5, 1.5)
 
         for (entity in nearby) {
-            try {
-                /*val furniture = OraxenFurniture.isFurniture(entity)
-                if (furniture != null && entity.isValid && !entity.isDead) {
-                    return true
-                }*/
-                if(entity.isValid && !entity.isDead ){
-                    return true
-                }
-            } catch (_: Exception) {
-                continue
+            if (entity.location.block.location != keyLoc) continue
+            if (!entity.isValid || entity.isDead) continue
+            if (!OraxenFurniture.isFurniture(entity)) continue
+
+            val mechanic = try { OraxenFurniture.getFurnitureMechanic(entity) } catch (_: Throwable) { null }
+
+            if (cleanId == null) return true
+            if (mechanic != null && mechanic.itemID.equals(cleanId, ignoreCase = true)) {
+                return true
             }
         }
 
-        if (loc.block.type != org.bukkit.Material.AIR) return true
+        return false
+    }
+
+    override fun isValidBlock(loc: Location, expectedAdapterId: String?): Boolean {
+        val cleanId = expectedAdapterId?.removePrefix("oraxen:") ?: return loc.block.type != org.bukkit.Material.AIR
+
+        return try {
+            val noteId = OraxenBlocks.getNoteBlockMechanic(loc.block)?.itemID
+            val stringId = OraxenBlocks.getStringMechanic(loc.block)?.itemID
+            noteId.equals(cleanId, ignoreCase = true) || stringId.equals(cleanId, ignoreCase = true)
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
+    override fun isValid(loc: Location, expectedAdapterId: String?): Boolean {
+        return isValidFurniture(loc, expectedAdapterId) || isValidBlock(loc, expectedAdapterId)
+    }
+
+    override fun removeFurnitureByUUID(loc: Location, uuid: UUID?): Boolean {
+        if (uuid == null) return false
+
+        val keyLoc = loc.block.location
+        val world = keyLoc.world ?: return false
+        val center = keyLoc.clone().add(0.5, 0.5, 0.5)
+
+        val nearby = world.getNearbyEntities(center, 1.5, 1.5, 1.5)
+
+        for (entity in nearby) {
+            if (entity.location.block.location != keyLoc) continue
+            if (!entity.isValid || entity.isDead) continue
+            if (entity.uniqueId != uuid) continue
+            if (!OraxenFurniture.isFurniture(entity)) continue
+
+            val mechanic = try { OraxenFurniture.getFurnitureMechanic(entity) } catch (_: Throwable) { null }
+
+            OraxenFurniture.remove(entity, null, null)
+
+            // extra clean
+            cleanupFurnitureEntitiesOraxen(keyLoc)
+
+            return true
+        }
 
         return false
+    }
+
+    private fun cleanupFurnitureEntitiesOraxen(loc: Location) {
+        val world = loc.world ?: return
+        val center = loc.clone().add(0.5, 0.5, 0.5)
+
+        val nearby = world.getNearbyEntities(center, 1.5, 1.5, 1.5)
+
+        for (entity in nearby) {
+            if (entity.location.block.location != loc) continue
+            if (!entity.isValid || entity.isDead) continue
+
+            if (OraxenFurniture.isFurniture(entity)) {
+                entity.remove()
+            }
+        }
     }
 
     @EventHandler
@@ -370,19 +417,20 @@ class OraxenImpl(
         val center = loc.clone().add(0.5, 0.5, 0.5)
         val nearby = loc.world.getNearbyEntities(center, 1.5, 1.5, 1.5)
 
+        var removedAnyFurniture = false
         for (entity in nearby) {
-            if (entity.location.block != loc.block) { continue }
+            if (!OraxenFurniture.isFurniture(entity) || !entity.isValid || entity.isDead) continue
+            if (entity.location.block.location != loc.block.location) continue
 
             val furniture = OraxenFurniture.isFurniture(entity)
             if (furniture != null && entity.isValid && !entity.isDead) {
                 OraxenFurniture.remove(loc,player)
-
-                return
+                removedAnyFurniture = true
             }
         }
 
-        if (loc.block.type != org.bukkit.Material.AIR) {
-            //OraxenBlocks.remove(loc,player)
+        if (!removedAnyFurniture && loc.block.type != org.bukkit.Material.AIR) {
+            //debug("handleRemove[Sequence]: no furniture found, breakBlock fallback loc=${loc.block.location}")
             breakBlock(loc,player)
         }
     }

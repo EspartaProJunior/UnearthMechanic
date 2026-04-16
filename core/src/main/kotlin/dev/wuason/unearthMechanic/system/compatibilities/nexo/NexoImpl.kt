@@ -20,6 +20,7 @@ import dev.wuason.unearthMechanic.system.StageData
 import dev.wuason.unearthMechanic.system.StageManager
 import dev.wuason.unearthMechanic.system.compatibilities.ICompatibility
 import dev.wuason.unearthMechanic.utils.Utils
+import io.th0rgal.oraxen.api.OraxenBlocks
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.block.Block
@@ -91,65 +92,113 @@ class NexoImpl(
     override fun isValidUUID(loc: Location, expectedAdapterId: String?, expectedUuid: UUID?): Boolean {
         val keyLoc = loc.block.location
         val world = keyLoc.world ?: return false
-
-
+        val cleanId = expectedAdapterId?.removePrefix("nexo:")
         val center = keyLoc.clone().add(0.5, 0.5, 0.5)
         val nearby = world.getNearbyEntities(center, 1.5, 1.5, 1.5)
 
-
         for (entity in nearby) {
-            val entityBlock = entity.location.block.location
-            if (entityBlock != keyLoc) continue
+            if (entity.location.block.location != keyLoc) continue
             if (!entity.isValid || entity.isDead) continue
+            if (!NexoFurniture.isFurniture(entity)) continue
 
-
-            var adapterId: String? = null
-
-
-            for (key in entity.persistentDataContainer.keys) {
-                val value = try {
-                    entity.persistentDataContainer.get(key, PersistentDataType.STRING)
-                } catch (ex: IllegalArgumentException) {
-                    null
-                }
-
-                if (value != null && adapterId == null) {
-                    adapterId = value
-                }
+            if (expectedUuid != null) {
+                if (entity.uniqueId == expectedUuid) return true
+                continue
             }
 
-
-            if (expectedUuid != null && entity.uniqueId == expectedUuid) return true
-            if (expectedAdapterId != null && adapterId != null && adapterId.equals(expectedAdapterId.removePrefix("nexo:"), ignoreCase = true)) return true
+            val mechanic = try { NexoFurniture.furnitureMechanic(entity) } catch (_: Throwable) { null }
+            if (cleanId != null && mechanic != null && mechanic.itemID.equals(cleanId, ignoreCase = true)) {
+                return true
+            }
         }
 
+        return false
+    }
+
+    override fun isValidFurniture(loc: Location, expectedAdapterId: String?): Boolean {
+        val keyLoc = loc.block.location
+        val world = keyLoc.world ?: return false
+        val cleanId = expectedAdapterId?.removePrefix("nexo:")
+        val center = keyLoc.clone().add(0.5, 0.5, 0.5)
+        val nearby = world.getNearbyEntities(center, 1.5, 1.5, 1.5)
+
+        for (entity in nearby) {
+            if (entity.location.block.location != keyLoc) continue
+            if (!entity.isValid || entity.isDead) continue
+            if (!NexoFurniture.isFurniture(entity)) continue
+
+            val mechanic = try { NexoFurniture.furnitureMechanic(entity) } catch (_: Throwable) { null }
+
+            if (cleanId == null) return true
+            if (mechanic != null && mechanic.itemID.equals(cleanId, ignoreCase = true)) {
+                return true
+            }
+        }
 
         return false
+    }
+
+    override fun isValidBlock(loc: Location, expectedAdapterId: String?): Boolean {
+        val cleanId = expectedAdapterId?.removePrefix("oraxen:") ?: return loc.block.type != org.bukkit.Material.AIR
+
+        return try {
+            val noteId = NexoBlocks.noteBlockMechanic(loc.block)?.itemID
+            val stringId = NexoBlocks.stringMechanic(loc.block)?.itemID
+            noteId.equals(cleanId, ignoreCase = true) || stringId.equals(cleanId, ignoreCase = true)
+        } catch (_: Throwable) {
+            false
+        }
     }
 
     override fun isValid(loc: Location, expectedAdapterId: String?): Boolean {
-        val world = loc.world ?: return false
+        return isValidFurniture(loc, expectedAdapterId) || isValidBlock(loc, expectedAdapterId)
+    }
 
-        val nearby = world.getNearbyEntities(loc, 0.5, 1.0, 0.5)
+    override fun removeFurnitureByUUID(loc: Location, uuid: UUID?): Boolean {
+        if (uuid == null) return false
+
+        val keyLoc = loc.block.location
+        val world = keyLoc.world ?: return false
+        val center = keyLoc.clone().add(0.5, 0.5, 0.5)
+
+        val nearby = world.getNearbyEntities(center, 1.5, 1.5, 1.5)
+
         for (entity in nearby) {
-            try {
-                /*val furniture = NexoFurniture.isFurniture(entity)
-                if (furniture != null && entity.isValid && !entity.isDead) {
-                    return true
-                }*/
-                if(entity.isValid && !entity.isDead ){
-                    return true
-                }
-            } catch (_: Exception) {
-                continue
-            }
-        }
+            if (entity.location.block.location != keyLoc) continue
+            if (!entity.isValid || entity.isDead) continue
+            if (entity.uniqueId != uuid) continue
+            if (!NexoFurniture.isFurniture(entity)) continue
 
-        if (loc.block.type != org.bukkit.Material.AIR) return true
+            val mechanic = try { NexoFurniture.furnitureMechanic(entity) } catch (_: Throwable) { null }
+
+            NexoFurniture.remove(entity, null, null)
+
+            // extra clean
+            cleanupFurnitureEntities(keyLoc)
+
+            return true
+        }
 
         return false
     }
 
+    private fun cleanupFurnitureEntities(loc: Location) {
+        val world = loc.world ?: return
+        val center = loc.clone().add(0.5, 0.5, 0.5)
+
+        val nearby = world.getNearbyEntities(center, 1.5, 1.5, 1.5)
+
+        for (entity in nearby) {
+            if (entity.location.block.location != loc) continue
+            if (!entity.isValid || entity.isDead) continue
+
+            try {
+                if (NexoFurniture.isFurniture(entity)) {
+                    entity.remove()
+                }
+            } catch (_: Throwable) {}
+        }
+    }
 
     @EventHandler(priority = EventPriority.HIGHEST)
     fun onInteractBlock(event: NexoNoteBlockInteractEvent) {
@@ -367,20 +416,25 @@ class NexoImpl(
         }
 
         val nearby = loc.world.getNearbyEntities(loc, 0.5, 1.0, 0.5)
+        var removedAnyFurniture = false
 
         for (entity in nearby) {
+            if (!NexoFurniture.isFurniture(entity) || !entity.isValid || entity.isDead) continue
+            if (entity.location.block.location != loc.block.location) continue
             try {
                 val furniture = NexoFurniture.isFurniture(entity)
                 if (furniture != null && entity.isValid && !entity.isDead) {
                     NexoFurniture.remove(entity)
+                    removedAnyFurniture = true
                 }
             } catch (_: Exception) {
                 continue
             }
         }
 
-        if (loc.block.type != org.bukkit.Material.AIR) {
-            NexoBlocks.remove(loc)
+        if (!removedAnyFurniture && loc.block.type != org.bukkit.Material.AIR) {
+            //debug("handleRemove[Sequence]: no furniture found, breakBlock fallback loc=${loc.block.location}")
+            breakBlock(loc,player)
         }
     }
 

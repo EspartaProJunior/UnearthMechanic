@@ -90,16 +90,11 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
 
 
                         val sectionStage: Section = sectionStages.getSection(keyStage) ?: continue
-                        var stageType: StageType = StageType.valueOf(type.name.uppercase(Locale.ENGLISH))
-                        var itemStageId: String? = null
-                        for (t in StageType.values()) {
-                            sectionStage.getString("${t.getRoute()}_id")?.let {
-                                stageType = t
-                                itemStageId = it
-                            }
-                        }
 
-                        val stageAdapterData: AdapterData? = itemStageId?.let { Adapter.getAdapterData(it).getOrNull() }
+                        val targetResult = resolveStageTarget(sectionStage, type, id, keyStage)
+                        val stageType: StageType = targetResult.stageType
+                        val stageAdapterData: AdapterData? = targetResult.adapterData
+                        val randomStageOptions: List<RandomStageOption> = targetResult.randomOptions
 
                         val remove: Boolean = sectionStage.getBoolean("remove", false)
                         val drops: List<Drop> = sectionStage.getStringList("drops", emptyList()).mapNotNull {
@@ -190,6 +185,7 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
                             toolAnimDelay
                         )
 
+                        stage.setRandomStageOptions(randomStageOptions)
                         stages.add(stage)
 
                         val sectionSequence: Section? = sectionStage.getSection("sequence")
@@ -200,16 +196,10 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
                                 val delay = key.toLongOrNull() ?: continue
                                 val sectionSubStage = sectionSequence.getSection(key) ?: continue
 
-                                var stageTypeSeq: StageType = StageType.valueOf(type.name.uppercase(Locale.ENGLISH))
-                                var itemStageIdSeq: String? = null
-                                for (t in StageType.values()) {
-                                    sectionSubStage.getString("${t.getRoute()}_id")?.let {
-                                        stageTypeSeq = t
-                                        itemStageIdSeq = it
-                                    }
-                                }
-
-                                val adapterDataSeq: AdapterData? = itemStageIdSeq?.let { Adapter.getAdapterData(it).getOrNull() }
+                                val targetSeqResult = resolveStageTarget(sectionSubStage, type, id, "$keyStage.sequence.$key")
+                                val stageTypeSeq: StageType = targetSeqResult.stageType
+                                val adapterDataSeq: AdapterData? = targetSeqResult.adapterData
+                                val randomStageOptionsSeq: List<RandomStageOption> = targetSeqResult.randomOptions
 
                                 val subStage: Stage = stageTypeSeq.getClazz().declaredConstructors[0].newInstance(
                                     stages.size,
@@ -219,6 +209,7 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
                                     emptyList<Item>(), false, emptyList<Sound>(), 0L, false
                                 ) as Stage
 
+                                subStage.setRandomStageOptions(randomStageOptionsSeq)
                                 sequenceStages[delay] = subStage
                             }
 
@@ -274,6 +265,103 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
         }
 
         AdventureUtils.sendMessagePluginConsole(core, "<aqua> ${type.getName()} loaded: <yellow>${generics.count { type.getClazz().isInstance(it.value) }}")
+    }
+
+    private data class StageTargetResult(
+        val stageType: StageType,
+        val adapterData: AdapterData?,
+        val randomOptions: List<RandomStageOption>
+    )
+
+    private fun parseRandomStageOptions(
+        values: List<String>,
+        genericId: String,
+        stageKey: String
+    ): List<RandomStageOption> {
+        return values.mapNotNull { raw ->
+            try {
+                val split = raw.split(";")
+                if (split.size < 2) {
+                    core.logger.warning("Skipping invalid random stage entry '$raw' in generic '$genericId', stage '$stageKey': format must be 'adapterId;chance'")
+                    return@mapNotNull null
+                }
+
+                val adapterId = split[0].trim()
+
+                val rawChance = split[1].trim()
+
+                if (!Regex("""^\d+(\.\d{1,2})?$""").matches(rawChance)) {
+                    core.logger.warning(
+                        "Skipping invalid random stage entry '$raw' in generic '$genericId', stage '$stageKey': chance supports up to 2 decimals"
+                    )
+                    return@mapNotNull null
+                }
+                val chance = rawChance.toDouble()
+
+                if (chance <= 0.0) {
+                    core.logger.warning("Skipping invalid random stage entry '$raw' in generic '$genericId', stage '$stageKey': chance must be > 0")
+                    return@mapNotNull null
+                }
+
+                val adapter = Adapter.getAdapterData(adapterId).getOrNull()
+                if (adapter == null) {
+                    core.logger.warning("Skipping invalid random stage entry '$raw' in generic '$genericId', stage '$stageKey': unknown adapter '$adapterId'")
+                    return@mapNotNull null
+                }
+
+                RandomStageOption(adapter, chance)
+            } catch (ex: Exception) {
+                core.logger.warning("Skipping invalid random stage entry '$raw' in generic '$genericId', stage '$stageKey': ${ex.message}")
+                null
+            }
+        }
+    }
+
+    private fun resolveStageTarget(
+        sectionStage: Section,
+        defaultType: GenericType,
+        genericId: String,
+        stageKey: String
+    ): StageTargetResult {
+        var stageType = StageType.valueOf(defaultType.name.uppercase(Locale.ENGLISH))
+        var adapterData: AdapterData? = null
+        var randomOptions: List<RandomStageOption> = emptyList()
+
+        for (t in StageType.values()) {
+            val fixedKey = "${t.getRoute()}_id"
+            val randomKey = "${t.getRoute()}_random_id"
+
+            val fixedValue = sectionStage.getString(fixedKey)
+            val randomValue = sectionStage.getStringList(randomKey, emptyList())
+
+            if (randomValue.isNotEmpty() && randomOptions.isEmpty()) {
+                core.logger.warning("Random stage '$stageKey' in generic '$genericId' has no valid entries.")
+            }
+
+            if (!fixedValue.isNullOrBlank() && randomValue.isNotEmpty()) {
+                core.logger.warning("Stage '$stageKey' in generic '$genericId' has both '$fixedKey' and '$randomKey'. Using '$randomKey'.")
+            }
+
+            if (randomValue.isNotEmpty()) {
+                stageType = t
+                randomOptions = parseRandomStageOptions(randomValue, genericId, stageKey)
+
+                val total = randomOptions.sumOf { it.chance }
+                if (kotlin.math.abs(total - 100.0) > 0.009) {
+                    core.logger.warning("Random stage '$stageKey' in generic '$genericId' has total chance = $total (recommended: 100.00)")
+                }
+                adapterData = null
+                break
+            }
+
+            if (!fixedValue.isNullOrBlank()) {
+                stageType = t
+                adapterData = Adapter.getAdapterData(fixedValue).getOrNull()
+                break
+            }
+        }
+
+        return StageTargetResult(stageType, adapterData, randomOptions)
     }
 
     private fun putTool(baseAdapterData: AdapterData, tool: AdapterData, generic: IGeneric) {

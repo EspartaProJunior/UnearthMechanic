@@ -17,4 +17,6 @@ interface IDrop : IItem {
      * @return The dropped item, or null if no item was dropped.
      */
     fun dropItem(loc: Location, applyChance: Boolean): Item?
+
+    fun rollItem(applyChance: Boolean): ItemStack?
 }

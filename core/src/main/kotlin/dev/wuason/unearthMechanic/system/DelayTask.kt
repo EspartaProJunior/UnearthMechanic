@@ -18,7 +18,8 @@ class DelayTask(
     private val toolUsed: LiveTool,
     private val generic: IGeneric,
     private val stage: Stage,
-    private val validation: Validation
+    private val validation: Validation,
+    private val currentStageData: StageData? = null
 ) : BukkitRunnable() {
 
     private var tick: Long = 0
@@ -33,7 +34,8 @@ class DelayTask(
             cancel()
             return
         }
-        stageManager.onProcessStage(tick++, player, compatibility, event, loc, toolUsed, generic, stage, validation)
+        stageManager.onProcessStage(tick++, player, compatibility,
+            event, loc, toolUsed, generic, stage, validation,currentStageData)
         if (tick >= stage.getMaxCorrectDelay(toolUsed)) {
             cancel()
         }

@@ -70,14 +70,22 @@ class MinecraftImpl(
         return false
     }
 
-    override fun isValid(loc: Location, expectedAdapterId: String?): Boolean {
-        if (loc.block.type != Material.AIR){
-            //Bukkit.getConsoleSender().sendMessage("[UM] loc.block.type != Material.AIR")
-            return true
-        }
-
+    override fun isValidFurniture(loc: Location, expectedAdapterId: String?): Boolean {
         return false
     }
+
+    override fun isValidBlock(loc: Location, expectedAdapterId: String?): Boolean {
+        if (expectedAdapterId == null) return loc.block.type != Material.AIR
+
+        val cleanId = expectedAdapterId.removePrefix("mc:")
+        return loc.block.type.name.equals(cleanId, ignoreCase = true)
+    }
+
+    override fun isValid(loc: Location, expectedAdapterId: String?): Boolean {
+        return isValidBlock(loc, expectedAdapterId)
+    }
+
+    override fun removeFurnitureByUUID(loc: Location, uuid: UUID?): Boolean = false
 
     @EventHandler
     fun onInteractBlock(event: PlayerInteractEvent) {

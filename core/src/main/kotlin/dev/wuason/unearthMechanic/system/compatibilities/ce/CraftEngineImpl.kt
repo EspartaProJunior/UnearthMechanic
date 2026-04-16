@@ -107,76 +107,109 @@ class CraftEngineImpl(
     override fun isValidUUID(loc: Location, expectedAdapterId: String?, expectedUuid: UUID?): Boolean {
         val keyLoc = loc.block.location
         val world = keyLoc.world ?: return false
-
-        //Bukkit.getConsoleSender().sendMessage("[CE][isValidFurniture] ENTER keyLoc=$keyLoc expectedUuid=$expectedUuid expectedAdapterId=$expectedAdapterId")
-
         val center = keyLoc.clone().add(0.5, 0.5, 0.5)
         val nearby = world.getNearbyEntities(center, 1.5, 1.5, 1.5)
 
-        //Bukkit.getConsoleSender().sendMessage("[CE][isValidFurniture] nearby.size=${nearby.size}")
-
         for (entity in nearby) {
-            val entityBlock = entity.location.block.location
-            //Bukkit.getConsoleSender().sendMessage("[CE][Entity] ${entity.type} UUID=${entity.uniqueId} block=$entityBlock")
-
-            if (entityBlock != keyLoc) continue
+            if (entity.location.block.location != keyLoc) continue
             if (!entity.isValid || entity.isDead || !isPossibleFurnitureEntity(entity)) continue
 
-            var adapterId: String? = null
+            val furniture = try { CraftEngineFurniture.getLoadedFurnitureByMetaEntity(entity) } catch (_: Throwable) { null } ?: continue
 
-            for (key in entity.persistentDataContainer.keys) {
-                val value = try {
-                    entity.persistentDataContainer.get(key, PersistentDataType.STRING)
-                } catch (ex: IllegalArgumentException) {
-                    null
-                }
-
-                if (value != null) {
-                    //Bukkit.getConsoleSender().sendMessage("[CE][PDC] ${key.namespace}:${key.key} = $value")
-                    if (adapterId == null) {
-                        adapterId = value
-                    }
-                } else {
-                    //Bukkit.getConsoleSender().sendMessage("[CE][PDC] ${key.namespace}:${key.key} (tipo no STRING o nulo)")
-                }
+            if (expectedUuid != null) {
+                if (entity.uniqueId == expectedUuid) return true
+                continue
             }
 
-            //Bukkit.getConsoleSender().sendMessage("[CE][FurnitureData] id=$adapterId")
-
-            if (expectedUuid != null && entity.uniqueId == expectedUuid) {
-                //Bukkit.getConsoleSender().sendMessage("[CE][isValidFurniture] MATCH por UUID")
+            if (expectedAdapterId != null &&
+                furniture.id().toString().equals(expectedAdapterId.removePrefix("ce:"), ignoreCase = true)
+            ) {
                 return true
             }
-
-            if (expectedAdapterId != null && adapterId != null && adapterId.equals(expectedAdapterId.removePrefix("ce:"), ignoreCase = true)) {
-                //Bukkit.getConsoleSender().sendMessage("[CE][isValidFurniture] MATCH por adapterId")
-                return true
-            }
-
-            //Bukkit.getConsoleSender().sendMessage("[CE][isValidFurniture] mismatch: id=$adapterId")
         }
 
-        //Bukkit.getConsoleSender().sendMessage("[CE][isValidFurniture] SIN MATCH en $keyLoc")
         return false
     }
 
-    override fun isValid(loc: Location, expectedAdapterId: String?): Boolean {
-        val world = loc.world ?: return false
+    override fun isValidFurniture(loc: Location, expectedAdapterId: String?): Boolean {
+        val keyLoc = loc.block.location
+        val world = keyLoc.world ?: return false
+        val cleanId = expectedAdapterId?.removePrefix("ce:")
+        val center = keyLoc.clone().add(0.5, 0.5, 0.5)
+        val nearby = world.getNearbyEntities(center, 1.5, 1.5, 1.5)
 
-        val nearby = world.getNearbyEntities(loc, 0.5, 1.0, 0.5)
         for (entity in nearby) {
-            try {
-                val furniture = CraftEngineFurniture.getLoadedFurnitureByMetaEntity(entity)
-                if (furniture != null && entity.isValid && !entity.isDead) {
-                    return true
-                }
-            } catch (_: Exception) {
-                continue
-            }
+            if (entity.location.block.location != keyLoc) continue
+            if (!entity.isValid || entity.isDead || !isPossibleFurnitureEntity(entity)) continue
+
+            val furniture = try { CraftEngineFurniture.getLoadedFurnitureByMetaEntity(entity) } catch (_: Throwable) { null } ?: continue
+
+            if (cleanId == null) return true
+            if (furniture.id().toString().equals(cleanId, ignoreCase = true)) return true
         }
-        if (loc.block.type != Material.AIR) return true
 
         return false
+    }
+
+    override fun isValidBlock(loc: Location, expectedAdapterId: String?): Boolean {
+        val cleanId = expectedAdapterId?.removePrefix("ce:") ?: return loc.block.type != Material.AIR
+
+        return try {
+            val state = CraftEngineBlocks.getCustomBlockState(loc.block.blockData) ?: return false
+            val owner = state.owner().value() ?: return false
+            owner.toString().equals(cleanId, ignoreCase = true)
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
+    override fun isValid(loc: Location, expectedAdapterId: String?): Boolean {
+        return isValidFurniture(loc, expectedAdapterId) || isValidBlock(loc, expectedAdapterId)
+    }
+
+    override fun removeFurnitureByUUID(loc: Location, uuid: UUID?): Boolean {
+        if (uuid == null) return false
+
+        val keyLoc = loc.block.location
+        val world = keyLoc.world ?: return false
+        val center = keyLoc.clone().add(0.5, 0.5, 0.5)
+
+        val nearby = world.getNearbyEntities(center, 1.5, 1.5, 1.5)
+
+        for (entity in nearby) {
+            if (entity.location.block.location != keyLoc) continue
+            if (!entity.isValid || entity.isDead) continue
+            if (entity.uniqueId != uuid) continue
+            if (!isPossibleFurnitureEntity(entity)) continue
+
+            val furniture = try {
+                CraftEngineFurniture.getLoadedFurnitureByMetaEntity(entity)
+            } catch (_: Throwable) { null } ?: continue
+
+            CraftEngineFurniture.remove(furniture.bukkitEntity())
+
+            // extra clean
+            cleanupFurnitureEntitiesCE(keyLoc)
+
+            return true
+        }
+
+        return false
+    }
+
+    private fun cleanupFurnitureEntitiesCE(loc: Location) {
+        val world = loc.world ?: return
+        val center = loc.clone().add(0.5, 0.5, 0.5)
+
+        val nearby = world.getNearbyEntities(center, 1.5, 1.5, 1.5)
+
+        for (entity in nearby) {
+            if (!isPossibleFurnitureEntity(entity)) continue
+            if (!entity.isValid || entity.isDead) continue
+            if (entity.location.block.location != loc) continue
+
+            entity.remove()
+        }
     }
 
     @EventHandler
@@ -585,7 +618,7 @@ class CraftEngineImpl(
 
             var breakloc = event.furniture().bukkitEntity.location.block.location
 
-            if(isValid(loc, itemAdapterData.toString())){
+            if(isValid(loc, itemAdapterData.id)){
                 CraftEngineFurniture.remove(event.furniture().bukkitEntity)
                 event.furniture().bukkitEntity.remove()
                 breakBlock(breakloc)
@@ -677,20 +710,20 @@ class CraftEngineImpl(
         val center = loc.clone().add(0.5, 0.5, 0.5)
         val nearby = loc.world.getNearbyEntities(center, 1.5, 1.5, 1.5)
 
+        var removedAnyFurniture = false
+
         for (entity in nearby) {
-            if (!isPossibleFurnitureEntity(entity) || !entity.isValid || entity.isDead) {
-                continue
-            }
-            if (entity.location.block != loc.block) { continue }
+            if (!isPossibleFurnitureEntity(entity) || !entity.isValid || entity.isDead) continue
+            if (entity.location.block.location != loc.block.location) continue
 
             val furniture = CraftEngineFurniture.getLoadedFurnitureByMetaEntity(entity)
             if (furniture != null && entity.isValid && !entity.isDead) {
                 CraftEngineFurniture.remove(entity)
-
-                return
+                removedAnyFurniture = true
             }
         }
-        if (loc.block.type != org.bukkit.Material.AIR) {
+        if (!removedAnyFurniture && loc.block.type != org.bukkit.Material.AIR) {
+            //debug("handleRemove[Sequence]: no furniture found, breakBlock fallback loc=${loc.block.location}")
             breakBlock(loc)
         }
     }
