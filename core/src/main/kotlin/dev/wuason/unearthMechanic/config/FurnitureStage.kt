@@ -17,8 +17,9 @@ class FurnitureStage(
     onlyOneItem: Boolean,
     sounds: List<Sound>,
     delay: Long,
-    toolAnimDelay: Boolean
+    toolAnimDelay: Boolean,
+    executeCommands: List<IStageCommand>
 ) : Stage(
     stage, adapterData, drops, remove, removeItemMainHand, durabilityToRemove, usagesIaToRemove, permissionStage,
-    onlyOneDrop, reduceItemHand, items, onlyOneItem, sounds, delay, toolAnimDelay
+    onlyOneDrop, reduceItemHand, items, onlyOneItem, sounds, delay, toolAnimDelay, executeCommands
 ), IFurnitureStage

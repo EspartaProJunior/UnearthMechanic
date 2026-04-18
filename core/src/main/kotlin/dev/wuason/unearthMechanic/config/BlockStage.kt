@@ -17,7 +17,8 @@ class BlockStage(
     onlyOneItem: Boolean,
     sounds: List<Sound>,
     delay: Long,
-    toolAnimDelay: Boolean
+    toolAnimDelay: Boolean,
+    executeCommands: List<IStageCommand>
 ) : Stage(
     stage,
     adapterData,
@@ -33,5 +34,6 @@ class BlockStage(
     onlyOneItem,
     sounds,
     delay,
-    toolAnimDelay
+    toolAnimDelay,
+    executeCommands
 ), IBlockStage

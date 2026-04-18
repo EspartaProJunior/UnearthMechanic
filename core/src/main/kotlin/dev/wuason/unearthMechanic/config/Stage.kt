@@ -16,7 +16,8 @@ open class Stage(
     private val onlyOneDrop: Boolean,
     private val reduceItemHand: Int, private val items: List<Item>, private val onlyOneItem: Boolean,
     private val sounds: List<Sound>,
-    private val delay: Long, private val toolAnimDelay: Boolean
+    private val delay: Long, private val toolAnimDelay: Boolean,
+    private val executeCommands: List<IStageCommand>
 ) : IStage {
 
     private var randomStageOptions: List<RandomStageOption> = emptyList()
@@ -64,7 +65,8 @@ open class Stage(
             onlyOneItem,
             sounds,
             delay,
-            toolAnimDelay
+            toolAnimDelay,
+            executeCommands
         ) as Stage
 
         sequenceStages?.let { resolved.setSequenceStages(it) }
@@ -149,6 +151,8 @@ open class Stage(
     override fun isToolAnimDelay(): Boolean {
         return toolAnimDelay
     }
+
+    override fun getExecuteCommands(): List<IStageCommand> = executeCommands
 
     override fun dropItems(loc: Location) {
         if(drops.isEmpty()) return

@@ -13,8 +13,8 @@ import dev.wuason.unearthMechanic.system.StageManager
 import dev.wuason.unearthMechanic.utils.Utils
 import net.momirealms.craftengine.bukkit.api.CraftEngineBlocks
 import net.momirealms.craftengine.core.block.ImmutableBlockState
-import net.momirealms.craftengine.core.block.properties.Property
-import net.momirealms.craftengine.core.block.properties.type.DoubleBlockHalf
+import net.momirealms.craftengine.core.block.property.Property
+import net.momirealms.craftengine.core.block.property.type.DoubleBlockHalf
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.Material

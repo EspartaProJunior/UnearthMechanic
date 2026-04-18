@@ -91,101 +91,14 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
 
                         val sectionStage: Section = sectionStages.getSection(keyStage) ?: continue
 
-                        val targetResult = resolveStageTarget(sectionStage, type, id, keyStage)
-                        val stageType: StageType = targetResult.stageType
-                        val stageAdapterData: AdapterData? = targetResult.adapterData
-                        val randomStageOptions: List<RandomStageOption> = targetResult.randomOptions
-
-                        val remove: Boolean = sectionStage.getBoolean("remove", false)
-                        val drops: List<Drop> = sectionStage.getStringList("drops", emptyList()).mapNotNull {
-                            try {
-                                val split = it.split(";")
-                                val adapter = Adapter.getAdapterData(split[0]).getOrNull()
-
-                                val adapterId = split[0]
-                                if (adapter == null) {
-                                    core.logger.warning("Skipping invalid drop '$it' in generic '$id': unknown adapter '$adapterId'")
-                                    null
-                                } else {
-                                    Drop(adapter, split[1], split[2].toInt())
-                                }
-                            } catch (ex: Exception) {
-                                core.logger.warning("Skipping invalid drop '$it' in generic '$id': ${ex.message}")
-                                null
-                            }
-                        }
-                        val removeItemMainHand: Boolean = sectionStage.getBoolean("remove_item_main_hand", false)
-                        val durabilityToRemove = sectionStage.getInt("reduce_durability", 0)
-                        val usagesIaToRemove = sectionStage.getInt("reduce_usages_ia", 0)
-                        val permissionStage = sectionStage.getString("permission", "")
-                        val onlyOneDrop = sectionStage.getBoolean("only_one_drop", false)
-                        val onlyOneItem = sectionStage.getBoolean("only_one_add", false)
-                        val reduceItemMainHand: Int = sectionStage.getInt("reduce_item_main_hand", 0)
-                        val delay: Long = sectionStage.getLong("delay", 0)
-                        val toolAnimDelay = sectionStage.getBoolean("tool_anim_on_delay", false)
-                        val items: List<Item> = sectionStage.getStringList("items_add", emptyList()).mapNotNull {
-                            try {
-                                val split = it.split(";")
-                                val adapter = Adapter.getAdapterData(split[0]).getOrNull()
-
-                                val adapterId = split[0]
-                                if (adapter == null) {
-                                    core.logger.warning("Skipping invalid drop '$it' in generic '$id': unknown adapter '$adapterId'")
-                                    null
-                                } else {
-                                    Item(adapter, split[1], split[2].toInt())
-                                }
-                            } catch (ex: Exception) {
-                                core.logger.warning("Skipping invalid item '$it' in generic '$id': ${ex.message}")
-                                null
-                            }
-                        }
-                        val sounds: List<Sound> = sectionStage.getMapList("sounds", emptyList()).filter {
-                            it.containsKey("sound") && it["sound"] is String && (it["sound"] as String).isNotBlank()
-                        }.map {
-                            val sound = it["sound"] as String
-                            val volume = it.getOrDefault("volume", 1.0) as Number
-                            val pitch = it.getOrDefault("pitch", 1.0) as Number
-                            val delay = it.getOrDefault("delay", 0) as Number
-                            Sound(sound, volume.toFloat(), pitch.toFloat(), delay.toLong())
-                        }
-                        val stage: Stage = stageType?.let {
-                            stageType.getClazz().declaredConstructors[0].newInstance(
-                                stages.size,
-                                stageAdapterData,
-                                drops,
-                                remove,
-                                removeItemMainHand,
-                                durabilityToRemove,
-                                usagesIaToRemove,
-                                permissionStage,
-                                onlyOneDrop,
-                                reduceItemMainHand,
-                                items,
-                                onlyOneItem,
-                                sounds,
-                                delay,
-                                toolAnimDelay
-                            ) as Stage
-                        }?: Stage(
-                            stages.size,
-                            stageAdapterData,
-                            drops,
-                            remove,
-                            removeItemMainHand,
-                            durabilityToRemove,
-                            usagesIaToRemove,
-                            permissionStage,
-                            onlyOneDrop,
-                            reduceItemMainHand,
-                            items,
-                            onlyOneItem,
-                            sounds,
-                            delay,
-                            toolAnimDelay
+                        val stage = buildStageFromSection(
+                            sectionStage = sectionStage,
+                            defaultType = type,
+                            genericId = id,
+                            stageKey = keyStage,
+                            stageIndex = stages.size
                         )
 
-                        stage.setRandomStageOptions(randomStageOptions)
                         stages.add(stage)
 
                         val sectionSequence: Section? = sectionStage.getSection("sequence")
@@ -196,20 +109,14 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
                                 val delay = key.toLongOrNull() ?: continue
                                 val sectionSubStage = sectionSequence.getSection(key) ?: continue
 
-                                val targetSeqResult = resolveStageTarget(sectionSubStage, type, id, "$keyStage.sequence.$key")
-                                val stageTypeSeq: StageType = targetSeqResult.stageType
-                                val adapterDataSeq: AdapterData? = targetSeqResult.adapterData
-                                val randomStageOptionsSeq: List<RandomStageOption> = targetSeqResult.randomOptions
+                                val subStage = buildStageFromSection(
+                                    sectionStage = sectionSubStage,
+                                    defaultType = type,
+                                    genericId = id,
+                                    stageKey = "$keyStage.sequence.$key",
+                                    stageIndex = -1 // to tell them apart
+                                )
 
-                                val subStage: Stage = stageTypeSeq.getClazz().declaredConstructors[0].newInstance(
-                                    stages.size,
-                                    adapterDataSeq,
-                                    emptyList<Drop>(),
-                                    false, false, 0, 0, "", false, 0,
-                                    emptyList<Item>(), false, emptyList<Sound>(), 0L, false
-                                ) as Stage
-
-                                subStage.setRandomStageOptions(randomStageOptionsSeq)
                                 sequenceStages[delay] = subStage
                             }
 
@@ -248,7 +155,8 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
                             false,
                             listOf<Sound>(),
                             0,
-                            false
+                            false,
+                            emptyList<IStageCommand>()
                         ) as Stage
 
                         val generic: IGeneric = constructor.newInstance(cid, normalTools.toSet(), baseStage, stages, notProtected) as IGeneric
@@ -317,6 +225,119 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
         }
     }
 
+    private fun parseStageCommands(section: Section): List<IStageCommand> {
+        return section.getMapList("execute_commands", emptyList()).mapNotNull { map ->
+            try {
+                val command = map["command"]?.toString()?.trim().orEmpty()
+                if (command.isBlank()) return@mapNotNull null
+
+                val asConsole = map["as_console"]?.toString()?.toBoolean() ?: true
+                StageCommand(command, asConsole)
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
+
+    private fun buildStageFromSection(
+        sectionStage: Section,
+        defaultType: GenericType,
+        genericId: String,
+        stageKey: String,
+        stageIndex: Int
+    ): Stage {
+        val targetResult = resolveStageTarget(sectionStage, defaultType, genericId, stageKey)
+        val stageType: StageType = targetResult.stageType
+        val stageAdapterData: AdapterData? = targetResult.adapterData
+        val randomStageOptions: List<RandomStageOption> = targetResult.randomOptions
+
+        val remove: Boolean = sectionStage.getBoolean("remove", false)
+
+        val drops: List<Drop> = sectionStage.getStringList("drops", emptyList()).mapNotNull {
+            try {
+                val split = it.split(";")
+                val adapterId = split[0].trim()
+                val adapter = Adapter.getAdapterData(adapterId).getOrNull()
+
+                if (adapter == null) {
+                    core.logger.warning("Skipping invalid drop '$it' in generic '$genericId', stage '$stageKey': unknown adapter '$adapterId'")
+                    null
+                } else {
+                    Drop(adapter, split[1], split[2].toInt())
+                }
+            } catch (ex: Exception) {
+                core.logger.warning("Skipping invalid drop '$it' in generic '$genericId', stage '$stageKey': ${ex.message}")
+                null
+            }
+        }
+
+        val removeItemMainHand: Boolean = sectionStage.getBoolean("remove_item_main_hand", false)
+        val durabilityToRemove = sectionStage.getInt("reduce_durability", 0)
+        val usagesIaToRemove = sectionStage.getInt("reduce_usages_ia", 0)
+        val permissionStage = sectionStage.getString("permission", "")
+        val onlyOneDrop = sectionStage.getBoolean("only_one_drop", false)
+        val onlyOneItem = sectionStage.getBoolean("only_one_add", false)
+        val reduceItemMainHand: Int = sectionStage.getInt("reduce_item_main_hand", 0)
+        val delay: Long = sectionStage.getLong("delay", 0)
+        val toolAnimDelay = sectionStage.getBoolean("tool_anim_on_delay", false)
+
+        val items: List<Item> = sectionStage.getStringList("items_add", emptyList()).mapNotNull {
+            try {
+                val split = it.split(";")
+                val adapterId = split[0].trim()
+                val adapter = Adapter.getAdapterData(adapterId).getOrNull()
+
+                if (adapter == null) {
+                    core.logger.warning("Skipping invalid item '$it' in generic '$genericId', stage '$stageKey': unknown adapter '$adapterId'")
+                    null
+                } else {
+                    Item(adapter, split[1], split[2].toInt())
+                }
+            } catch (ex: Exception) {
+                core.logger.warning("Skipping invalid item '$it' in generic '$genericId', stage '$stageKey': ${ex.message}")
+                null
+            }
+        }
+
+        val sounds: List<Sound> = sectionStage.getMapList("sounds", emptyList())
+            .filter {
+                it.containsKey("sound") && it["sound"] is String && (it["sound"] as String).isNotBlank()
+            }.map {
+                val sound = it["sound"] as String
+                val volume = it.getOrDefault("volume", 1.0) as Number
+                val pitch = it.getOrDefault("pitch", 1.0) as Number
+                val delaySound = it.getOrDefault("delay", 0) as Number
+                Sound(sound, volume.toFloat(), pitch.toFloat(), delaySound.toLong())
+            }
+
+        val executeCommands: List<IStageCommand> = parseStageCommands(sectionStage)
+
+        val constructor = stageType.getClazz().declaredConstructors[0]
+        constructor.isAccessible = true
+
+        val stage = constructor.newInstance(
+            stageIndex,
+            stageAdapterData,
+            drops,
+            remove,
+            removeItemMainHand,
+            durabilityToRemove,
+            usagesIaToRemove,
+            permissionStage,
+            onlyOneDrop,
+            reduceItemMainHand,
+            items,
+            onlyOneItem,
+            sounds,
+            delay,
+            toolAnimDelay,
+            executeCommands
+        ) as Stage
+
+        stage.setRandomStageOptions(randomStageOptions)
+        return stage
+    }
+
     private fun resolveStageTarget(
         sectionStage: Section,
         defaultType: GenericType,
@@ -334,10 +355,6 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
             val fixedValue = sectionStage.getString(fixedKey)
             val randomValue = sectionStage.getStringList(randomKey, emptyList())
 
-            if (randomValue.isNotEmpty() && randomOptions.isEmpty()) {
-                core.logger.warning("Random stage '$stageKey' in generic '$genericId' has no valid entries.")
-            }
-
             if (!fixedValue.isNullOrBlank() && randomValue.isNotEmpty()) {
                 core.logger.warning("Stage '$stageKey' in generic '$genericId' has both '$fixedKey' and '$randomKey'. Using '$randomKey'.")
             }
@@ -346,10 +363,15 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
                 stageType = t
                 randomOptions = parseRandomStageOptions(randomValue, genericId, stageKey)
 
+                if (randomOptions.isEmpty()) {
+                    core.logger.warning("Random stage '$stageKey' in generic '$genericId' has no valid entries.")
+                }
+
                 val total = randomOptions.sumOf { it.chance }
                 if (kotlin.math.abs(total - 100.0) > 0.009) {
                     core.logger.warning("Random stage '$stageKey' in generic '$genericId' has total chance = $total (recommended: 100.00)")
                 }
+
                 adapterData = null
                 break
             }

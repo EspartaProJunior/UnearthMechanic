@@ -6,7 +6,7 @@ import net.momirealms.craftengine.bukkit.block.behavior.BukkitBlockBehavior
 import net.momirealms.craftengine.core.block.BlockDefinition
 import net.momirealms.craftengine.core.block.ImmutableBlockState
 import net.momirealms.craftengine.core.block.UpdateFlags
-import net.momirealms.craftengine.core.block.properties.Property
+import net.momirealms.craftengine.core.block.property.Property
 import net.momirealms.craftengine.core.world.BlockPos
 import net.momirealms.craftengine.core.world.World
 import org.bukkit.Bukkit

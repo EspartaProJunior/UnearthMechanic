@@ -131,4 +131,13 @@ interface IStage {
      */
     fun addItems(player: Player)
 
+    /**
+     * Retrieves the commands to execute when this stage is applied.
+     *
+     * Supported placeholder:
+     * - {player}: name of the player who interacted
+     *
+     * @return a list of stage commands
+     */
+    fun getExecuteCommands(): List<IStageCommand>
 }

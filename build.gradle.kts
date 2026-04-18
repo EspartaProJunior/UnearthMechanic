@@ -18,7 +18,7 @@ val targetJavaVersion = 21
 allprojects {
 
     project.group = "dev.wuason"
-    project.version = "0.1.12m"
+    project.version = "0.1.12n"
 
     //apply kotlin jvm plugin
     apply(plugin = "kotlin")
@@ -237,7 +237,7 @@ subprojects {
         implementation("com.jeff-media:MorePersistentDataTypes:2.4.0")
         implementation("dev.dejvokep:boosted-yaml:1.3.6")
         implementation("de.tr7zw:item-nbt-api:2.15.5")
-        implementation("net.momirealms:antigrieflib:0.16")
+        implementation("net.momirealms:antigrieflib:1.0.9")
         implementation(kotlin("stdlib"))
     }
 }

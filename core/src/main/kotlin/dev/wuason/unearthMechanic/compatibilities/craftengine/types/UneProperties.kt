@@ -1,7 +1,7 @@
 package dev.wuason.unearthMechanic.compatibilities.craftengine.types
 
-import net.momirealms.craftengine.core.block.properties.EnumProperty
-import net.momirealms.craftengine.core.block.properties.Properties
+import net.momirealms.craftengine.core.block.property.EnumProperty
+import net.momirealms.craftengine.core.block.property.Properties
 
 object UneProperties {
 

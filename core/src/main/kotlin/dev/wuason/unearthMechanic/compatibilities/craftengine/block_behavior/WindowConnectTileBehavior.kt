@@ -3,21 +3,19 @@ package dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior
 import dev.wuason.unearthMechanic.compatibilities.craftengine.types.WindowTile
 import net.momirealms.craftengine.bukkit.api.BukkitAdaptor
 import net.momirealms.craftengine.bukkit.block.behavior.BukkitBlockBehavior
-import net.momirealms.craftengine.bukkit.nms.FastNMS
 import net.momirealms.craftengine.bukkit.util.BlockStateUtils
 import net.momirealms.craftengine.bukkit.world.BukkitWorld
 import net.momirealms.craftengine.core.block.BlockDefinition
 import net.momirealms.craftengine.core.block.ImmutableBlockState
 import net.momirealms.craftengine.core.block.UpdateFlags
 import net.momirealms.craftengine.core.block.behavior.BlockBehaviorFactory
-import net.momirealms.craftengine.core.block.properties.Property
+import net.momirealms.craftengine.core.block.property.Property
 import net.momirealms.craftengine.core.plugin.config.ConfigSection
 import net.momirealms.craftengine.core.registry.Holder
 import net.momirealms.craftengine.core.world.BlockPos
 import net.momirealms.craftengine.core.world.World
 import net.momirealms.craftengine.core.world.context.BlockPlaceContext
 import org.bukkit.Bukkit
-import java.util.concurrent.Callable
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -78,23 +76,12 @@ class WindowConnectTileBehavior(
     }
 
     override fun onPlace(thisBlock: Any, args: Array<Any>) {
-        if (inBatch.get() == true) { super.onPlace(thisBlock, args); return }
-        //log.info("[WindowTile] onPlace(): args.size=${args.size}")
-        val nmsWorld = args.getOrNull(1) ?: run { super.onPlace(thisBlock, args); return }
-        val nmsPos   = args.getOrNull(2) ?: run { super.onPlace(thisBlock, args); return }
+        if (inBatch.get() == true) {
+            super.onPlace(thisBlock, args)
+            return
+        }
 
-        val craftWorld = Bukkit.getWorlds().firstOrNull { w ->
-            val handle = w.javaClass.getMethod("getHandle").invoke(w)
-            handle == nmsWorld
-        } ?: run { super.onPlace(thisBlock, args); return }
-
-        val x = nmsPos.javaClass.getMethod("getX").invoke(nmsPos) as Int
-        val y = nmsPos.javaClass.getMethod("getY").invoke(nmsPos) as Int
-        val z = nmsPos.javaClass.getMethod("getZ").invoke(nmsPos) as Int
-
-        val ceWorld = BukkitAdaptor.adapt(craftWorld)
-        val cePos   = BlockPos(x, y, z)
-        scheduleNeighborUpdate(ceWorld, cePos, 2L)
+        scheduleNeighborUpdateFromArgs(args, 1L)
         super.onPlace(thisBlock, args)
     }
 
@@ -105,30 +92,34 @@ class WindowConnectTileBehavior(
     }*/
 
     override fun affectNeighborsAfterRemoval(thisBlock: Any, args: Array<Any>) {
-        if (inBatch.get() == true) { super.affectNeighborsAfterRemoval(thisBlock, args); return }
-        //log.info("[WindowTile] affectNeighborsAfterRemoval(): args.size=${args.size}")
-        handleRemoval(thisBlock, args); super.affectNeighborsAfterRemoval(thisBlock, args)
+        if (inBatch.get() == true) {
+            super.affectNeighborsAfterRemoval(thisBlock, args)
+            return
+        }
+
+        scheduleNeighborUpdateFromArgs(args, 1L)
+        super.affectNeighborsAfterRemoval(thisBlock, args)
     }
 
-    private fun handleRemoval(thisBlock: Any, args: Array<Any>) {
-
+    private fun scheduleNeighborUpdateFromArgs(args: Array<Any>, delay: Long) {
         val nmsWorld = args.getOrNull(1) ?: return
-        val nmsPos   = args.getOrNull(2) ?: return
+        val nmsPos = args.getOrNull(2) ?: return
 
-        FastNMS.INSTANCE.`method$ScheduledTickAccess$scheduleBlockTick`(nmsWorld, nmsPos, thisBlock, 2)
-
-        /*val craftWorld = Bukkit.getWorlds().firstOrNull { w ->
-            val handle = w.javaClass.getMethod("getHandle").invoke(w)
-            handle == nmsWorld
+        val craftWorld = Bukkit.getWorlds().firstOrNull { world ->
+            runCatching {
+                val handle = world.javaClass.getMethod("getHandle").invoke(world)
+                handle == nmsWorld
+            }.getOrDefault(false)
         } ?: return
 
-        val x = nmsPos.javaClass.getMethod("getX").invoke(nmsPos) as Int
-        val y = nmsPos.javaClass.getMethod("getY").invoke(nmsPos) as Int
-        val z = nmsPos.javaClass.getMethod("getZ").invoke(nmsPos) as Int
+        val x = runCatching { nmsPos.javaClass.getMethod("getX").invoke(nmsPos) as Int }.getOrNull() ?: return
+        val y = runCatching { nmsPos.javaClass.getMethod("getY").invoke(nmsPos) as Int }.getOrNull() ?: return
+        val z = runCatching { nmsPos.javaClass.getMethod("getZ").invoke(nmsPos) as Int }.getOrNull() ?: return
 
-        val ceWorld = BukkitAdaptors.adapt(craftWorld)
-        val cePos   = BlockPos(x, y, z)
-        scheduleNeighborUpdate(ceWorld, cePos, 2L)*/
+        val ceWorld = BukkitAdaptor.adapt(craftWorld)
+        val cePos = BlockPos(x, y, z)
+
+        scheduleNeighborUpdate(ceWorld, cePos, delay)
     }
 
     private fun scheduleNeighborUpdate(world: World, pos: BlockPos, delay: Long) {
@@ -140,6 +131,7 @@ class WindowConnectTileBehavior(
             return
         }
         val plugin = Bukkit.getPluginManager().getPlugin("UnearthMechanic") ?: return
+        if (!plugin.isEnabled) return
         //log.info("[WindowTile] scheduleNeighborUpdate(): ($key) +${delay}t")
         Bukkit.getScheduler().runTaskLater(plugin, Runnable {
             try { updateNeighbors(world, pos) } finally { pending.remove(key) }
@@ -148,6 +140,25 @@ class WindowConnectTileBehavior(
     }
 
     // ================== Connection logic ==================
+
+    private fun isSameWindowPlane(
+        world: World,
+        pos: BlockPos,
+        originId: String,
+        axis0: String?,
+        facing0: String?
+    ): Boolean {
+        val st = world.getBlock(pos).customBlockState() ?: return false
+        if (ceStateId(st) != originId) return false
+
+        val ax = normalizeAxis(propValue(st, "axis"))
+        val fc = normalizeFacing(propValue(st, "facing"))
+
+        if (axis0 != null && ax != axis0) return false
+        if (facing0 != null && fc != facing0) return false
+
+        return true
+    }
 
     private fun calculateTile(world: World, pos: BlockPos, selfState: ImmutableBlockState? = null): WindowTile {
         val originState = selfState ?: world.getBlock(pos).customBlockState()
@@ -158,16 +169,7 @@ class WindowConnectTileBehavior(
         val facing0 = normalizeFacing(propValue(originState, "facing"))
 
         fun isSameOriented(p: BlockPos): Boolean {
-            val st = world.getBlock(p).customBlockState() ?: return false
-            if (ceStateId(st) != originId) return false
-
-            val ax = normalizeAxis(propValue(st, "axis"))
-            val fc = normalizeFacing(propValue(st, "facing"))
-
-            if (axis0 != null && ax != axis0) return false
-            if (facing0 != null && fc != facing0) return false
-
-            return true
+            return isSameWindowPlane(world, p, originId, axis0, facing0)
         }
 
         fun inferUseAxisZ(p: BlockPos): Boolean? {
@@ -284,14 +286,6 @@ class WindowConnectTileBehavior(
         return WindowTile.single*/
     }
 
-    private fun isSame(world: World, pos: BlockPos): Boolean {
-        val wrap = world.getBlockState(pos) ?: return false
-        //val wrap = world.getBlockAt(pos).blockState() ?: return false
-        val neighborStr = try { wrap.ownerId()?.toString() } catch (_: Throwable) { null }
-        val selfStr     = try { blockDefinition.id().asString() } catch (_: Throwable) { blockDefinition.id().toString() }
-        return neighborStr != null && neighborStr == selfStr
-    }
-
     // ---------------- Robust recalculation with flood-fill ----------------
 
     private enum class OrientationKind { FACING, AXIS, NONE }
@@ -301,24 +295,6 @@ class WindowConnectTileBehavior(
         if (state == null) return null
         val ref = state.owner() as? Holder.Reference<BlockDefinition> ?: return null
         return try { ref.key().location().asString() } catch (_: Throwable) { null }
-    }
-
-    private fun ceFacing(state: ImmutableBlockState?, fallback: String = "south"): String {
-        if (state == null) return fallback
-        return try {
-            state.propertyEntries().entries
-                .firstOrNull { it.key.name() == "facing" }
-                ?.value?.toString()?.lowercase() ?: fallback
-        } catch (_: Throwable) { fallback }
-    }
-
-    private fun ceAxis(state: ImmutableBlockState?, fallback: String = "z"): String {
-        if (state == null) return fallback
-        return try {
-            state.propertyEntries().entries
-                .firstOrNull { it.key.name() == "axis" }
-                ?.value?.toString()?.lowercase() ?: fallback
-        } catch (_: Throwable) { fallback }
     }
 
     private fun propValue(state: ImmutableBlockState?, name: String): Any? {
@@ -446,30 +422,8 @@ class WindowConnectTileBehavior(
 
         val ori = ceOrientation(originState)
 
-        val axisFlip = (facing0 == null && ori.kind == OrientationKind.AXIS && ori.value == "x")
-
-        fun sameBlockId(st: ImmutableBlockState?): Boolean = ceStateId(st) == originId
-
         fun isSameAt(pos: BlockPos): Boolean {
-            val st = world.getBlock(pos).customBlockState() ?: return false
-            if (ceStateId(st) != originId) return false
-
-            val ax = normalizeAxis(propValue(st, "axis"))
-            val fc = normalizeFacing(propValue(st, "facing"))
-
-            if (axis0 != null && ax != axis0) return false
-            if (facing0 != null && fc != facing0) return false
-            return true
-        }
-
-        fun inferUseAxisZ(p: BlockPos): Boolean? {
-            val hasX = isSameAt(p.offset( 1, 0, 0)) || isSameAt(p.offset(-1, 0, 0))
-            val hasZ = isSameAt(p.offset( 0, 0, 1)) || isSameAt(p.offset( 0, 0,-1))
-            return when {
-                hasZ && !hasX -> true   // Z
-                hasX && !hasZ -> false  // X
-                else -> null            // ambiguous (single or rare form)
-            }
+            return isSameWindowPlane(world, pos, originId, axis0, facing0)
         }
 
         // axis has no direction => we do not invert L/R
@@ -477,16 +431,20 @@ class WindowConnectTileBehavior(
         //val invertLR_X = ((ori.kind == OrientationKind.FACING && ori.value == "north") xor axisFlip)
         //val invertLR_Z = ((ori.kind == OrientationKind.FACING && ori.value == "west")  xor axisFlip)
 
-        val invertLR_X = (facing0 == "south")
-        val invertLR_Z = (facing0 == "west")
 
         fun setTile(p: BlockPos, tile: WindowTile) {
             val state = world.getBlock(p).customBlockState() ?: return
 
-            val newState = try { state.with(tileProperty, tile) } catch (_: Throwable) { return }
-            BukkitAdaptor.adapt(bWorld).setBlockState(p.x(), p.y(), p.z(), newState, UpdateFlags.UPDATE_ALL)
-            //BukkitAdaptors.adapt(bWorld).setBlockAt(p.x(), p.y(), p.z(), newState, UpdateOption.UPDATE_ALL.flags()) //OLD API METHOD
-            // log: "[WindowTile] (${p.x()},${p.y()},${p.z()}) tile='${tile.name.lowercase()}' facing=${facing}"
+            val current = runCatching { state.get(tileProperty) }.getOrNull()
+            if (current == tile) return // avoid unnecessary updates
+
+            val newState = runCatching { state.with(tileProperty, tile) }.getOrNull() ?: return
+
+            BukkitAdaptor.adapt(bWorld).setBlockState(
+                p.x(), p.y(), p.z(),
+                newState,
+                UpdateFlags.UPDATE_ALL
+            )
         }
 
         fun familyFor(p: BlockPos): String {
@@ -529,6 +487,7 @@ class WindowConnectTileBehavior(
         val q: ArrayDeque<BlockPos> = ArrayDeque()
 
         if (!isSameAt(origin)) return
+        if (ceStateId(world.getBlock(origin).customBlockState()) != originId) return
         comp.add(origin); q.add(origin)
 
         val dirs = arrayOf(

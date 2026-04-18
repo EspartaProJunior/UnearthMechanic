@@ -5,7 +5,7 @@ import dev.wuason.unearthMechanic.compatibilities.craftengine.types.FishType
 import net.momirealms.craftengine.bukkit.api.BukkitAdaptor
 import net.momirealms.craftengine.bukkit.api.CraftEngineBlocks
 import net.momirealms.craftengine.core.block.UpdateFlags
-import net.momirealms.craftengine.core.block.properties.Property
+import net.momirealms.craftengine.core.block.property.Property
 import net.momirealms.craftengine.core.world.BlockPos
 import org.bukkit.Bukkit
 import org.bukkit.GameMode

@@ -5,7 +5,7 @@ import net.momirealms.craftengine.bukkit.util.BlockStateUtils
 import net.momirealms.craftengine.core.block.BlockDefinition
 import net.momirealms.craftengine.core.block.ImmutableBlockState
 import net.momirealms.craftengine.core.block.behavior.BlockBehaviorFactory
-import net.momirealms.craftengine.core.block.properties.Property
+import net.momirealms.craftengine.core.block.property.Property
 import net.momirealms.craftengine.core.entity.player.InteractionResult
 import net.momirealms.craftengine.core.plugin.config.ConfigSection
 import net.momirealms.craftengine.core.util.Direction

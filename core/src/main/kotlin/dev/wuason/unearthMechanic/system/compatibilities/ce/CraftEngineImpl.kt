@@ -22,8 +22,8 @@ import net.momirealms.craftengine.bukkit.api.CraftEngineFurniture
 import net.momirealms.craftengine.bukkit.api.event.*
 import net.momirealms.craftengine.core.block.ImmutableBlockState
 import net.momirealms.craftengine.core.block.UpdateFlags
-import net.momirealms.craftengine.core.block.properties.Property
-import net.momirealms.craftengine.core.block.properties.type.DoubleBlockHalf
+import net.momirealms.craftengine.core.block.property.Property
+import net.momirealms.craftengine.core.block.property.type.DoubleBlockHalf
 import net.momirealms.craftengine.core.entity.furniture.AnchorType
 import net.momirealms.craftengine.core.entity.player.InteractionHand
 import net.momirealms.craftengine.core.util.Key
