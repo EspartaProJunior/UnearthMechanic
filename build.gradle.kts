@@ -18,7 +18,7 @@ val targetJavaVersion = 21
 allprojects {
 
     project.group = "dev.wuason"
-    project.version = "0.1.12n"
+    project.version = "0.1.13"
 
     //apply kotlin jvm plugin
     apply(plugin = "kotlin")
@@ -239,6 +239,8 @@ subprojects {
         implementation("de.tr7zw:item-nbt-api:2.15.5")
         implementation("net.momirealms:antigrieflib:1.0.9")
         implementation(kotlin("stdlib"))
+
+        implementation("com.h2database:h2:2.2.224")
     }
 }
 
@@ -275,6 +277,7 @@ tasks.shadowJar {
     relocate("com.jeff_media.morepersistentdatatypes", "dev.wuason.libs.jeffmedia.morepersistentdatatypes")
     relocate("dev.wuason.adapter", "dev.wuason.libs.adapter")
     relocate ("com.jeff_media.customblockdata", "dev.wuason.libs.jeff_media.customblockdata")
+    relocate ("com.h2database", "dev.wuason.libs.h2database")
 
     manifest {
         attributes["paperweight-mappings-namespace"] = "mojang"

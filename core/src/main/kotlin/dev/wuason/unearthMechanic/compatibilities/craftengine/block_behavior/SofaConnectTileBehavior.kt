@@ -171,15 +171,52 @@ class SofaConnectTileBehavior(
      * - single if not connected
      */
     private fun calculateTile(state: ImmutableBlockState, world: World, pos: BlockPos): SofaTile {
-        val axis = getAxisValue(state)
-
         val east = isSame(world, pos.offset(1, 0, 0))
         val west = isSame(world, pos.offset(-1, 0, 0))
         val north = isSame(world, pos.offset(0, 0, -1))
         val south = isSame(world, pos.offset(0, 0, 1))
 
-        val result = when (axis) {
-            // Row X
+        // FACING PRIORITY
+        if (facingProperty != null) {
+            val facing = runCatching { state.get(facingProperty) }.getOrNull()
+
+            return when (facing) {
+                Direction.NORTH -> when {
+                    east && west -> SofaTile.middle
+                    east -> SofaTile.right
+                    west -> SofaTile.left
+                    else -> SofaTile.single
+                }
+
+                Direction.SOUTH -> when {
+                    east && west -> SofaTile.middle
+                    east -> SofaTile.left
+                    west -> SofaTile.right
+                    else -> SofaTile.single
+                }
+
+                Direction.EAST -> when {
+                    north && south -> SofaTile.middle
+                    south -> SofaTile.right
+                    north -> SofaTile.left
+                    else -> SofaTile.single
+                }
+
+                Direction.WEST -> when {
+                    north && south -> SofaTile.middle
+                    south -> SofaTile.left
+                    north -> SofaTile.right
+                    else -> SofaTile.single
+                }
+
+                else -> SofaTile.single
+            }
+        }
+
+        // FALLBACK AXIS
+        val axis = getAxisValue(state)
+
+        return when (axis) {
             "z" -> when {
                 east && west -> SofaTile.middle
                 east -> SofaTile.left
@@ -187,7 +224,6 @@ class SofaConnectTileBehavior(
                 else -> SofaTile.single
             }
 
-            // Row Z
             "x" -> when {
                 north && south -> SofaTile.middle
                 south -> SofaTile.right
@@ -197,12 +233,6 @@ class SofaConnectTileBehavior(
 
             else -> SofaTile.single
         }
-
-        /*Bukkit.getLogger().info(
-            "[SOFA-FIX] pos=$pos axis=$axis east=$east west=$west north=$north south=$south result=$result"
-        )*/
-
-        return result
     }
 
     override fun updateShape(thisBlock: Any, args: Array<Any>): Any {

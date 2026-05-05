@@ -3,6 +3,7 @@ package dev.wuason.unearthMechanic.system
 import dev.wuason.adapter.Adapter
 import dev.wuason.adapter.AdapterData
 import dev.wuason.unearthMechanic.UnearthMechanic
+import dev.wuason.unearthMechanic.compatibilities.craftengine.CraftEnginePlugin
 import dev.wuason.unearthMechanic.compatibilities.luckperms.LuckPermsPlugin
 import dev.wuason.unearthMechanic.compatibilities.worldguard.WorldGuardPlugin
 import dev.wuason.unearthMechanic.config.*
@@ -25,8 +26,9 @@ import dev.wuason.unearthMechanic.system.features.Features
 import dev.wuason.unearthMechanic.system.features.TintFurnitureFeature
 import dev.wuason.unearthMechanic.system.features.ToolSoundFeature
 import dev.wuason.unearthMechanic.utils.Utils
-import dev.wuason.unearthMechanic.utils.Utils.Companion.toAdapter
 import net.momirealms.antigrieflib.Flag
+import net.momirealms.craftengine.bukkit.api.CraftEngineBlocks
+import net.momirealms.craftengine.bukkit.api.event.CustomBlockInteractEvent
 import org.bukkit.Bukkit
 import org.bukkit.FluidCollisionMode
 import org.bukkit.GameMode
@@ -40,6 +42,7 @@ import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.scheduler.BukkitTask
 import java.util.*
+import kotlin.jvm.optionals.getOrNull
 
 
 class StageManager(private val core: UnearthMechanic) : IStageManager {
@@ -62,6 +65,8 @@ class StageManager(private val core: UnearthMechanic) : IStageManager {
     public val activeSequences = mutableSetOf<Location>()
     private val activeSequenceUuids = mutableMapOf<Location, UUID?>()
     private val scheduledTasks = mutableMapOf<Location, MutableList<BukkitTask>>()
+
+    private val lastInteractionProps = mutableMapOf<Location, Map<String, String>>()
 
     private val transitioningLocations = mutableSetOf<Location>()
     fun isTransitioning(location: Location) = transitioningLocations.contains(location)
@@ -99,8 +104,73 @@ class StageManager(private val core: UnearthMechanic) : IStageManager {
 
     }
 
+    private fun readCePropsFromNbt(nbt: net.momirealms.craftengine.libraries.nbt.CompoundTag?): Map<String, String> {
+        if (nbt == null) return emptyMap()
+
+        val props = mutableMapOf<String, String>()
+
+        for (key in nbt.keySet()) {
+            val value = nbt.get(key) ?: continue
+
+            props[key.lowercase()] = value.toString()
+                .removeSurrounding("\"")
+                .substringAfter("StringTag(")
+                .substringBeforeLast(")")
+                .removeSurrounding("\"")
+                .lowercase()
+        }
+
+        return props
+    }
+
+    private fun getCurrentBlockProps(location: Location, event: Event? = null): Map<String, String> {
+        // CraftEngine event props: more reliable
+        if (event is CustomBlockInteractEvent) {
+            val props = readCePropsFromNbt(event.blockState().propertiesNbt())
+            //core.logger.info("[UM-DBG-PROPS] CE event props=$props")
+            if (props.isNotEmpty()) return props
+        }
+
+        // CraftEngine BlockData fallback
+        try {
+            if (CraftEnginePlugin.isCraftEngineEnabled() && CraftEnginePlugin.isCraftEngineLoaded()) {
+                val ceState = CraftEngineBlocks.getCustomBlockState(location.block.blockData)
+                if (ceState != null) {
+                    val props = readCePropsFromNbt(ceState.propertiesNbt())
+                    //core.logger.info("[UM-DBG-PROPS] CE blockData props=$props")
+                    if (props.isNotEmpty()) return props
+                }
+            }
+        } catch (ex: Throwable) {
+            //core.logger.info("[UM-DBG-PROPS] CE props error=${ex.message}")
+        }
+
+        // Vanilla Fallback
+        val data = location.block.blockData
+        val props = mutableMapOf<String, String>()
+
+        if (data is org.bukkit.block.data.Orientable) {
+            props["axis"] = data.axis.name.lowercase()
+        }
+
+        if (data is org.bukkit.block.data.Directional) {
+            props["facing"] = data.facing.name.lowercase()
+        }
+
+        if (data is org.bukkit.block.data.Bisected) {
+            props["half"] = when (data.half) {
+                org.bukkit.block.data.Bisected.Half.TOP -> "upper"
+                org.bukkit.block.data.Bisected.Half.BOTTOM -> "lower"
+            }
+        }
+
+        core.logger.info("[UM-DBG-PROPS] Vanilla props=$props")
+        return props
+    }
+
     fun interact(player: Player, baseItemId: String, location: Location, event: Event, compatibility: ICompatibility) {
-        if (player.isSneaking) return
+        //core.logger.info("[UM-DBG] interact ENTER baseItemId=$baseItemId loc=${location.blockX},${location.blockY},${location.blockZ} comp=${compatibility.adapterComp()?.type}")
+        //if (player.isSneaking) return
 
         if(compatibility.isRemoving(location.block.location)) return
 
@@ -110,16 +180,53 @@ class StageManager(private val core: UnearthMechanic) : IStageManager {
             val toolUsed: String = Adapter.getAdapterId(
                 animator.getAnimation(player)?.getItemMainHand() ?: player.inventory.itemInMainHand
             )
-            interactExist(player, baseItemId, location, event, compatibility, stageData, toolUsed.toAdapter()!!)
+            val toolAdapter = Adapter.getAdapterData(toolUsed).getOrNull() ?: run {
+                //core.logger.info("[UM-DBG] INVALID toolAdapter (exist) from $toolUsed")
+                return
+            }
+
+            interactExist(
+                player,
+                baseItemId,
+                location,
+                event,
+                compatibility,
+                stageData,
+                toolAdapter
+            )
             return
         }
 
-        if (core.getConfigManager().validBaseItemId(baseItemId.toAdapter()!!)) {
-            val toolUsed: String = Adapter.getAdapterId(
-                animator.getAnimation(player)?.getItemMainHand() ?: player.inventory.itemInMainHand
-            )
-            interactNotExist(player, baseItemId.toAdapter()!!, location, event, compatibility, toolUsed.toAdapter()!!)
+        val toolUsed: String = Adapter.getAdapterId(
+            animator.getAnimation(player)?.getItemMainHand() ?: player.inventory.itemInMainHand
+        )
+
+        val parsedBase = (core.getConfigManager() as ConfigManager)
+            .parseBlockStateId(baseItemId)
+
+        val baseAdapter = Adapter.getAdapterData(parsedBase.cleanId).getOrNull() ?: run {
+            //core.logger.info("[UM-DBG] INVALID baseAdapter from $baseItemId parsed=${parsedBase.cleanId}")
             return
+        }
+
+        val toolAdapter = Adapter.getAdapterData(toolUsed).getOrNull() ?: run {
+            //core.logger.info("[UM-DBG] INVALID toolAdapter from $toolUsed")
+            return
+        }
+        val mode = InteractionMode.fromSneaking(player.isSneaking)
+        val props = getCurrentBlockProps(location,event)
+
+        val configManager = core.getConfigManager()
+
+        val generic = configManager.getGeneric(baseAdapter, toolAdapter, mode, props)
+
+        //core.logger.info("[UM-DBG] generic result=${generic?.getId() ?: "NULL"}")
+
+        if (generic != null) {
+            //core.logger.info("[UM-DBG] calling interactNotExist generic=${generic.getId()}")
+            interactNotExist(player, baseAdapter, location, event, compatibility, toolAdapter)
+        } else {
+            //core.logger.info("[UM-DBG] STOP no generic matched")
         }
     }
 
@@ -133,6 +240,10 @@ class StageManager(private val core: UnearthMechanic) : IStageManager {
         toolUsed: AdapterData
     ) {
         if (!stageData.getGeneric().existsTool(toolUsed)) return
+        lastInteractionProps[location.block.location] = getCurrentBlockProps(location, event)
+
+        // Check if the INTERACTION MODE matches the player
+        if (!stageData.getGeneric().getInteractionMode().matches(player.isSneaking)) return
 
         if (stageData.getActualAdapterData().adapter != compatibility.adapterComp()) return
 
@@ -165,7 +276,6 @@ class StageManager(private val core: UnearthMechanic) : IStageManager {
         stageData: StageData,
         core: UnearthMechanic
     ): Boolean {
-
         val generic = stageData.getGeneric()
 
         return player.isOp
@@ -190,10 +300,34 @@ class StageManager(private val core: UnearthMechanic) : IStageManager {
         compatibility: ICompatibility,
         toolUsed: AdapterData
     ) {
-        if (!core.getConfigManager().validTool(baseAdapterData, toolUsed)) return
-        val generic: IGeneric = core.getConfigManager().getGeneric(baseAdapterData, toolUsed) ?: return
+        //.logger.info("[UM-DBG] interactNotExist ENTER base=$baseAdapterData tool=$toolUsed loc=${location.blockX},${location.blockY},${location.blockZ}")
+        //if (!core.getConfigManager().validTool(baseAdapterData, toolUsed)) return
+
+        val mode = InteractionMode.fromSneaking(player.isSneaking)
+        val currentProps = getCurrentBlockProps(location,event)
+
+        lastInteractionProps[location.block.location] = currentProps
+
+        val configManager = core.getConfigManager() as ConfigManager
+
+        if (!configManager.validTool(baseAdapterData, toolUsed, mode, currentProps)) return
+
+        val valid = configManager.validTool(baseAdapterData, toolUsed, mode, currentProps)
+        //core.logger.info("[UM-DBG] validTool=$valid mode=$mode props=$currentProps")
+        if (!valid) {
+            //core.logger.info("[UM-DBG] STOP validTool false")
+            return
+        }
+
+        val generic: IGeneric = configManager
+            .getGeneric(baseAdapterData, toolUsed, mode, currentProps)
+            ?: return
+        //core.logger.info("[UM-DBG] interactNotExist generic=${generic.getId()} stages=${generic.getStages().size}")
 
         //Bukkit.getConsoleSender().sendMessage("No existe StageData y es "+ generic.isNotProtect())
+
+        val canInteract = canInteractNotExist(player, location, generic, core)
+        //core.logger.info("[UM-DBG] canInteractNotExist=$canInteract noProtect=${generic.isNotProtect()} op=${player.isOp}")
 
         if (canInteractNotExist(player, location, generic, core)) {
 
@@ -340,7 +474,9 @@ class StageManager(private val core: UnearthMechanic) : IStageManager {
             if (permission.isNotBlank()) {
                 val hasPermLuckPerms = if (LuckPermsPlugin.isLuckPermsEnabled()) {
                     core.getLuckPermsComb().hasPermission(player, permission)
-                } else { player.hasPermission(permission) || player.isOp }
+                } else {
+                    player.hasPermission(permission) || player.isOp
+                }
                 //Bukkit.getConsoleSender().sendMessage("The player has the $permission permission and is $hasPermLuckPerms of Tool.)
                 if (!hasPermLuckPerms) return
             }
@@ -350,7 +486,9 @@ class StageManager(private val core: UnearthMechanic) : IStageManager {
             if (permission.isNotBlank()) {
                 val hasPermLuckPerms = if (LuckPermsPlugin.isLuckPermsEnabled()) {
                     core.getLuckPermsComb().hasPermission(player, permission)
-                } else { player.hasPermission(permission) || player.isOp }
+                } else {
+                    player.hasPermission(permission) || player.isOp
+                }
                 //Bukkit.getConsoleSender().sendMessage("The player has the $permission permission and is $hasPermLuckPerms from Stage.")
                 if (!hasPermLuckPerms) return
             }
@@ -368,9 +506,62 @@ class StageManager(private val core: UnearthMechanic) : IStageManager {
 
         if ((validation != null && !validation.validate())
             || !toolUsed.isOriginalItem() || !toolUsed.isValid()
-            || !StageData.compare(StageData(loc, stage.getStage(), generic), loc)) return
+            || !StageData.compare(StageData(loc, stage.getStage(), generic), loc)
+        ) return
 
-        val resolvedStage = stage.resolveStage()
+        if (stage.shouldRememberPrevious()) {
+            val currentAdapter = currentStageData?.getActualAdapterData()
+                ?: generic.getBaseStage().getAdapterData()
+
+            currentAdapter?.let {
+                val currentStage = if (currentStageData != null) {
+                    generic.getStagesAdapterData()[it] as? Stage
+                } else {
+                    generic.getBaseStage() as? Stage
+                }
+
+                PreviousBlockMemory.save(
+                    loc,
+                    it,
+                    currentStage?.getExplicitBlockProperties() ?: emptyMap()
+                )
+            }
+        }
+
+        val resolvedStage = if (stage.shouldUsePrevious()) {
+            val previous = PreviousBlockMemory.get(loc)
+            val fallback = stage.getFallbackAdapterData()
+
+            val targetAdapter = previous?.adapterData ?: fallback ?: return
+
+            val result = stage.resolveStage().copyWithAdapterData(targetAdapter)
+
+            if (previous != null) {
+                result.setExplicitBlockProperties(previous.props)
+                PreviousBlockMemory.remove(loc)
+            } else {
+                result.setExplicitBlockProperties(stage.getFallbackProperties())
+            }
+
+            result
+        } else {
+            stage.resolveStage()
+        }
+
+        if (!stage.shouldUsePrevious()) {
+            val inheritedProps = lastInteractionProps[loc.block.location]
+                ?: getCurrentBlockProps(loc, event)
+            val explicitProps = resolvedStage.getExplicitBlockProperties()
+
+            if (inheritedProps.isNotEmpty()) {
+                resolvedStage.setExplicitBlockProperties(inheritedProps + explicitProps)
+            }
+
+            /*core.logger.info(
+                "[UM-DBG] APPLY props inherited=$inheritedProps explicit=$explicitProps final=${resolvedStage.getExplicitBlockProperties()}"
+            )*/
+        }
+
         /*Bukkit.getConsoleSender().sendMessage(
             "[UM][SM] onApplyStage rawStageId=${stage.getAdapterData()?.id} resolvedStageId=${resolvedStage.getAdapterData()?.id} loc=$loc"
         )*/
@@ -392,6 +583,8 @@ class StageManager(private val core: UnearthMechanic) : IStageManager {
             }
         }
 
+        executeStageCommands(player, resolvedStage)
+        //core.logger.info("[UM-DBG] APPLY stageAdapter=${resolvedStage.getAdapterData()}")
         resolvedStage.getAdapterData()?.let {
             if (isSimilarCompatibility(it, compatibility)) {
                 if (!isCurrentObjectValid(compatibility, loc, generic, currentStageData)) {
@@ -402,7 +595,6 @@ class StageManager(private val core: UnearthMechanic) : IStageManager {
                 //Bukkit.getConsoleSender().sendMessage("[UM] handleStage aplicado para $furnitureUuid en $currentTick")
                 //Bukkit.getConsoleSender().sendMessage("[UM] handleStage aplicado para ${stage.getAdapterData()?.adapter?.type}:${stage.getAdapterData()?.id} en ${Bukkit.getCurrentTick()}")
                 compatibility.handleStage(player, it, event, loc, toolUsed, generic, resolvedStage)
-                executeStageCommands(player, resolvedStage)
 
                 if (resolvedStage.getSequenceStages()?.isNotEmpty() == true) {
                     if (resolvedStage is IFurnitureStage) {
@@ -431,7 +623,6 @@ class StageManager(private val core: UnearthMechanic) : IStageManager {
                 //Bukkit.getConsoleSender().sendMessage("[UM] handleRemove2 aplicado para $furnitureUuid en $currentTick")
 
                 c.handleStage(player, it, event, loc, toolUsed, generic, resolvedStage)
-                executeStageCommands(player, resolvedStage)
                 //Bukkit.getConsoleSender().sendMessage("[UM] handleStage2 aplicado para ${stage.getAdapterData()?.adapter?.type}:${stage.getAdapterData()?.id} en ${Bukkit.getCurrentTick()}")
                 //Bukkit.getConsoleSender().sendMessage("[UM] handleStage2 aplicado para $furnitureUuid en $currentTick")
 
@@ -452,6 +643,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager {
                 }
             }
         }
+        lastInteractionProps.remove(loc.block.location)
 
         if (resolvedStage.isRemove() || generic.isLastStage(resolvedStage)) {
             if (resolvedStage.isRemove()) compatibility.handleRemove(player, event, loc, toolUsed, generic, resolvedStage)

@@ -2,7 +2,11 @@ package dev.wuason.unearthMechanic.config
 
 import dev.wuason.adapter.AdapterData
 
-open class Generic(private val id: String, private val tools: Set<ITool>, private val baseStage: IStage, private val stages: List<IStage> = mutableListOf(), private val notProtected: Boolean): IGeneric {
+open class Generic(private val id: String, private val tools: Set<ITool>,
+                   private val baseStage: IStage,
+                   private val stages: List<IStage> = mutableListOf(),
+                   private val notProtected: Boolean,
+                   private val interactionMode: InteractionMode = InteractionMode.INTERACT): IGeneric {
 
     private val stagesItemsId: HashMap<AdapterData, IStage> = HashMap()
 
@@ -51,5 +55,9 @@ open class Generic(private val id: String, private val tools: Set<ITool>, privat
     override fun getBackStage(currentStage: IStage): IStage {
         if (currentStage.getStage() <= 0) return baseStage
         return stages[currentStage.getStage() - 1]
+    }
+
+    override fun getInteractionMode(): InteractionMode {
+        return interactionMode
     }
 }

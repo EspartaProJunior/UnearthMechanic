@@ -11,6 +11,7 @@ import dev.wuason.unearthMechanic.config.IBlockStage
 import dev.wuason.unearthMechanic.config.IFurnitureStage
 import dev.wuason.unearthMechanic.config.IGeneric
 import dev.wuason.unearthMechanic.config.IStage
+import dev.wuason.unearthMechanic.config.Stage
 import dev.wuason.unearthMechanic.system.ILiveTool
 import dev.wuason.unearthMechanic.system.StageData
 import dev.wuason.unearthMechanic.system.StageManager
@@ -56,8 +57,6 @@ class CraftEngineImpl(
 ) {
     private val removedLocations = Collections.synchronizedSet(mutableSetOf<Location>())
 
-    private val lastBlockData = mutableMapOf<Location, BlockData>()
-
     override fun isRemoving(location: Location): Boolean {
         return removedLocations.contains(location)
     }
@@ -71,9 +70,12 @@ class CraftEngineImpl(
     }
 
     companion object {
-        private val rotationMap = mutableMapOf<Location, Pair<Float, Float>>()
-        val itemFrameRotationMap = mutableMapOf<Location, org.bukkit.Rotation>()
+        private val rotationMap = Collections.synchronizedMap(mutableMapOf<Location, Pair<Float, Float>>())
+        val itemFrameRotationMap = Collections.synchronizedMap(mutableMapOf<Location, org.bukkit.Rotation>())
     }
+
+    private fun fixedKey(loc: Location): Location =
+        Location(loc.world, loc.blockX.toDouble(), loc.blockY.toDouble(), loc.blockZ.toDouble())
 
     fun removeStageData(location: Location){
         StageData.removeStageData(location)
@@ -122,7 +124,7 @@ class CraftEngineImpl(
             }
 
             if (expectedAdapterId != null &&
-                furniture.id().toString().equals(expectedAdapterId.removePrefix("ce:"), ignoreCase = true)
+                furniture.id().toString().equals(expectedAdapterId.removePrefix("ce:").removePrefix("craftengine:").substringBefore("["), ignoreCase = true)
             ) {
                 return true
             }
@@ -134,7 +136,7 @@ class CraftEngineImpl(
     override fun isValidFurniture(loc: Location, expectedAdapterId: String?): Boolean {
         val keyLoc = loc.block.location
         val world = keyLoc.world ?: return false
-        val cleanId = expectedAdapterId?.removePrefix("ce:")
+        val cleanId = expectedAdapterId?.removePrefix("ce:")?.removePrefix("craftengine:")?.substringBefore("[")
         val center = keyLoc.clone().add(0.5, 0.5, 0.5)
         val nearby = world.getNearbyEntities(center, 1.5, 1.5, 1.5)
 
@@ -152,12 +154,16 @@ class CraftEngineImpl(
     }
 
     override fun isValidBlock(loc: Location, expectedAdapterId: String?): Boolean {
-        val cleanId = expectedAdapterId?.removePrefix("ce:") ?: return loc.block.type != Material.AIR
+        //val cleanId = expectedAdapterId?.removePrefix("ce:")?.removePrefix("craftengine:")?.substringBefore("[") ?: return loc.block.type != Material.AIR
 
         return try {
             val state = CraftEngineBlocks.getCustomBlockState(loc.block.blockData) ?: return false
-            val owner = state.owner().value() ?: return false
-            owner.toString().equals(cleanId, ignoreCase = true)
+            //val owner = state.owner().value() ?: return false
+            //owner.toString().equals(cleanId, ignoreCase = true)
+
+            if (expectedAdapterId == null) return true
+
+            true
         } catch (_: Throwable) {
             false
         }
@@ -371,11 +377,15 @@ class CraftEngineImpl(
         removeStageData(loc)
         setRemoving(loc)
 
-        if(!isRemoving(loc)){
-            if(!stageManager.activeSequences.contains(loc)){
+        if (!stageManager.activeSequences.contains(loc)) {
+            Bukkit.getScheduler().runTaskLater(core, Runnable {
                 clearRemoving(loc)
-            }
+            }, 5L)
         }
+
+        val key = fixedKey(loc)
+        rotationMap.remove(key)
+        itemFrameRotationMap.remove(key)
     }
 
     @EventHandler
@@ -401,7 +411,6 @@ class CraftEngineImpl(
     private fun breakBlock(location: Location?) {
         if (location != null) {
             val data = location.block.blockData
-            lastBlockData[location.block.location.block.location] = data
             //Bukkit.getConsoleSender().sendMessage("💾 [DEBUG] Guardado BlockData en $location: $data")
 
             CraftEngineBlocks.remove(location.block)
@@ -461,6 +470,67 @@ class CraftEngineImpl(
         }
     }
 
+    private fun mergeCeProperties(
+        inherited: CompoundTag?,
+        explicit: Map<String, String>
+    ): CompoundTag {
+        val result = CompoundTag()
+
+        if (inherited != null) {
+            for (key in inherited.keySet()) {
+                val value = inherited.get(key)
+                if (value != null) {
+                    result.put(key, value.copy())
+                }
+            }
+        }
+
+        explicit.forEach { (key, value) ->
+            when (value.lowercase()) {
+                "true" -> result.putBoolean(key, true)
+                "false" -> result.putBoolean(key, false)
+                else -> result.putString(key, value)
+            }
+        }
+
+        return result
+    }
+
+    private fun tryUpdateSameCraftEngineBlockState(
+        loc: Location,
+        previousBlockState: ImmutableBlockState,
+        targetAdapterId: String,
+        explicitProps: Map<String, String>
+    ): Boolean {
+        val targetCleanId = targetAdapterId.removePrefix("ce:").removePrefix("craftengine:").substringBefore("[")
+        val currentOwner = previousBlockState.owner().value()?.toString() ?: return false
+
+        if (!currentOwner.equals(targetCleanId, ignoreCase = true)) {
+            return false
+        }
+
+        val targetBlock = CraftEngineBlocks.byId(Key.of(targetCleanId)) ?: return false
+
+        val mergedProps = mergeCeProperties(
+            previousBlockState.propertiesNbt(),
+            explicitProps
+        )
+
+        val newState = targetBlock.getPossibleStates(mergedProps).firstOrNull()
+            ?: return false
+
+        val world = loc.world ?: return false
+        val ceWorld = BukkitAdaptor.adapt(world)
+        val pos = BlockPos(loc.blockX, loc.blockY, loc.blockZ)
+
+        ceWorld.setBlockState(pos, newState, UpdateFlags.UPDATE_ALL)
+        return true
+    }
+
+    private fun getItemAdapterDataId(itemAdapterData: AdapterData): String {
+        return itemAdapterData.id.removePrefix("ce:").removePrefix("craftengine:").substringBefore("[")
+    }
+
     private fun handleBlockStage(
         player: Player,
         itemAdapterData: AdapterData,
@@ -482,8 +552,7 @@ class CraftEngineImpl(
                 if (CraftEngineBlocks.isCustomBlock(block)) return;
                 val blockData = block.blockData
                 if (blockData is Door) {
-                    val customBlock = CraftEngineBlocks.byId(Key.of(itemAdapterData.id.removePrefix("ce:"))) ?: return
-                    if (customBlock == null) return;
+                    val customBlock = CraftEngineBlocks.byId(Key.of(getItemAdapterDataId(itemAdapterData))) ?: return
                     val otherHalf = when (blockData.half) {
                         Bisected.Half.BOTTOM -> block.getRelative(BlockFace.UP)
                         Bisected.Half.TOP -> block.getRelative(BlockFace.DOWN)
@@ -503,14 +572,31 @@ class CraftEngineImpl(
                     CraftEngineBlocks.place(otherHalf.location, newState2, UpdateFlags.UPDATE_NONE, false)
                 }else{
                     //Bukkit.getConsoleSender().sendMessage(" [DEBUG] previousBlockState == null && !(blockData is Door)")
+                    val explicitProps = (stage as? Stage)?.getExplicitBlockProperties() ?: emptyMap()
+                    val properties = mergeCeProperties(null, explicitProps)
+
+                    //core.logger.info("[UM-DBG-CE] place vanilla->ce id=${getItemAdapterDataId(itemAdapterData)} props=$explicitProps")
+
                     CraftEngineBlocks.place(
                         loc,
-                        Key.of(itemAdapterData.id.removePrefix("ce:")),
-                        CompoundTag(),
+                        Key.of(getItemAdapterDataId(itemAdapterData)),
+                        properties,
                         false
                     )
                 }
 
+                return
+            }
+
+            val explicitProps = (stage as? Stage)?.getExplicitBlockProperties() ?: emptyMap()
+
+            if (tryUpdateSameCraftEngineBlockState(
+                    loc,
+                    previousBlockState,
+                    itemAdapterData.id,
+                    explicitProps
+                )
+            ) {
                 return
             }
 
@@ -524,6 +610,7 @@ class CraftEngineImpl(
 
             if (doubleBlockProperty != null) {
                 //Bukkit.getConsoleSender().sendMessage(" [DEBUG] doubleBlockProperty != null")
+                //val explicitProps = (stage as? Stage)?.getExplicitBlockProperties() ?: emptyMap()
                 val half = previousBlockState.get(doubleBlockProperty) as DoubleBlockHalf;
                 when(half) {
                     DoubleBlockHalf.UPPER -> {
@@ -537,8 +624,8 @@ class CraftEngineImpl(
                         )?.getPossibleStates(previousLowerState.propertiesNbt())?.firstOrNull()
                         val lowerLoc = Location(loc.world, loc.x, loc.y - 1, loc.z)
 
-                        CraftEngineBlocks.remove(loc.block)
-                        CraftEngineBlocks.remove(lowerLoc.block)
+                        //CraftEngineBlocks.remove(loc.block)
+                        //CraftEngineBlocks.remove(lowerLoc.block)
 
                         if (newUpperState == null || newLowerState == null) return;
                         BukkitAdaptor.adapt(loc.world).setBlockState(
@@ -565,29 +652,95 @@ class CraftEngineImpl(
                 }
             }else{
                 //Bukkit.getConsoleSender().sendMessage(" [DEBUG] doubleBlockProperty == null")
-                val properties = previousBlockState.propertiesNbt()
-                if(properties != null){
-                    //CraftEngineBlocks.remove(loc.block)
+                val explicitProps = (stage as? Stage)?.getExplicitBlockProperties() ?: emptyMap()
 
-                    val newBlockState = CraftEngineBlocks.byId(
-                        Key.of(itemAdapterData.id.removePrefix("ce:"))
-                    )?.getPossibleStates(properties)?.firstOrNull();
-                    newBlockState?.let{ state ->
-                        CraftEngineBlocks.place(loc, state, false
-                        )
-                    }
+                val properties = mergeCeProperties(
+                    previousBlockState.propertiesNbt(),
+                    explicitProps
+                )
+                val newBlockState = CraftEngineBlocks.byId(
+                    Key.of(getItemAdapterDataId(itemAdapterData))
+                )?.getPossibleStates(properties)?.firstOrNull()
+                newBlockState?.let{ state ->
+                    CraftEngineBlocks.place(loc, state, false
+                    )
                 }
             }
         }else{
             //Bukkit.getConsoleSender().sendMessage(" [DEBUG] state1 == null")
+            val explicitProps = (stage as? Stage)?.getExplicitBlockProperties() ?: emptyMap()
+            val properties = mergeCeProperties(null, explicitProps)
+
             CraftEngineBlocks.place(
                 loc,
-                Key.of(itemAdapterData.id.removePrefix("ce:")),
-                CompoundTag(),
+                Key.of(getItemAdapterDataId(itemAdapterData)),
+                properties,
                 false
             )
         }
         //placeBlock(itemAdapterData.id, loc)
+    }
+
+    private fun getFurnitureVariant(stage: IStage, fallback: String): String {
+        val props = (stage as? Stage)?.getExplicitBlockProperties() ?: emptyMap()
+        return props["variant"]
+            ?: props["anchor"]
+            ?: fallback
+    }
+
+    private fun tryUpdateSameCraftEngineFurniture(
+        currentFurniture: Any,
+        currentIdRaw: String,
+        itemAdapterData: AdapterData,
+        stage: IStage
+    ): Boolean {
+
+        val currentId = currentIdRaw
+            .removePrefix("ce:")
+            .removePrefix("craftengine:")
+            .substringBefore("[")
+
+        val targetId = getItemAdapterDataId(itemAdapterData)
+
+        if (!currentId.equals(targetId, true)) return false
+
+        val targetFurniture =
+            CraftEngineFurniture.byId(Key.of(targetId)) ?: return false
+
+        val targetVariant = getFurnitureVariant(
+            stage,
+            targetFurniture.anyVariantName()
+                ?: AnchorType.GROUND.variantName()
+        )
+
+        return try {
+            val clazz = currentFurniture.javaClass
+
+            val setVariant = clazz.getMethod(
+                "setVariant",
+                String::class.java,
+                Boolean::class.javaPrimitiveType
+            )
+
+            var changed =
+                setVariant.invoke(currentFurniture, targetVariant, false) as Boolean
+
+            if (!changed) {
+                changed =
+                    setVariant.invoke(currentFurniture, targetVariant, true) as Boolean
+            }
+
+            if (changed) {
+                try {
+                    clazz.getMethod("refresh").invoke(currentFurniture)
+                } catch (_: Throwable) {}
+            }
+
+            changed
+
+        } catch (_: Throwable) {
+            false
+        }
     }
 
     private fun handleFurnitureStage(
@@ -616,20 +769,36 @@ class CraftEngineImpl(
                 return
             }
 
+            if (tryUpdateSameCraftEngineFurniture(
+                    currentFurniture = event.furniture(),
+                    currentIdRaw = "ce:" + event.furniture().id(),
+                    itemAdapterData = itemAdapterData,
+                    stage = stage
+                )
+            ) {
+                return
+            }
+
             var breakloc = event.furniture().bukkitEntity.location.block.location
 
-            if(isValid(loc, itemAdapterData.id)){
+            val currentId = "ce:" + event.furniture().id()
+            val hadCurrentObject = isValidFurniture(loc, currentId) || isValidBlock(loc, currentId)
+
+            if (hadCurrentObject) {
                 CraftEngineFurniture.remove(event.furniture().bukkitEntity)
-                event.furniture().bukkitEntity.remove()
+                //event.furniture().bukkitEntity.remove()
                 breakBlock(breakloc)
-            }else{
+            } else {
                 breakBlock(breakloc)
             }
 
             // Spawn of the new furniture
-            val furnitureId = Key.of(itemAdapterData.id.removePrefix("ce:"))
+            val furnitureId = Key.of(getItemAdapterDataId(itemAdapterData))
             val furniture = CraftEngineFurniture.byId(furnitureId)
-            val anchor = furniture?.anyVariantName() ?: AnchorType.WALL.variantName()
+            val anchor = getFurnitureVariant(
+                stage,
+                furniture?.anyVariantName() ?: AnchorType.GROUND.variantName()
+            )
             CraftEngineFurniture.place(loc,
                 furnitureId,
                 anchor,
@@ -639,12 +808,14 @@ class CraftEngineImpl(
                 entity.setRotation(entityEvent.location.yaw, entityEvent.location.pitch)
 
                 CraftEngineFurniture.isFurniture(entity)?.let { entity ->
-                    rotationMap[loc] = Pair(entityEvent.location.yaw, entityEvent.location.pitch)
+                    rotationMap[fixedKey(loc)] = Pair(entityEvent.location.yaw, entityEvent.location.pitch)
                 }
 
-                if (entity is ItemFrame && entity is ItemFrame) {
-                    entity.rotation = entity.rotation
-                    itemFrameRotationMap[loc] = entity.rotation
+                val oldFrameRotation = (entityEvent as? ItemFrame)?.rotation
+
+                if (oldFrameRotation != null && entity is ItemFrame) {
+                    entity.rotation = oldFrameRotation
+                    itemFrameRotationMap[fixedKey(loc)] = entity.rotation
                 }
             }
             Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
@@ -654,12 +825,17 @@ class CraftEngineImpl(
             }, 5L)
         }else{
             // Sequence System
-            val furnitureId = Key.of(itemAdapterData.id.removePrefix("ce:"))
+            val furnitureId = Key.of(getItemAdapterDataId(itemAdapterData))
             val furniture = CraftEngineFurniture.byId(furnitureId)
-            val anchor = furniture?.anyVariantName() ?: AnchorType.GROUND.variantName()
+            val anchor = getFurnitureVariant(
+                stage,
+                furniture?.anyVariantName() ?: AnchorType.GROUND.variantName()
+            )
 
-            val rotation = rotationMap.remove(loc)
-            val cachedFrameRotation = itemFrameRotationMap[loc]
+            val key = fixedKey(loc)
+
+            val rotation = rotationMap.remove(key)
+            val cachedFrameRotation = itemFrameRotationMap.remove(key)
 
             if(isRemoving(loc.block.location)){
                 if(!stageManager.activeSequences.contains(loc.block.location)){
@@ -697,7 +873,14 @@ class CraftEngineImpl(
         }
         if (event is FurnitureInteractEvent) {
             event.furniture().bukkitEntity?.let { entity ->
-                rotationMap[entity.location] = Pair(entity.location.yaw, entity.location.pitch)
+                val key = fixedKey(entity.location)
+
+                rotationMap[key] =
+                    Pair(entity.location.yaw, entity.location.pitch)
+
+                (entity as? ItemFrame)?.let {
+                    itemFrameRotationMap[key] = it.rotation
+                }
             }
             setRemoving(event.furniture().bukkitEntity.location.block.location)
 

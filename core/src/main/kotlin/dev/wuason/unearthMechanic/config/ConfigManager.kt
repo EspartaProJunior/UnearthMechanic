@@ -22,13 +22,19 @@ import kotlin.let
 class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
 
     private val generics: HashMap<String, IGeneric> = HashMap()
-    private val genericsBaseItemId: HashMap<AdapterData, HashMap<AdapterData, IGeneric>> = HashMap()
+    //private val genericsBaseItemId: HashMap<AdapterData, HashMap<AdapterData, IGeneric>> = HashMap()
+
+    private val genericsBaseItemIdMode:
+            HashMap<AdapterData, HashMap<AdapterData, HashMap<InteractionMode, MutableList<IGeneric>>>> = HashMap()
 
     override fun loadConfig() {
         generics.clear()
-        genericsBaseItemId.clear()
+        //genericsBaseItemId.clear()
+        genericsBaseItemIdMode.clear()
+
         loadConfig(GenericType.BLOCK)
         loadConfig(GenericType.FURNITURE)
+        //core.logger.info("[UM-DBG] LOADED BASES: ${genericsBaseItemIdMode.keys}")
     }
 
     private fun getAllFilesRecursive(file: File): List<File> {
@@ -66,6 +72,16 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
                     }
 
                     val notProtected: Boolean = sectionGeneric.getBoolean("no_protect", false)
+
+                    val rawMode = sectionGeneric.getString("mode", "INTERACT")
+                    val interactionMode = InteractionMode.parse(rawMode)
+                    if (interactionMode == null) {
+                        core.logger.warning(
+                            "[UnearthMechanic] Invalid mode '$rawMode' in generic '$id' (${file.name}). " +
+                                    "Using INTERACT. Valid modes: ${InteractionMode.validModes()}"
+                        )
+                    }
+                    val finalInteractionMode = interactionMode ?: InteractionMode.INTERACT
 
                     // Delay CraftEngine Loading
                     val toolStrings = sectionGeneric.getStringList("tool", listOf("mc:air"))
@@ -138,11 +154,22 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
                             }
                         }
 
-                        val constructor: Constructor<*> = type.getClazz().declaredConstructors[0]
+                        val constructor: Constructor<*> = type.getClazz().declaredConstructors
+                            .first { it.parameterCount == 6 }
+
+                        constructor.isAccessible = true
+
+                        val parsedBase = parseBlockStateId(baseItemId1.substringBefore(";"))
+
+                        val adapterData = Adapter.getAdapterData(parsedBase.cleanId).getOrNull()
+                        if (adapterData == null) {
+                            //core.logger.warning("[UM-DBG] INVALID BASE: ${parsedBase.cleanId} raw=$baseItemId1")
+                            continue
+                        }
 
                         val baseStage: Stage = StageType.valueOf(type.name.uppercase(Locale.ENGLISH)).getClazz().declaredConstructors[0].newInstance(
                             -1,
-                            if (baseItemId1.contains(";")) baseItemId1.substring(0, baseItemId1.indexOf(';')).toAdapter() else baseItemId1.toAdapter(),
+                            adapterData,
                             listOf<Drop>(),
                             false,
                             false,
@@ -159,7 +186,11 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
                             emptyList<IStageCommand>()
                         ) as Stage
 
-                        val generic: IGeneric = constructor.newInstance(cid, normalTools.toSet(), baseStage, stages, notProtected) as IGeneric
+                        val generic: IGeneric = constructor.newInstance(cid, normalTools.toSet(),
+                            baseStage, stages, notProtected,
+                            finalInteractionMode) as IGeneric
+
+                        baseStage.setExplicitBlockProperties(parsedBase.props)
 
                         generics[generic.getId()] = generic
 
@@ -190,7 +221,7 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
             try {
                 val split = raw.split(";")
                 if (split.size < 2) {
-                    core.logger.warning("Skipping invalid random stage entry '$raw' in generic '$genericId', stage '$stageKey': format must be 'adapterId;chance'")
+                    //core.logger.warning("Skipping invalid random stage entry '$raw' in generic '$genericId', stage '$stageKey': format must be 'adapterId;chance'")
                     return@mapNotNull null
                 }
 
@@ -199,27 +230,27 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
                 val rawChance = split[1].trim()
 
                 if (!Regex("""^\d+(\.\d{1,2})?$""").matches(rawChance)) {
-                    core.logger.warning(
+                    /*core.logger.warning(
                         "Skipping invalid random stage entry '$raw' in generic '$genericId', stage '$stageKey': chance supports up to 2 decimals"
-                    )
+                    )*/
                     return@mapNotNull null
                 }
                 val chance = rawChance.toDouble()
 
                 if (chance <= 0.0) {
-                    core.logger.warning("Skipping invalid random stage entry '$raw' in generic '$genericId', stage '$stageKey': chance must be > 0")
+                    //core.logger.warning("Skipping invalid random stage entry '$raw' in generic '$genericId', stage '$stageKey': chance must be > 0")
                     return@mapNotNull null
                 }
 
                 val adapter = Adapter.getAdapterData(adapterId).getOrNull()
                 if (adapter == null) {
-                    core.logger.warning("Skipping invalid random stage entry '$raw' in generic '$genericId', stage '$stageKey': unknown adapter '$adapterId'")
+                    //core.logger.warning("Skipping invalid random stage entry '$raw' in generic '$genericId', stage '$stageKey': unknown adapter '$adapterId'")
                     return@mapNotNull null
                 }
 
                 RandomStageOption(adapter, chance)
             } catch (ex: Exception) {
-                core.logger.warning("Skipping invalid random stage entry '$raw' in generic '$genericId', stage '$stageKey': ${ex.message}")
+                //core.logger.warning("Skipping invalid random stage entry '$raw' in generic '$genericId', stage '$stageKey': ${ex.message}")
                 null
             }
         }
@@ -260,13 +291,13 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
                 val adapter = Adapter.getAdapterData(adapterId).getOrNull()
 
                 if (adapter == null) {
-                    core.logger.warning("Skipping invalid drop '$it' in generic '$genericId', stage '$stageKey': unknown adapter '$adapterId'")
+                    //core.logger.warning("Skipping invalid drop '$it' in generic '$genericId', stage '$stageKey': unknown adapter '$adapterId'")
                     null
                 } else {
                     Drop(adapter, split[1], split[2].toInt())
                 }
             } catch (ex: Exception) {
-                core.logger.warning("Skipping invalid drop '$it' in generic '$genericId', stage '$stageKey': ${ex.message}")
+                //core.logger.warning("Skipping invalid drop '$it' in generic '$genericId', stage '$stageKey': ${ex.message}")
                 null
             }
         }
@@ -288,13 +319,13 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
                 val adapter = Adapter.getAdapterData(adapterId).getOrNull()
 
                 if (adapter == null) {
-                    core.logger.warning("Skipping invalid item '$it' in generic '$genericId', stage '$stageKey': unknown adapter '$adapterId'")
+                    //core.logger.warning("Skipping invalid item '$it' in generic '$genericId', stage '$stageKey': unknown adapter '$adapterId'")
                     null
                 } else {
                     Item(adapter, split[1], split[2].toInt())
                 }
             } catch (ex: Exception) {
-                core.logger.warning("Skipping invalid item '$it' in generic '$genericId', stage '$stageKey': ${ex.message}")
+                //core.logger.warning("Skipping invalid item '$it' in generic '$genericId', stage '$stageKey': ${ex.message}")
                 null
             }
         }
@@ -334,6 +365,30 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
             executeCommands
         ) as Stage
 
+        val rawTargetId = sectionStage.getString("${stageType.getRoute()}_id")
+        if (!rawTargetId.isNullOrBlank()) {
+            stage.setExplicitBlockProperties(parseBlockStateId(rawTargetId).props)
+        }
+
+        stage.setRememberPrevious(sectionStage.getBoolean("remember_previous", false))
+
+        if (rawTargetId.equals("um:previous", ignoreCase = true)) {
+            stage.setUsePrevious(true)
+        }
+
+        val fallbackRaw =
+            sectionStage.getString("fallback_${stageType.getRoute()}_id")
+                ?: sectionStage.getString("fallback_block_id")
+        if (!fallbackRaw.isNullOrBlank()) {
+            val parsedFallback = parseBlockStateId(fallbackRaw)
+
+            stage.setFallbackAdapterData(
+                Adapter.getAdapterData(parsedFallback.cleanId).getOrNull()
+            )
+
+            stage.setFallbackProperties(parsedFallback.props)
+        }
+
         stage.setRandomStageOptions(randomStageOptions)
         return stage
     }
@@ -354,6 +409,18 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
 
             val fixedValue = sectionStage.getString(fixedKey)
             val randomValue = sectionStage.getStringList(randomKey, emptyList())
+
+            if (!fixedValue.isNullOrBlank()) {
+                if (fixedValue.equals("um:previous", ignoreCase = true)) {
+                    stageType = t
+                    adapterData = null
+                    break
+                }
+
+                stageType = t
+                adapterData = Adapter.getAdapterData(parseBlockStateId(fixedValue).cleanId).getOrNull()
+                break
+            }
 
             if (!fixedValue.isNullOrBlank() && randomValue.isNotEmpty()) {
                 core.logger.warning("Stage '$stageKey' in generic '$genericId' has both '$fixedKey' and '$randomKey'. Using '$randomKey'.")
@@ -378,7 +445,7 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
 
             if (!fixedValue.isNullOrBlank()) {
                 stageType = t
-                adapterData = Adapter.getAdapterData(fixedValue).getOrNull()
+                adapterData = Adapter.getAdapterData(parseBlockStateId(fixedValue).cleanId).getOrNull()
                 break
             }
         }
@@ -386,24 +453,134 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
         return StageTargetResult(stageType, adapterData, randomOptions)
     }
 
-    private fun putTool(baseAdapterData: AdapterData, tool: AdapterData, generic: IGeneric) {
-        if (!genericsBaseItemId.containsKey(baseAdapterData)) {
-            genericsBaseItemId[baseAdapterData] = HashMap()
+    data class ParsedBlockId(
+        val cleanId: String,
+        val props: Map<String, String>
+    )
+
+    fun parseBlockStateId(raw: String): ParsedBlockId {
+        val value = raw.trim()
+        val start = value.indexOf('[')
+        val end = value.lastIndexOf(']')
+
+        if (start == -1 || end == -1 || end <= start) {
+            return ParsedBlockId(value, emptyMap())
         }
-        genericsBaseItemId[baseAdapterData]?.set(tool, generic)
+
+        val cleanId = value.substring(0, start).trim()
+        val propsRaw = value.substring(start + 1, end)
+
+        val props = propsRaw.split(",")
+            .mapNotNull {
+                val split = it.split("=", limit = 2)
+                if (split.size != 2) return@mapNotNull null
+                split[0].trim().lowercase() to split[1].trim().lowercase()
+            }
+            .toMap()
+
+        return ParsedBlockId(cleanId, props)
+    }
+
+    private fun putTool(
+        baseAdapterData: AdapterData,
+        tool: AdapterData,
+        generic: IGeneric
+    ) {
+        genericsBaseItemIdMode
+            .getOrPut(baseAdapterData) { HashMap() }
+            .getOrPut(tool) { HashMap() }
+            .getOrPut(generic.getInteractionMode()) { mutableListOf() }
+            .add(generic)
     }
 
     override fun validTool(baseAdapterData: AdapterData, tool: AdapterData): Boolean {
-        return genericsBaseItemId.containsKey(baseAdapterData) && genericsBaseItemId[baseAdapterData]?.containsKey(tool) ?: false
+        return genericsBaseItemIdMode[baseAdapterData]
+            ?.get(tool)
+            ?.values
+            ?.any { it.isNotEmpty() }
+            ?: false
+    }
+
+    fun validTool(
+        baseAdapterData: AdapterData,
+        tool: AdapterData,
+        mode: InteractionMode,
+        currentProps: Map<String, String> = emptyMap()
+    ): Boolean {
+        return getGeneric(baseAdapterData, tool, mode, currentProps) != null
     }
 
     override fun validBaseItemId(baseAdapterData: AdapterData): Boolean {
-        return genericsBaseItemId.containsKey(baseAdapterData)
+        return genericsBaseItemIdMode.containsKey(baseAdapterData)
     }
 
     override fun getGeneric(baseAdapterData: AdapterData, tool: AdapterData): IGeneric? {
-        if (!validTool(baseAdapterData, tool)) return null
-        return genericsBaseItemId[baseAdapterData]?.get(tool)
+        return genericsBaseItemIdMode[baseAdapterData]
+            ?.get(tool)
+            ?.values
+            ?.firstOrNull { it.isNotEmpty() }
+            ?.firstOrNull()
+    }
+
+    fun getGeneric(
+        baseAdapterData: AdapterData,
+        tool: AdapterData,
+        mode: InteractionMode,
+        currentProps: Map<String, String> = emptyMap()
+    ): IGeneric? {
+        val toolMap = genericsBaseItemIdMode[baseAdapterData]
+        if (toolMap == null) {
+            //core.logger.info("[UM-DBG-CFG] no base match base=$baseAdapterData availableBases=${genericsBaseItemIdMode.keys}")
+            return null
+        }
+
+        val modeMap = toolMap[tool]
+        if (modeMap == null) {
+            //core.logger.info("[UM-DBG-CFG] no tool match base=$baseAdapterData tool=$tool availableTools=${toolMap.keys}")
+            return null
+        }
+
+        val candidates = modeMap[mode]
+        if (candidates == null) {
+            //core.logger.info("[UM-DBG-CFG] no mode match base=$baseAdapterData tool=$tool mode=$mode availableModes=${modeMap.keys}")
+            return null
+        }
+
+        //core.logger.info("[UM-DBG-CFG] candidates=${candidates.size} currentProps=$currentProps")
+
+        candidates.forEach { generic ->
+            val baseProps = (generic.getBaseStage() as? Stage)
+                ?.getExplicitBlockProperties()
+                ?: emptyMap()
+
+            //core.logger.info("[UM-DBG-CFG] candidate id=${generic.getId()} base=${generic.getBaseStage().getAdapterData()} baseProps=$baseProps")
+        }
+
+        val exact = candidates.firstOrNull { generic ->
+            val baseProps = (generic.getBaseStage() as? Stage)
+                ?.getExplicitBlockProperties()
+                ?: emptyMap()
+
+            baseProps.isNotEmpty() && baseProps.all { (key, value) ->
+                currentProps[key]?.equals(value, ignoreCase = true) == true
+            }
+        }
+
+        if (exact != null) {
+            //core.logger.info("[UM-DBG-CFG] exact match=${exact.getId()}")
+            return exact
+        }
+
+        val fallback = candidates.firstOrNull { generic ->
+            val baseProps = (generic.getBaseStage() as? Stage)
+                ?.getExplicitBlockProperties()
+                ?: emptyMap()
+
+            baseProps.isEmpty()
+        }
+
+        //core.logger.info("[UM-DBG-CFG] fallback=${fallback?.getId() ?: "NULL"}")
+        return fallback
     }
 
     override fun getGenerics(): HashMap<String, IGeneric> {
@@ -411,7 +588,18 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
     }
 
     override fun getGenericsBaseItemId(): HashMap<AdapterData, HashMap<AdapterData, IGeneric>> {
-        return genericsBaseItemId
+        val legacy = HashMap<AdapterData, HashMap<AdapterData, IGeneric>>()
+
+        genericsBaseItemIdMode.forEach { (base, toolMap) ->
+            toolMap.forEach { (tool, modeMap) ->
+                val generic = modeMap.values.firstOrNull { it.isNotEmpty() }?.firstOrNull()
+                if (generic != null) {
+                    legacy.getOrPut(base) { HashMap() }[tool] = generic
+                }
+            }
+        }
+
+        return legacy
     }
 
     private fun getCorrectId(id: String, baseItemId: String): String {

@@ -18,6 +18,7 @@ import dev.wuason.unearthMechanic.compatibilities.worldguard.WorldGuardComp
 import dev.wuason.unearthMechanic.compatibilities.worldguard.WorldGuardPlugin
 import dev.wuason.unearthMechanic.config.ConfigManager
 import dev.wuason.unearthMechanic.system.IStageManager
+import dev.wuason.unearthMechanic.system.PreviousBlockDataStore
 import dev.wuason.unearthMechanic.system.StageManager
 import dev.wuason.unearthMechanic.utils.AdventureUtils
 import dev.wuason.unearthMechanic.utils.ItemRemoverManager
@@ -92,6 +93,8 @@ class UnearthMechanic : UnearthMechanicPlugin() {
 
         Bukkit.getPluginManager().registerEvents(ItemRemoverManager(this), this)
 
+        PreviousBlockDataStore.load()
+
         if (CraftEnginePlugin.isCraftEngineEnabled()) {
             onCraftEngineReady();
         }
@@ -159,6 +162,7 @@ class UnearthMechanic : UnearthMechanicPlugin() {
         if(CraftEnginePlugin.isCraftEngineEnabled()){
             FishTankDataStore.flushSaveNow()
         }
+        PreviousBlockDataStore.close()
     }
 
     override fun getConfigManager(): ConfigManager {

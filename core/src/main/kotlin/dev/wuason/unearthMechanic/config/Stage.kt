@@ -69,6 +69,8 @@ open class Stage(
             executeCommands
         ) as Stage
 
+        resolved.setExplicitBlockProperties(getExplicitBlockProperties())
+
         sequenceStages?.let { resolved.setSequenceStages(it) }
         return resolved
     }
@@ -202,5 +204,87 @@ open class Stage(
 
     fun getSequenceStages(): Map<Long, Stage>? {
         return sequenceStages
+    }
+
+    private var explicitBlockProperties: Map<String, String> = emptyMap()
+
+    fun setExplicitBlockProperties(props: Map<String, String>) {
+        explicitBlockProperties = props
+    }
+
+    fun getExplicitBlockProperties(): Map<String, String> {
+        return explicitBlockProperties
+    }
+
+    private var rememberPrevious: Boolean = false
+    private var usePrevious: Boolean = false
+
+    fun setRememberPrevious(value: Boolean) {
+        rememberPrevious = value
+    }
+
+    fun shouldRememberPrevious(): Boolean {
+        return rememberPrevious
+    }
+
+    fun setUsePrevious(value: Boolean) {
+        usePrevious = value
+    }
+
+    fun shouldUsePrevious(): Boolean {
+        return usePrevious
+    }
+
+    fun copyWithAdapterData(newAdapterData: AdapterData?): Stage {
+        val constructor = this::class.java.declaredConstructors.first()
+        constructor.isAccessible = true
+
+        val copy = constructor.newInstance(
+            stage,
+            newAdapterData,
+            drops,
+            remove,
+            removeItemMainHand,
+            durabilityToRemove,
+            usagesIaToRemove,
+            permissionStage,
+            onlyOneDrop,
+            reduceItemHand,
+            items,
+            onlyOneItem,
+            sounds,
+            delay,
+            toolAnimDelay,
+            executeCommands
+        ) as Stage
+
+        copy.setExplicitBlockProperties(getExplicitBlockProperties())
+        copy.setRememberPrevious(this.shouldRememberPrevious())
+        copy.setUsePrevious(this.shouldUsePrevious())
+        copy.setFallbackAdapterData(this.getFallbackAdapterData())
+        copy.setFallbackProperties(this.getFallbackProperties())
+        sequenceStages?.let { copy.setSequenceStages(it) }
+
+        return copy
+    }
+
+    private var fallbackAdapterData: AdapterData? = null
+
+    fun setFallbackAdapterData(adapterData: AdapterData?) {
+        fallbackAdapterData = adapterData
+    }
+
+    fun getFallbackAdapterData(): AdapterData? {
+        return fallbackAdapterData
+    }
+
+    private var fallbackProperties: Map<String, String> = emptyMap()
+
+    fun setFallbackProperties(props: Map<String, String>) {
+        fallbackProperties = props
+    }
+
+    fun getFallbackProperties(): Map<String, String> {
+        return fallbackProperties
     }
 }

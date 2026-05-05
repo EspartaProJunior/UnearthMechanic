@@ -65,8 +65,8 @@ class ItemsAdderImpl(
     }
 
     companion object {
-        private val rotationMap = mutableMapOf<Location, Pair<Float, Float>>()
-        val itemFrameRotationMap = mutableMapOf<Location, org.bukkit.Rotation>()
+        private val rotationMap = Collections.synchronizedMap(mutableMapOf<Location, Pair<Float, Float>>())
+        val itemFrameRotationMap = Collections.synchronizedMap(mutableMapOf<Location, org.bukkit.Rotation>())
     }
 
     fun removeStageData(location: Location){

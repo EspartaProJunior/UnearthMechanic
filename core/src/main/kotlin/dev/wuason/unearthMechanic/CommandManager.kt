@@ -28,8 +28,18 @@ class CommandManager(private val core: UnearthMechanic) : ICommandManager {
                     .withAliases("r")
                     .withPermission("unearthmechanic.reload")
                     .executes(CommandExecutor { commandSender: CommandSender?, commandArguments: CommandArguments? ->
-                        AdventureUtils.sendMessage(commandSender, "<red>Reloading...")
+                        val start = System.currentTimeMillis()
+
+                        AdventureUtils.sendMessage(commandSender, "<red>[UnearthMechanic] Reloading...")
                         core.getConfigManager().loadConfig()
+
+                        val end = System.currentTimeMillis()
+                        val took = end - start
+
+                        AdventureUtils.sendMessage(
+                            commandSender,
+                            "<green>[UnearthMechanic] Reload complete! <gray>(Took ${took}ms)"
+                        )
                     }),
                 CommandAPICommand("debug")
                     .withPermission("unearthmechanic.debug")

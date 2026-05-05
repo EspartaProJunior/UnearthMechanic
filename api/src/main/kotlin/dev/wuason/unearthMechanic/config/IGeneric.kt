@@ -81,4 +81,22 @@ interface IGeneric {
      * @return The stage instance that precedes the current stage.
      */
     fun getBackStage(currentStage: IStage): IStage
+
+    /**
+     * Retrieves the interaction mode required to trigger this generic.
+     *
+     * Supported modes:
+     * - INTERACT: normal right click / interact without shift.
+     * - INTERACT_SHIFT: interact while sneaking.
+     *
+     * This is checked centrally inside StageManager, so each compatibility
+     * does not need to implement its own shift logic.
+     *
+     * YAML:
+     * mode: INTERACT
+     * mode: INTERACT_SHIFT
+     *
+     * @return The configured interaction mode.
+     */
+    fun getInteractionMode(): InteractionMode
 }

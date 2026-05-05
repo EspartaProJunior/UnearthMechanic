@@ -61,8 +61,8 @@ class OraxenImpl(
     }
 
     companion object {
-        private val rotationMap = mutableMapOf<Location, Pair<Float, Float>>()
-        val itemFrameRotationMap = mutableMapOf<Location, org.bukkit.Rotation>()
+        private val rotationMap = Collections.synchronizedMap(mutableMapOf<Location, Pair<Float, Float>>())
+        val itemFrameRotationMap = Collections.synchronizedMap(mutableMapOf<Location, org.bukkit.Rotation>())
     }
 
     fun removeStageData(location: Location){
@@ -360,34 +360,82 @@ class OraxenImpl(
         generic: IGeneric,
         stage: IStage
     ) {
-        if(isRemoving(loc.block.location)){
-            if(!stageManager.activeSequences.contains(loc.block.location)){
-                clearRemoving(loc.block.location)
-            }
+        val keyLoc = loc.block.location
+
+        if (isRemoving(keyLoc)) {
+            if (!stageManager.activeSequences.contains(keyLoc)) clearRemoving(keyLoc)
             return
         }
+
         if (event is OraxenFurnitureInteractEvent) {
-            if(isRemoving(loc.block.location)){
-                if(!stageManager.activeSequences.contains(loc.block.location)){
-                    clearRemoving(loc.block.location) }
-                return
+            val oldEntity = event.baseEntity
+            if (!oldEntity.isValid || oldEntity.isDead) return
+
+            val oldLoc = oldEntity.location.block.location
+            val oldYaw = oldEntity.location.yaw
+            val oldPitch = oldEntity.location.pitch
+            val oldFace = oldEntity.facing
+            val oldFrameRotation = if (oldEntity is org.bukkit.entity.ItemFrame) oldEntity.rotation else null
+
+            val currentId = getPath(event.mechanic.itemID)
+            val hadCurrentObject = isValidFurniture(oldLoc, currentId) || isValidBlock(oldLoc, currentId)
+
+            if (hadCurrentObject) {
+                try {
+                    OraxenFurniture.remove(oldEntity, null, null)
+                } catch (_: Throwable) {
+                    oldEntity.remove()
+                }
+                cleanupFurnitureEntitiesOraxen(oldLoc)
+                breakBlock(oldLoc, player)
+            } else {
+                breakBlock(oldLoc, player)
             }
-            breakFurniture(event.baseEntity, player, event.mechanic.itemID)
-            placeFurniture(itemAdapterData, loc, event.baseEntity.facing, event.baseEntity.location.yaw)
+
+            OraxenFurniture.getFurnitureMechanic(itemAdapterData.id)
+                ?.place(oldLoc, oldYaw, oldFace)
 
             Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
-                if(!stageManager.activeSequences.contains(event.baseEntity.location.block.location)){
-                    clearRemoving(event.baseEntity.location.block.location)
+                val center = oldLoc.clone().add(0.5, 0.5, 0.5)
+                oldLoc.world?.getNearbyEntities(center, 1.5, 1.5, 1.5)?.forEach { entity ->
+                    if (entity.location.block.location != oldLoc) return@forEach
+                    if (!entity.isValid || entity.isDead) return@forEach
+                    if (!OraxenFurniture.isFurniture(entity)) return@forEach
+
+                    entity.setRotation(oldYaw, oldPitch)
+                    if (oldFrameRotation != null && entity is org.bukkit.entity.ItemFrame) {
+                        entity.rotation = oldFrameRotation
+                    }
                 }
-            }, 5L)
+
+                if (!stageManager.activeSequences.contains(oldLoc)) clearRemoving(oldLoc)
+            }, 2L)
+
         } else {
-            // Sequence System
-            if(isRemoving(loc.block.location)){
-                if(!stageManager.activeSequences.contains(loc.block.location)){
-                    clearRemoving(loc.block.location) }
+            val rotation = rotationMap.remove(keyLoc)
+            val cachedFrameRotation = itemFrameRotationMap.remove(keyLoc)
+
+            if (isRemoving(keyLoc)) {
+                if (!stageManager.activeSequences.contains(keyLoc)) clearRemoving(keyLoc)
                 return
             }
-            placeFurniture(itemAdapterData, loc)
+
+            OraxenFurniture.getFurnitureMechanic(itemAdapterData.id)
+                ?.place(keyLoc, rotation?.first ?: 0f, BlockFace.UP)
+
+            Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
+                val center = keyLoc.clone().add(0.5, 0.5, 0.5)
+                keyLoc.world?.getNearbyEntities(center, 1.5, 1.5, 1.5)?.forEach { entity ->
+                    if (entity.location.block.location != keyLoc) return@forEach
+                    if (!entity.isValid || entity.isDead) return@forEach
+                    if (!OraxenFurniture.isFurniture(entity)) return@forEach
+
+                    if (rotation != null) entity.setRotation(rotation.first, rotation.second)
+                    if (cachedFrameRotation != null && entity is org.bukkit.entity.ItemFrame) {
+                        entity.rotation = cachedFrameRotation
+                    }
+                }
+            }, 2L)
         }
     }
 
