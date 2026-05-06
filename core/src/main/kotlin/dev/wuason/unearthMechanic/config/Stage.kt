@@ -1,6 +1,7 @@
 package dev.wuason.unearthMechanic.config
 
 import dev.wuason.adapter.AdapterData
+import dev.wuason.unearthMechanic.compatibilities.worldguard.WorldGuardPlugin
 import dev.wuason.unearthMechanic.system.LiveTool
 import org.bukkit.Location
 import org.bukkit.entity.Player
@@ -70,6 +71,12 @@ open class Stage(
         ) as Stage
 
         resolved.setExplicitBlockProperties(getExplicitBlockProperties())
+        resolved.setRememberPrevious(this.shouldRememberPrevious())
+        resolved.setUsePrevious(this.shouldUsePrevious())
+        resolved.setFallbackAdapterData(this.getFallbackAdapterData())
+        resolved.setFallbackProperties(this.getFallbackProperties())
+        resolved.setRegionConditions(this.getRegionConditions())
+        resolved.setTimedSequenceInteraction(this.getTimedSequenceInteraction())
 
         sequenceStages?.let { resolved.setSequenceStages(it) }
         return resolved
@@ -206,6 +213,20 @@ open class Stage(
         return sequenceStages
     }
 
+    private var timedSequenceInteraction: TimedSequenceInteraction? = null
+
+    fun setTimedSequenceInteraction(value: TimedSequenceInteraction?) {
+        timedSequenceInteraction = value
+    }
+
+    fun getTimedSequenceInteraction(): TimedSequenceInteraction? {
+        return timedSequenceInteraction
+    }
+
+    fun hasTimedSequenceInteraction(): Boolean {
+        return timedSequenceInteraction != null
+    }
+
     private var explicitBlockProperties: Map<String, String> = emptyMap()
 
     fun setExplicitBlockProperties(props: Map<String, String>) {
@@ -263,6 +284,8 @@ open class Stage(
         copy.setUsePrevious(this.shouldUsePrevious())
         copy.setFallbackAdapterData(this.getFallbackAdapterData())
         copy.setFallbackProperties(this.getFallbackProperties())
+        copy.setRegionConditions(this.getRegionConditions())
+        copy.setTimedSequenceInteraction(this.getTimedSequenceInteraction())
         sequenceStages?.let { copy.setSequenceStages(it) }
 
         return copy
@@ -286,5 +309,33 @@ open class Stage(
 
     fun getFallbackProperties(): Map<String, String> {
         return fallbackProperties
+    }
+
+    private var regionConditions: List<RegionCondition> = emptyList()
+
+    fun setRegionConditions(conditions: List<RegionCondition>) {
+        this.regionConditions = conditions
+    }
+
+    fun getRegionConditions(): List<RegionCondition> {
+        return regionConditions
+    }
+
+    fun hasRegionConditions(): Boolean {
+        return regionConditions.isNotEmpty()
+    }
+
+    fun matchesRegionConditions(location: Location): Boolean {
+        if (regionConditions.isEmpty()) return true
+
+        if (!WorldGuardPlugin.isWorldGuardEnabled()) {
+            return false
+        }
+
+        val currentRegions = WorldGuardPlugin.getRegionIdsAt(location)
+
+        return regionConditions.all { condition ->
+            condition.matches(currentRegions)
+        }
     }
 }

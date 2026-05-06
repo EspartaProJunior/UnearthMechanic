@@ -45,6 +45,7 @@ import org.bukkit.event.EventPriority
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
 import java.util.*
+import kotlin.collections.get
 
 class CraftEngineImpl(
     pluginName: String,
@@ -72,6 +73,249 @@ class CraftEngineImpl(
     companion object {
         private val rotationMap = Collections.synchronizedMap(mutableMapOf<Location, Pair<Float, Float>>())
         val itemFrameRotationMap = Collections.synchronizedMap(mutableMapOf<Location, org.bukkit.Rotation>())
+
+        // Minecraft Compability
+        fun tryReplaceCraftEngineBlockWithVanilla(
+            loc: Location,
+            event: Event,
+            oldData: BlockData,
+            newMaterial: Material,
+            explicitProps: Map<String, String>
+        ): Boolean {
+            return try {
+                val previousBlockState =
+                    when {
+                        event is CustomBlockInteractEvent -> {
+                            event.blockState()
+                        }
+
+                        else -> {
+                            CraftEngineBlocks.getCustomBlockState(oldData)
+                        }
+                    } ?: return false
+
+                val ceProps = previousBlockState.propertiesNbt()
+
+                if (newMaterial.createBlockData() is org.bukkit.block.data.type.Door) {
+                    replaceCraftEngineDoubleBlockWithVanillaDoorStatic(
+                        loc = loc,
+                        previousBlockState = previousBlockState,
+                        newMaterial = newMaterial,
+                        ceProps = ceProps,
+                        explicitProps = explicitProps
+                    )
+                    return true
+                }
+
+                removeCraftEngineDoubleBlockSilentStatic(loc, previousBlockState)
+
+                loc.block.type = newMaterial
+
+                val newBlock = loc.block
+                var newData = newBlock.blockData.clone()
+
+                newData = applyCePropertiesToVanillaStatic(ceProps, newData)
+                newData = applyExplicitPropertiesToVanillaStatic(explicitProps, newData)
+
+                newBlock.blockData = newData
+                newBlock.state.update(true, false)
+
+                true
+            } catch (_: Throwable) {
+                false
+            }
+        }
+
+        private fun applyCePropertiesToVanillaStatic(
+            ceProps: CompoundTag?,
+            data: BlockData
+        ): BlockData {
+            if (ceProps == null) return data
+
+            try {
+                if (data is Directional && ceProps.containsKey("facing")) {
+                    val facing = BlockFace.valueOf(ceProps.getString("facing").uppercase(Locale.ENGLISH))
+                    if (data.faces.contains(facing)) data.facing = facing
+                }
+
+                if (data is Orientable && ceProps.containsKey("axis")) {
+                    data.axis = org.bukkit.Axis.valueOf(ceProps.getString("axis").uppercase(Locale.ENGLISH))
+                }
+
+                if (data is Bisected && ceProps.containsKey("half")) {
+                    val rawHalf = ceProps.getString("half").lowercase(Locale.ENGLISH)
+                    data.half = if (rawHalf == "upper" || rawHalf == "top") {
+                        Bisected.Half.TOP
+                    } else {
+                        Bisected.Half.BOTTOM
+                    }
+                }
+
+                if (data is Openable && ceProps.containsKey("open")) {
+                    data.isOpen = ceProps.getBoolean("open")
+                }
+
+                if (data is Powerable && ceProps.containsKey("powered")) {
+                    data.isPowered = ceProps.getBoolean("powered")
+                }
+
+                if (data is Waterlogged && ceProps.containsKey("waterlogged")) {
+                    data.isWaterlogged = ceProps.getBoolean("waterlogged")
+                }
+
+                if (data is org.bukkit.block.data.type.Slab && ceProps.containsKey("type")) {
+                    data.type = org.bukkit.block.data.type.Slab.Type.valueOf(
+                        ceProps.getString("type").uppercase(Locale.ENGLISH)
+                    )
+                }
+
+                if (data is org.bukkit.block.data.type.Switch && ceProps.containsKey("face")) {
+                    data.face = org.bukkit.block.data.type.Switch.Face.valueOf(
+                        ceProps.getString("face").uppercase(Locale.ENGLISH)
+                    )
+                }
+            } catch (_: Throwable) {}
+
+            return data
+        }
+
+        private fun applyExplicitPropertiesToVanillaStatic(
+            props: Map<String, String>,
+            data: BlockData
+        ): BlockData {
+            try {
+                props["facing"]?.let {
+                    if (data is Directional) {
+                        val face = BlockFace.valueOf(it.uppercase(Locale.ENGLISH))
+                        if (data.faces.contains(face)) data.facing = face
+                    }
+                }
+
+                props["axis"]?.let {
+                    if (data is Orientable) {
+                        data.axis = org.bukkit.Axis.valueOf(it.uppercase(Locale.ENGLISH))
+                    }
+                }
+
+                props["half"]?.let {
+                    if (data is Bisected) {
+                        data.half = when (it.lowercase(Locale.ENGLISH)) {
+                            "upper", "top" -> Bisected.Half.TOP
+                            else -> Bisected.Half.BOTTOM
+                        }
+                    }
+                }
+
+                props["open"]?.let {
+                    if (data is Openable) data.isOpen = it.toBoolean()
+                }
+
+                props["powered"]?.let {
+                    if (data is Powerable) data.isPowered = it.toBoolean()
+                }
+
+                props["waterlogged"]?.let {
+                    if (data is Waterlogged) data.isWaterlogged = it.toBoolean()
+                }
+
+                props["type"]?.let {
+                    if (data is org.bukkit.block.data.type.Slab) {
+                        data.type = org.bukkit.block.data.type.Slab.Type.valueOf(it.uppercase(Locale.ENGLISH))
+                    }
+                }
+
+                props["face"]?.let {
+                    if (data is org.bukkit.block.data.type.Switch) {
+                        data.face = org.bukkit.block.data.type.Switch.Face.valueOf(it.uppercase(Locale.ENGLISH))
+                    }
+                }
+            } catch (_: Throwable) {}
+
+            return data
+        }
+
+        private fun findCeDoubleBlockPropertyStatic(state: ImmutableBlockState): Property<*>? {
+            for (property in state.properties) {
+                if (property.valueClass() == DoubleBlockHalf::class.java) {
+                    return property
+                }
+            }
+            return null
+        }
+
+        private fun removeCraftEngineDoubleBlockSilentStatic(
+            loc: Location,
+            state: ImmutableBlockState
+        ) {
+            val doubleProp = findCeDoubleBlockPropertyStatic(state)
+
+            if (doubleProp == null) {
+                loc.block.setType(Material.AIR, false)
+                return
+            }
+
+            val half = state.get(doubleProp) as DoubleBlockHalf
+
+            val lowerLoc = when (half) {
+                DoubleBlockHalf.UPPER -> loc.clone().add(0.0, -1.0, 0.0)
+                DoubleBlockHalf.LOWER -> loc.clone()
+            }
+
+            val upperLoc = lowerLoc.clone().add(0.0, 1.0, 0.0)
+
+            upperLoc.block.setType(Material.AIR, false)
+            lowerLoc.block.setType(Material.AIR, false)
+        }
+
+        private fun replaceCraftEngineDoubleBlockWithVanillaDoorStatic(
+            loc: Location,
+            previousBlockState: ImmutableBlockState,
+            newMaterial: Material,
+            ceProps: CompoundTag?,
+            explicitProps: Map<String, String>
+        ) {
+            val doubleProp = findCeDoubleBlockPropertyStatic(previousBlockState)
+
+            val lowerLoc = if (doubleProp != null) {
+                when (previousBlockState.get(doubleProp) as DoubleBlockHalf) {
+                    DoubleBlockHalf.UPPER -> loc.clone().add(0.0, -1.0, 0.0)
+                    DoubleBlockHalf.LOWER -> loc.clone()
+                }
+            } else {
+                loc.clone()
+            }
+
+            val upperLoc = lowerLoc.clone().add(0.0, 1.0, 0.0)
+
+            upperLoc.block.setType(Material.AIR, false)
+            lowerLoc.block.setType(Material.AIR, false)
+
+            lowerLoc.block.setType(newMaterial, false)
+            upperLoc.block.setType(newMaterial, false)
+
+            var lowerData = lowerLoc.block.blockData.clone()
+            var upperData = upperLoc.block.blockData.clone()
+
+            lowerData = applyCePropertiesToVanillaStatic(ceProps, lowerData)
+            lowerData = applyExplicitPropertiesToVanillaStatic(explicitProps, lowerData)
+
+            upperData = applyCePropertiesToVanillaStatic(ceProps, upperData)
+            upperData = applyExplicitPropertiesToVanillaStatic(explicitProps, upperData)
+
+            if (lowerData is org.bukkit.block.data.type.Door) {
+                lowerData.half = Bisected.Half.BOTTOM
+            }
+
+            if (upperData is org.bukkit.block.data.type.Door) {
+                upperData.half = Bisected.Half.TOP
+            }
+
+            lowerLoc.block.setBlockData(lowerData, false)
+            upperLoc.block.setBlockData(upperData, false)
+
+            lowerLoc.block.state.update(true, false)
+            upperLoc.block.state.update(true, false)
+        }
     }
 
     private fun fixedKey(loc: Location): Location =
@@ -957,4 +1201,39 @@ class CraftEngineImpl(
         return null
     }
 
+    private fun CompoundTag.toSimpleStringMap(): Map<String, String> {
+        val result = mutableMapOf<String, String>()
+
+        for (key in this.keySet()) {
+            val raw = this.get(key) ?: continue
+            result[key] = raw.toString()
+                .removeSurrounding("\"")
+                .lowercase()
+        }
+
+        return result
+    }
+
+    override fun getCurrentBlockPropsFromEvent(
+        event: Event,
+        loc: Location
+    ): Map<String, String> {
+        return try {
+            when (event) {
+                is CustomBlockInteractEvent -> {
+                    val state = event.blockState()
+                    state.propertiesNbt()?.toSimpleStringMap() ?: emptyMap()
+                }
+
+                else -> {
+                    val state = CraftEngineBlocks.getCustomBlockState(loc.block.blockData)
+                        ?: return emptyMap()
+
+                    state.propertiesNbt()?.toSimpleStringMap() ?: emptyMap()
+                }
+            }
+        } catch (_: Throwable) {
+            emptyMap()
+        }
+    }
 }

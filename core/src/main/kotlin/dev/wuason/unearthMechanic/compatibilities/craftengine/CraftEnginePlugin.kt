@@ -23,7 +23,6 @@ class CraftEnginePlugin {
             if (event.isFirstReload()) isLoaded = true;
         }
 
-        @EventHandler
         fun isCraftEngineLoaded(): Boolean {
             return isLoaded
         }

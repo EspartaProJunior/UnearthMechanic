@@ -10,17 +10,11 @@ import dev.wuason.unearthMechanic.system.ILiveTool
 import dev.wuason.unearthMechanic.system.StageData
 import dev.wuason.unearthMechanic.system.StageManager
 import dev.wuason.unearthMechanic.utils.Utils
-import net.momirealms.craftengine.bukkit.api.CraftEngineBlocks
-import net.momirealms.craftengine.bukkit.api.event.CustomBlockInteractEvent
-import net.momirealms.craftengine.core.block.ImmutableBlockState
-import net.momirealms.craftengine.core.block.property.Property
-import net.momirealms.craftengine.core.block.property.type.DoubleBlockHalf
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.block.Block
 import org.bukkit.block.BlockFace
-import net.momirealms.craftengine.libraries.nbt.CompoundTag
 import org.bukkit.block.data.*
 import org.bukkit.block.data.type.Slab
 import org.bukkit.block.data.type.Switch
@@ -138,55 +132,6 @@ class MinecraftImpl(
         return to
     }
 
-    private fun applyCePropertiesToVanilla(
-        ceProps: CompoundTag?,
-        data: BlockData
-    ): BlockData {
-        if (ceProps == null) return data
-
-        try {
-            if (data is Directional && ceProps.containsKey("facing")) {
-                val facing = BlockFace.valueOf(ceProps.getString("facing").uppercase(Locale.ENGLISH))
-                if (data.faces.contains(facing)) data.facing = facing
-            }
-
-            if (data is Orientable && ceProps.containsKey("axis")) {
-                data.axis = org.bukkit.Axis.valueOf(ceProps.getString("axis").uppercase(Locale.ENGLISH))
-            }
-
-            if (data is Bisected && ceProps.containsKey("half")) {
-                val rawHalf = ceProps.getString("half").lowercase(Locale.ENGLISH)
-                data.half = if (rawHalf == "upper" || rawHalf == "top") {
-                    Bisected.Half.TOP
-                } else {
-                    Bisected.Half.BOTTOM
-                }
-            }
-
-            if (data is Openable && ceProps.containsKey("open")) {
-                data.isOpen = ceProps.getBoolean("open")
-            }
-
-            if (data is Powerable && ceProps.containsKey("powered")) {
-                data.isPowered = ceProps.getBoolean("powered")
-            }
-
-            if (data is Waterlogged && ceProps.containsKey("waterlogged")) {
-                data.isWaterlogged = ceProps.getBoolean("waterlogged")
-            }
-
-            if (data is Slab && ceProps.containsKey("type")) {
-                data.type = Slab.Type.valueOf(ceProps.getString("type").uppercase(Locale.ENGLISH))
-            }
-
-            if (data is Switch && ceProps.containsKey("face")) {
-                data.face = Switch.Face.valueOf(ceProps.getString("face").uppercase(Locale.ENGLISH))
-            }
-        } catch (_: Exception) {}
-
-        return data
-    }
-
     private fun applyExplicitPropertiesToVanilla(
         props: Map<String, String>,
         data: BlockData
@@ -238,90 +183,6 @@ class MinecraftImpl(
         return data
     }
 
-    private fun findCeDoubleBlockProperty(state: ImmutableBlockState): Property<*>? {
-        for (property in state.properties) {
-            if (property.valueClass() == DoubleBlockHalf::class.java) {
-                return property
-            }
-        }
-        return null
-    }
-
-    private fun removeCraftEngineDoubleBlockSilent(loc: Location, state: ImmutableBlockState) {
-        val doubleProp = findCeDoubleBlockProperty(state)
-
-        if (doubleProp == null) {
-            loc.block.setType(Material.AIR, false)
-            return
-        }
-
-        val half = state.get(doubleProp) as DoubleBlockHalf
-
-        val lowerLoc = when (half) {
-            DoubleBlockHalf.UPPER -> loc.clone().add(0.0, -1.0, 0.0)
-            DoubleBlockHalf.LOWER -> loc.clone()
-        }
-
-        val upperLoc = lowerLoc.clone().add(0.0, 1.0, 0.0)
-
-        upperLoc.block.setType(Material.AIR, false)
-        lowerLoc.block.setType(Material.AIR, false)
-    }
-
-    private fun replaceCraftEngineDoubleBlockWithVanillaDoor(
-        loc: Location,
-        previousBlockState: ImmutableBlockState,
-        newMaterial: Material,
-        ceProps: CompoundTag?,
-        explicitProps: Map<String, String>
-    ) {
-        val doubleProp = findCeDoubleBlockProperty(previousBlockState)
-
-        val lowerLoc = if (doubleProp != null) {
-            when (previousBlockState.get(doubleProp) as DoubleBlockHalf) {
-                DoubleBlockHalf.UPPER -> loc.clone().add(0.0, -1.0, 0.0)
-                DoubleBlockHalf.LOWER -> loc.clone()
-            }
-        } else {
-            loc.clone()
-        }
-
-        val upperLoc = lowerLoc.clone().add(0.0, 1.0, 0.0)
-
-        upperLoc.block.setType(Material.AIR, false)
-        lowerLoc.block.setType(Material.AIR, false)
-
-        lowerLoc.block.setType(newMaterial, false)
-        upperLoc.block.setType(newMaterial, false)
-
-        var lowerData = lowerLoc.block.blockData.clone()
-        var upperData = upperLoc.block.blockData.clone()
-
-        lowerData = applyCePropertiesToVanilla(ceProps, lowerData)
-        lowerData = applyExplicitPropertiesToVanilla(explicitProps, lowerData)
-
-        upperData = applyCePropertiesToVanilla(ceProps, upperData)
-        upperData = applyExplicitPropertiesToVanilla(explicitProps, upperData)
-
-        if (lowerData is org.bukkit.block.data.type.Door) {
-            lowerData.half = Bisected.Half.BOTTOM
-        }
-
-        if (upperData is org.bukkit.block.data.type.Door) {
-            upperData.half = Bisected.Half.TOP
-        }
-
-        lowerLoc.block.setBlockData(lowerData, false)
-        upperLoc.block.setBlockData(upperData, false)
-
-        lowerLoc.block.state.update(true, false)
-        upperLoc.block.state.update(true, false)
-    }
-
-    private fun isCraftEngineInteract(event: Event): Boolean {
-        return event.javaClass.simpleName == "CustomBlockInteractEvent"
-    }
-
     private fun handleBlockStage(
         player: Player,
         itemAdapterData: AdapterData,
@@ -340,38 +201,25 @@ class MinecraftImpl(
 
         val oldData = loc.block.blockData
         val keyLoc = loc.block.location
+        val explicitProps = (stage as? Stage)?.getExplicitBlockProperties() ?: emptyMap()
 
         Bukkit.getScheduler().runTask(core, Runnable {
-            val previousBlockState =
-                when {
-                    event is CustomBlockInteractEvent -> {
-                        event.blockState()
-                    }
 
-                    CraftEnginePlugin.isCraftEngineEnabled() &&
-                            CraftEnginePlugin.isCraftEngineLoaded() -> {
-                        CraftEngineBlocks.getCustomBlockState(oldData)
-                    }
-
-                    else -> null
-                }
-
-            val ceProps = previousBlockState?.propertiesNbt()
-            val explicitProps = (stage as? Stage)?.getExplicitBlockProperties() ?: emptyMap()
-
-            if (previousBlockState != null && newMaterial.createBlockData() is org.bukkit.block.data.type.Door) {
-                replaceCraftEngineDoubleBlockWithVanillaDoor(
+            if (
+                CraftEnginePlugin.isCraftEngineEnabled() &&
+                CraftEnginePlugin.isCraftEngineLoaded()
+            ) {
+                val handledByCe = tryReplaceWithCraftEngineBridge(
                     loc = keyLoc,
-                    previousBlockState = previousBlockState,
+                    event = event,
+                    oldData = oldData,
                     newMaterial = newMaterial,
-                    ceProps = ceProps,
                     explicitProps = explicitProps
                 )
-                return@Runnable
-            }
 
-            if (previousBlockState != null) {
-                removeCraftEngineDoubleBlockSilent(keyLoc, previousBlockState)
+                if (handledByCe) {
+                    return@Runnable
+                }
             }
 
             keyLoc.block.type = newMaterial
@@ -380,12 +228,47 @@ class MinecraftImpl(
             var newData = newBlock.blockData.clone()
 
             newData = copyOrientationProperties(oldData, newData)
-            newData = applyCePropertiesToVanilla(ceProps, newData)
             newData = applyExplicitPropertiesToVanilla(explicitProps, newData)
 
             newBlock.blockData = newData
             newBlock.state.update(true, false)
         })
+    }
+
+    private fun tryReplaceWithCraftEngineBridge(
+        loc: Location,
+        event: Event,
+        oldData: BlockData,
+        newMaterial: Material,
+        explicitProps: Map<String, String>
+    ): Boolean {
+        return try {
+            val clazz = Class.forName(
+                "dev.wuason.unearthMechanic.system.compatibilities.ce.CraftEngineImpl"
+            )
+
+            val companion = clazz.getField("Companion").get(null)
+
+            val method = companion.javaClass.getMethod(
+                "tryReplaceCraftEngineBlockWithVanilla",
+                Location::class.java,
+                Event::class.java,
+                BlockData::class.java,
+                Material::class.java,
+                Map::class.java
+            )
+
+            method.invoke(
+                companion,
+                loc,
+                event,
+                oldData,
+                newMaterial,
+                explicitProps
+            ) as? Boolean ?: false
+        } catch (_: Throwable) {
+            false
+        }
     }
 
     private fun handleFurnitureStage(

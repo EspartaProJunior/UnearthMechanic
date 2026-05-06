@@ -11,8 +11,6 @@ import dev.wuason.adapter.AdapterData
 import dev.wuason.unearthMechanic.UnearthMechanic
 import dev.wuason.unearthMechanic.compatibilities.craftengine.CraftEnginePlugin
 import dev.wuason.unearthMechanic.utils.AdventureUtils
-import dev.wuason.unearthMechanic.utils.Utils.Companion.toAdapter
-import org.bukkit.Bukkit
 import java.io.File
 import java.lang.reflect.Constructor
 import java.util.Locale
@@ -221,7 +219,7 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
             try {
                 val split = raw.split(";")
                 if (split.size < 2) {
-                    //core.logger.warning("Skipping invalid random stage entry '$raw' in generic '$genericId', stage '$stageKey': format must be 'adapterId;chance'")
+                    core.logger.warning("Skipping invalid random stage entry '$raw' in generic '$genericId', stage '$stageKey': format must be 'adapterId;chance'")
                     return@mapNotNull null
                 }
 
@@ -230,21 +228,21 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
                 val rawChance = split[1].trim()
 
                 if (!Regex("""^\d+(\.\d{1,2})?$""").matches(rawChance)) {
-                    /*core.logger.warning(
+                    core.logger.warning(
                         "Skipping invalid random stage entry '$raw' in generic '$genericId', stage '$stageKey': chance supports up to 2 decimals"
-                    )*/
+                    )
                     return@mapNotNull null
                 }
                 val chance = rawChance.toDouble()
 
                 if (chance <= 0.0) {
-                    //core.logger.warning("Skipping invalid random stage entry '$raw' in generic '$genericId', stage '$stageKey': chance must be > 0")
+                    core.logger.warning("Skipping invalid random stage entry '$raw' in generic '$genericId', stage '$stageKey': chance must be > 0")
                     return@mapNotNull null
                 }
 
                 val adapter = Adapter.getAdapterData(adapterId).getOrNull()
                 if (adapter == null) {
-                    //core.logger.warning("Skipping invalid random stage entry '$raw' in generic '$genericId', stage '$stageKey': unknown adapter '$adapterId'")
+                    core.logger.warning("Skipping invalid random stage entry '$raw' in generic '$genericId', stage '$stageKey': unknown adapter '$adapterId'")
                     return@mapNotNull null
                 }
 
@@ -342,6 +340,8 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
             }
 
         val executeCommands: List<IStageCommand> = parseStageCommands(sectionStage)
+        val regionConditions: List<RegionCondition> =
+            parseRegionConditions(sectionStage, genericId, stageKey)
 
         val constructor = stageType.getClazz().declaredConstructors[0]
         constructor.isAccessible = true
@@ -390,7 +390,68 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
         }
 
         stage.setRandomStageOptions(randomStageOptions)
+        stage.setRegionConditions(regionConditions)
+
+        parseTimedSequenceInteraction(
+            sectionStage = sectionStage,
+            defaultType = defaultType,
+            genericId = genericId,
+            stageKey = stageKey
+        )?.let {
+            stage.setTimedSequenceInteraction(it)
+        }
+
         return stage
+    }
+
+    private fun parseRegionConditions(
+        section: Section,
+        genericId: String,
+        stageKey: String
+    ): List<RegionCondition> {
+        return section.getMapList("region-conditions", emptyList()).mapNotNull { map ->
+            try {
+                val rawType = map["type"]?.toString()
+                val type = RegionConditionType.parse(rawType)
+
+                if (type == null) {
+                    core.logger.warning(
+                        "Skipping invalid region-condition in generic '$genericId', stage '$stageKey': " +
+                                "type='$rawType'. Valid types: ${RegionConditionType.validTypes()}"
+                    )
+                    return@mapNotNull null
+                }
+
+                val listRaw = map["list"]
+
+                val regions = when (listRaw) {
+                    is List<*> -> listRaw.mapNotNull { it?.toString()?.trim() }
+                    is String -> listOf(listRaw.trim())
+                    else -> emptyList()
+                }
+                    .filter { it.isNotBlank() }
+                    .map { it.lowercase(Locale.ENGLISH) }
+                    .toSet()
+
+                if (
+                    regions.isEmpty()
+                    && type != RegionConditionType.ONLY_GLOBAL
+                    && type != RegionConditionType.DENY_GLOBAL
+                ) {
+                    core.logger.warning(
+                        "Skipping region-condition in generic '$genericId', stage '$stageKey': region list is empty"
+                    )
+                    return@mapNotNull null
+                }
+
+                RegionCondition(type, regions)
+            } catch (ex: Exception) {
+                core.logger.warning(
+                    "Skipping invalid region-condition in generic '$genericId', stage '$stageKey': ${ex.message}"
+                )
+                null
+            }
+        }
     }
 
     private fun resolveStageTarget(
@@ -451,6 +512,122 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
         }
 
         return StageTargetResult(stageType, adapterData, randomOptions)
+    }
+
+    private fun parseTimedSequenceInteraction(
+        sectionStage: Section,
+        defaultType: GenericType,
+        genericId: String,
+        stageKey: String
+    ): TimedSequenceInteraction? {
+        val timedSection = sectionStage.getSection("timed_interaction") ?: return null
+
+        val collectWindowTicks = timedSection.getLong("collect_window", -1)
+            .takeIf { it > 0 }
+            ?: timedSection.getLong("take_window", -1).takeIf { it > 0 }
+            ?: timedSection.getLong("success_window", -1).takeIf { it > 0 }
+            ?: timedSection.getLong("window", -1).takeIf { it > 0 }
+            ?: run {
+                core.logger.warning(
+                    "Skipping timed_interaction in generic '$genericId', stage '$stageKey': " +
+                            "missing collect_window/take_window/success_window/window or value must be > 0"
+                )
+                return null
+            }
+
+        val outcomesSection = timedSection.getSection("outcomes")
+        if (outcomesSection == null) {
+            core.logger.warning(
+                "Skipping timed_interaction in generic '$genericId', stage '$stageKey': missing outcomes section"
+            )
+            return null
+        }
+
+        val outcomes = linkedMapOf<String, TimedSequenceOutcome>()
+
+        for (outcomeKey in outcomesSection.getRoutesAsStrings(false)) {
+            val outcomeSection = outcomesSection.getSection(outcomeKey) ?: continue
+
+            val successSection = outcomeSection.getSection("success")
+            if (successSection == null) {
+                core.logger.warning(
+                    "Skipping timed_interaction outcome '$outcomeKey' in generic '$genericId', stage '$stageKey': missing success section"
+                )
+                continue
+            }
+
+            val tools = parseTimedOutcomeTools(
+                section = outcomeSection,
+                genericId = genericId,
+                stageKey = "$stageKey.timed_interaction.outcomes.$outcomeKey"
+            )
+
+            val successStage = buildStageFromSection(
+                sectionStage = successSection,
+                defaultType = defaultType,
+                genericId = genericId,
+                stageKey = "$stageKey.timed_interaction.outcomes.$outcomeKey.success",
+                stageIndex = -2
+            )
+
+            outcomes[outcomeKey.lowercase(Locale.ENGLISH)] = TimedSequenceOutcome(
+                id = outcomeKey.lowercase(Locale.ENGLISH),
+                tools = tools,
+                successStage = successStage
+            )
+        }
+
+        val fallbackCount = outcomes.values.count { it.isFallback() }
+        if (fallbackCount > 1) {
+            core.logger.warning(
+                "timed_interaction in generic '$genericId', stage '$stageKey' has $fallbackCount outcomes without tool. " +
+                        "Only the first one will be used as fallback."
+            )
+        }
+
+        if (outcomes.isEmpty()) {
+            core.logger.warning(
+                "Skipping timed_interaction in generic '$genericId', stage '$stageKey': no valid outcomes"
+            )
+            return null
+        }
+
+        return TimedSequenceInteraction(
+            collectWindowTicks = collectWindowTicks,
+            outcomes = outcomes
+        )
+    }
+
+    private fun parseTimedOutcomeTools(
+        section: Section,
+        genericId: String,
+        stageKey: String
+    ): Set<ITool> {
+        val rawTools = section.getStringList("tool", emptyList())
+        if (rawTools.isEmpty()) return emptySet()
+
+        val tools = linkedSetOf<ITool>()
+
+        for (toolString in rawTools) {
+            val adapterId = toolString.substringBefore(";").trim()
+
+            if (adapterId.startsWith("ce:") && !CraftEnginePlugin.isCraftEngineEnabled()) {
+                continue
+            }
+
+            Tool.parseTool(toolString)?.let { parsedTool ->
+                if (parsedTool.getDelay() > 0) {
+                    core.logger.warning(
+                        "Timed interaction tool '$toolString' in '$stageKey' uses delay=${parsedTool.getDelay()}, " +
+                                "but tool delay is ignored in timed_interaction outcomes."
+                    )
+                }
+
+                tools.add(parsedTool)
+            }
+        }
+
+        return tools
     }
 
     data class ParsedBlockId(

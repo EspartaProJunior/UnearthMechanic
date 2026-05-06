@@ -194,5 +194,10 @@ abstract class ICompatibility(
      */
     abstract fun getFurnitureUUID(location: Location): UUID?
 
-
+    open fun getCurrentBlockPropsFromEvent(
+        event: Event,
+        loc: Location
+    ): Map<String, String> {
+        return emptyMap()
+    }
 }
