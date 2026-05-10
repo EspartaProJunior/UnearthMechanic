@@ -126,6 +126,9 @@ class UnearthMechanic : UnearthMechanicPlugin() {
             registerSafely(UneKeys.CURTAIN_BEHAVIOR.asString()){
                 BlockBehaviors.register(UneKeys.CURTAIN_BEHAVIOR, CurtainBlockBehavior.FACTORY)
             }
+            registerSafely(UneKeys.SHOWER_CURTAIN_BEHAVIOR.asString()){
+                BlockBehaviors.register(UneKeys.SHOWER_CURTAIN_BEHAVIOR, ShowerCurtainBlockBehavior.FACTORY)
+            }
 
             UneProperties.registerAll()
             FishTankDataStore.load()
@@ -145,15 +148,15 @@ class UnearthMechanic : UnearthMechanicPlugin() {
                 }
             }, 40L)
         } catch (t: Throwable) {
-            logger.severe("[UnearthMechanic] CraftEngine hook failed: ${t.javaClass.name}: ${t.message}")
+            AdventureUtils.sendMessagePluginConsole(this, " <red>CraftEngine hook failed: ${t.javaClass.name}: ${t.message}")
         }
     }
 
     private fun registerSafely(label: String, action: () -> Unit) {
         runCatching(action).onSuccess {
-            logger.info("Registered $label")
+            AdventureUtils.sendMessagePluginConsole(this, " <gray>Registered <gold>$label")
         }.onFailure { error ->
-            logger.fine("Skipped $label: ${error.message}")
+            AdventureUtils.sendMessagePluginConsole(this, " <yellow>Skipped $label: ${error.message}")
         }
     }
 
@@ -162,6 +165,7 @@ class UnearthMechanic : UnearthMechanicPlugin() {
         if(CraftEnginePlugin.isCraftEngineEnabled()){
             FishTankDataStore.flushSaveNow()
         }
+        FishTankDataStore.close()
         PreviousBlockDataStore.close()
     }
 

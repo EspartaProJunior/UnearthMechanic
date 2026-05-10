@@ -119,7 +119,7 @@ object PreviousBlockDataStore {
     private fun initDatabase() {
         Class.forName("org.h2.Driver")
 
-        val url = "jdbc:h2:${dbFile.absolutePath};MODE=MySQL;DATABASE_TO_UPPER=false"
+        val url = "jdbc:h2:${dbFile.absolutePath};MODE=MySQL;DATABASE_TO_UPPER=false;DB_CLOSE_ON_EXIT=FALSE"
 
         connection = DriverManager.getConnection(url)
         connection.autoCommit = true

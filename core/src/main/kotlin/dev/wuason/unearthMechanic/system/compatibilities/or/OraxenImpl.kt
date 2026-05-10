@@ -166,13 +166,25 @@ class OraxenImpl(
             if (entity.location.block.location != keyLoc) continue
             if (!entity.isValid || entity.isDead) continue
             if (entity.uniqueId != uuid) continue
-            if (!OraxenFurniture.isFurniture(entity)) continue
 
-            val mechanic = try { OraxenFurniture.getFurnitureMechanic(entity) } catch (_: Throwable) { null }
+            val furniture = try {
+                OraxenFurniture.isFurniture(entity)
+            } catch (_: Throwable) {
+                null
+            } ?: continue
 
-            OraxenFurniture.remove(entity, null, null)
+            rotationMap[keyLoc] = Pair(entity.location.yaw, entity.location.pitch)
 
-            // extra clean
+            if (entity is org.bukkit.entity.ItemFrame) {
+                itemFrameRotationMap[keyLoc] = entity.rotation
+            }
+
+            try {
+                OraxenFurniture.remove(entity, null, null)
+            } catch (_: Throwable) {
+                entity.remove()
+            }
+
             cleanupFurnitureEntitiesOraxen(keyLoc)
 
             return true
@@ -439,6 +451,90 @@ class OraxenImpl(
         }
     }
 
+    private fun hardRemoveOraxenAt(loc: Location, player: Player? = null): Boolean {
+        val keyLoc = loc.block.location
+        var removed = false
+
+        // 1) Custom block Oraxen: note/string
+        try {
+            val hasOraxenBlock =
+                OraxenBlocks.getNoteBlockMechanic(keyLoc.block) != null ||
+                        OraxenBlocks.getStringMechanic(keyLoc.block) != null
+
+            if (hasOraxenBlock) {
+                if (player != null) {
+                    OraxenBlocks.remove(keyLoc, player)
+                } else {
+                    keyLoc.block.type = org.bukkit.Material.AIR
+                }
+                removed = true
+            }
+        } catch (_: Throwable) {
+            keyLoc.block.type = org.bukkit.Material.AIR
+        }
+
+        // 2) Furniture Oraxen
+        val world = keyLoc.world ?: return removed
+        val center = keyLoc.clone().add(0.5, 0.5, 0.5)
+
+        for (entity in world.getNearbyEntities(center, 1.5, 1.5, 1.5)) {
+            if (!entity.isValid || entity.isDead) continue
+            if (entity.location.block.location != keyLoc) continue
+
+            val isFurniture = try {
+                OraxenFurniture.isFurniture(entity)
+            } catch (_: Throwable) {
+                false
+            }
+
+            if (!isFurniture) continue
+
+            rotationMap[keyLoc] = Pair(entity.location.yaw, entity.location.pitch)
+
+            if (entity is org.bukkit.entity.ItemFrame) {
+                itemFrameRotationMap[keyLoc] = entity.rotation
+            }
+
+            try {
+                if (player != null) {
+                    OraxenFurniture.remove(entity, player, null)
+                } else {
+                    OraxenFurniture.remove(entity, null, null)
+                }
+            } catch (_: Throwable) {
+                entity.remove()
+            }
+
+            removed = true
+        }
+
+        if (removed) {
+            cleanupFurnitureEntitiesOraxen(keyLoc)
+            StageData.removeStageData(keyLoc)
+            setRemoving(keyLoc)
+
+            Bukkit.getScheduler().runTaskLater(core, Runnable {
+                if (!stageManager.activeSequences.contains(keyLoc)) {
+                    clearRemoving(keyLoc)
+                }
+            }, 2L)
+        }
+
+        return removed
+    }
+
+    override fun handleCrossCompatibilityRemoveBeforeTarget(
+        player: Player,
+        event: Event,
+        loc: Location,
+        toolUsed: ILiveTool,
+        generic: IGeneric,
+        stage: IStage,
+        targetCompatibility: ICompatibility
+    ): Boolean {
+        return hardRemoveOraxenAt(loc, player)
+    }
+
     override fun handleRemove(
         player: Player,
         event: Event,
@@ -447,6 +543,7 @@ class OraxenImpl(
         generic: IGeneric,
         stage: IStage
     ) {
+        if (hardRemoveOraxenAt(loc, player)) return
         if (event is OraxenNoteBlockInteractEvent || event is OraxenStringBlockInteractEvent) {
             OraxenBlocks.remove(loc,player)
 
@@ -454,7 +551,12 @@ class OraxenImpl(
         }
         if (event is OraxenFurnitureInteractEvent) {
             event.baseEntity?.let { entity ->
-                rotationMap[entity.location] = Pair(entity.location.yaw, entity.location.pitch)
+                val key = entity.location.block.location
+                rotationMap[key] = Pair(entity.location.yaw, entity.location.pitch)
+
+                if (entity is org.bukkit.entity.ItemFrame) {
+                    itemFrameRotationMap[key] = entity.rotation
+                }
             }
             setRemoving(event.baseEntity.location.block.location)
 
@@ -467,14 +569,30 @@ class OraxenImpl(
 
         var removedAnyFurniture = false
         for (entity in nearby) {
-            if (!OraxenFurniture.isFurniture(entity) || !entity.isValid || entity.isDead) continue
+            if (!entity.isValid || entity.isDead) continue
             if (entity.location.block.location != loc.block.location) continue
 
-            val furniture = OraxenFurniture.isFurniture(entity)
-            if (furniture != null && entity.isValid && !entity.isDead) {
-                OraxenFurniture.remove(loc,player)
-                removedAnyFurniture = true
+            val furniture = try {
+                OraxenFurniture.isFurniture(entity)
+            } catch (_: Throwable) {
+                null
+            } ?: continue
+
+            val key = loc.block.location
+
+            rotationMap[key] = Pair(entity.location.yaw, entity.location.pitch)
+
+            if (entity is org.bukkit.entity.ItemFrame) {
+                itemFrameRotationMap[key] = entity.rotation
             }
+
+            try {
+                OraxenFurniture.remove(entity, null, null)
+            } catch (_: Throwable) {
+                entity.remove()
+            }
+
+            removedAnyFurniture = true
         }
 
         if (!removedAnyFurniture && loc.block.type != org.bukkit.Material.AIR) {

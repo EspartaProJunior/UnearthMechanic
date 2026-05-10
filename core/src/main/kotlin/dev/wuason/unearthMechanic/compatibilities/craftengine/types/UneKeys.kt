@@ -19,4 +19,5 @@ object UneKeys {
     val FISH_TANK_BEHAVIOR: Key = Key.of("$NAMESPACE:fish_tank")
     val ASHES_MERGE_BEHAVIOR: Key = Key.of("$NAMESPACE:ashes_merge")
     val CURTAIN_BEHAVIOR: Key = Key.of("$NAMESPACE:curtain_block")
+    val SHOWER_CURTAIN_BEHAVIOR: Key = Key.of("$NAMESPACE:shower_curtain_block")
 }

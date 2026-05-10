@@ -16,6 +16,7 @@ import org.bukkit.Material
 import org.bukkit.block.Block
 import org.bukkit.block.BlockFace
 import org.bukkit.block.data.*
+import org.bukkit.block.data.type.Door
 import org.bukkit.block.data.type.Slab
 import org.bukkit.block.data.type.Switch
 import org.bukkit.entity.Player
@@ -205,21 +206,26 @@ class MinecraftImpl(
 
         Bukkit.getScheduler().runTask(core, Runnable {
 
-            if (
-                CraftEnginePlugin.isCraftEngineEnabled() &&
-                CraftEnginePlugin.isCraftEngineLoaded()
-            ) {
-                val handledByCe = tryReplaceWithCraftEngineBridge(
-                    loc = keyLoc,
-                    event = event,
-                    oldData = oldData,
+            val handledByCe = tryReplaceWithCraftEngineBridge(
+                loc = keyLoc,
+                event = event,
+                oldData = oldData,
+                newMaterial = newMaterial,
+                explicitProps = explicitProps
+            )
+
+            if (handledByCe) {
+                return@Runnable
+            }
+
+            if (newMaterial.createBlockData() is Door) {
+                placeVanillaDoorBothHalves(
+                    clickedLoc = keyLoc,
                     newMaterial = newMaterial,
+                    oldData = oldData,
                     explicitProps = explicitProps
                 )
-
-                if (handledByCe) {
-                    return@Runnable
-                }
+                return@Runnable
             }
 
             keyLoc.block.type = newMaterial
@@ -235,6 +241,51 @@ class MinecraftImpl(
         })
     }
 
+    private fun placeVanillaDoorBothHalves(
+        clickedLoc: Location,
+        newMaterial: Material,
+        oldData: BlockData,
+        explicitProps: Map<String, String>
+    ) {
+        val clickedHalf = explicitProps["half"]?.lowercase(Locale.ENGLISH)
+
+        val lowerLoc = when (clickedHalf) {
+            "upper", "top" -> clickedLoc.clone().add(0.0, -1.0, 0.0)
+            else -> clickedLoc.clone()
+        }
+
+        val upperLoc = lowerLoc.clone().add(0.0, 1.0, 0.0)
+
+        upperLoc.block.setType(Material.AIR, false)
+        lowerLoc.block.setType(Material.AIR, false)
+
+        lowerLoc.block.setType(newMaterial, false)
+        upperLoc.block.setType(newMaterial, false)
+
+        var lowerData = lowerLoc.block.blockData.clone()
+        var upperData = upperLoc.block.blockData.clone()
+
+        lowerData = copyOrientationProperties(oldData, lowerData)
+        upperData = copyOrientationProperties(oldData, upperData)
+
+        lowerData = applyExplicitPropertiesToVanilla(explicitProps, lowerData)
+        upperData = applyExplicitPropertiesToVanilla(explicitProps, upperData)
+
+        if (lowerData is Door) {
+            lowerData.half = Bisected.Half.BOTTOM
+        }
+
+        if (upperData is Door) {
+            upperData.half = Bisected.Half.TOP
+        }
+
+        lowerLoc.block.setBlockData(lowerData, false)
+        upperLoc.block.setBlockData(upperData, false)
+
+        lowerLoc.block.state.update(true, false)
+        upperLoc.block.state.update(true, false)
+    }
+
     private fun tryReplaceWithCraftEngineBridge(
         loc: Location,
         event: Event,
@@ -242,6 +293,11 @@ class MinecraftImpl(
         newMaterial: Material,
         explicitProps: Map<String, String>
     ): Boolean {
+        if (
+            !CraftEnginePlugin.isCraftEngineEnabled() ||
+            !CraftEnginePlugin.isCraftEngineLoaded()
+        ) return false
+
         return try {
             val clazz = Class.forName(
                 "dev.wuason.unearthMechanic.system.compatibilities.ce.CraftEngineImpl"
@@ -266,7 +322,8 @@ class MinecraftImpl(
                 newMaterial,
                 explicitProps
             ) as? Boolean ?: false
-        } catch (_: Throwable) {
+        } catch (t: Throwable) {
+            core.logger.warning("[UM-MC] CE bridge failed: ${t.javaClass.simpleName}: ${t.message}")
             false
         }
     }
@@ -282,6 +339,93 @@ class MinecraftImpl(
     ) {
         return
         //throw UnsupportedOperationException("Minecraft does not support furniture stages")
+    }
+
+    override fun getCurrentBlockPropsFromEvent(
+        event: Event,
+        loc: Location
+    ): Map<String, String> {
+        val blockData = when (event) {
+            is PlayerInteractEvent -> event.clickedBlock?.blockData ?: loc.block.blockData
+            else -> loc.block.blockData
+        }
+
+        return getVanillaBlockProps(blockData)
+    }
+
+    private fun getVanillaBlockProps(data: BlockData): Map<String, String> {
+        val props = mutableMapOf<String, String>()
+
+        if (data is Directional) {
+            props["facing"] = data.facing.name.lowercase(Locale.ENGLISH)
+        }
+
+        if (data is Orientable) {
+            props["axis"] = data.axis.name.lowercase(Locale.ENGLISH)
+        }
+
+        if (data is Bisected) {
+            props["half"] = when (data.half) {
+                Bisected.Half.TOP -> "upper"
+                Bisected.Half.BOTTOM -> "lower"
+            }
+        }
+
+        if (data is Openable) {
+            props["open"] = data.isOpen.toString()
+        }
+
+        if (data is Powerable) {
+            props["powered"] = data.isPowered.toString()
+        }
+
+        if (data is Waterlogged) {
+            props["waterlogged"] = data.isWaterlogged.toString()
+        }
+
+        if (data is org.bukkit.block.data.type.Slab) {
+            props["type"] = data.type.name.lowercase(Locale.ENGLISH)
+        }
+
+        if (data is org.bukkit.block.data.type.Switch) {
+            props["face"] = data.face.name.lowercase(Locale.ENGLISH)
+        }
+
+        if (data is org.bukkit.block.data.type.Door) {
+            props["hinge"] = data.hinge.name.lowercase(Locale.ENGLISH)
+        }
+
+        return props
+    }
+
+    private fun removeVanillaDoorBothHalves(block: Block): Boolean {
+        val doorData = block.blockData as? Door ?: return false
+
+        val lowerBlock = when (doorData.half) {
+            Bisected.Half.BOTTOM -> block
+            Bisected.Half.TOP -> block.getRelative(BlockFace.DOWN)
+        }
+
+        val upperBlock = lowerBlock.getRelative(BlockFace.UP)
+
+        val lowerData = lowerBlock.blockData as? Door
+        val upperData = upperBlock.blockData as? Door
+
+        if (lowerData == null || upperData == null) {
+            block.setType(Material.AIR, false)
+            return true
+        }
+
+        // Seguridad: no borres media puerta ajena de otro material.
+        if (lowerBlock.type != block.type && upperBlock.type != block.type) {
+            block.setType(Material.AIR, false)
+            return true
+        }
+
+        upperBlock.setType(Material.AIR, false)
+        lowerBlock.setType(Material.AIR, false)
+
+        return true
     }
 
     override fun handleStage(
@@ -327,6 +471,13 @@ class MinecraftImpl(
         generic: IGeneric,
         stage: IStage
     ) {
+        if (removeVanillaDoorBothHalvesSilent(loc.block)) {
+            StageData.removeStageData(loc.block.location)
+            StageData.removeStageData(loc.block.getRelative(BlockFace.UP).location)
+            StageData.removeStageData(loc.block.getRelative(BlockFace.DOWN).location)
+            return
+        }
+
         if (event is PlayerInteractEvent) {
             val data = loc.block.blockData
             lastBlockData[loc.block.location.block.location] = data
@@ -363,6 +514,30 @@ class MinecraftImpl(
             return event.blockFace
         }
         return null
+    }
+
+    private fun removeVanillaDoorBothHalvesSilent(block: Block): Boolean {
+        val doorData = block.blockData as? Door ?: return false
+
+        val lowerBlock = when (doorData.half) {
+            Bisected.Half.BOTTOM -> block
+            Bisected.Half.TOP -> block.getRelative(BlockFace.DOWN)
+        }
+
+        val upperBlock = lowerBlock.getRelative(BlockFace.UP)
+
+        val lowerData = lowerBlock.blockData as? Door
+        val upperData = upperBlock.blockData as? Door
+
+        if (lowerData == null || upperData == null) {
+            block.setType(Material.AIR, false)
+            return true
+        }
+
+        upperBlock.setType(Material.AIR, false)
+        lowerBlock.setType(Material.AIR, false)
+
+        return true
     }
 
 }

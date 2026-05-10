@@ -167,13 +167,25 @@ class NexoImpl(
             if (entity.location.block.location != keyLoc) continue
             if (!entity.isValid || entity.isDead) continue
             if (entity.uniqueId != uuid) continue
-            if (!NexoFurniture.isFurniture(entity)) continue
 
-            val mechanic = try { NexoFurniture.furnitureMechanic(entity) } catch (_: Throwable) { null }
+            val furniture = try {
+                NexoFurniture.isFurniture(entity)
+            } catch (_: Throwable) {
+                null
+            } ?: continue
 
-            NexoFurniture.remove(entity, null, null)
+            rotationMap[keyLoc] = Pair(entity.location.yaw, entity.location.pitch)
 
-            // extra clean
+            if (entity is org.bukkit.entity.ItemFrame) {
+                itemFrameRotationMap[keyLoc] = entity.rotation
+            }
+
+            try {
+                NexoFurniture.remove(entity, null, null)
+            } catch (_: Throwable) {
+                entity.remove()
+            }
+
             cleanupFurnitureEntities(keyLoc)
 
             return true
@@ -441,6 +453,90 @@ class NexoImpl(
         }
     }
 
+    private fun hardRemoveNexoAt(loc: Location, player: Player? = null): Boolean {
+        val keyLoc = loc.block.location
+        var removed = false
+
+        // 1) Custom block Nexo: note/string
+        try {
+            val hasNexoBlock =
+                NexoBlocks.noteBlockMechanic(keyLoc.block) != null ||
+                        NexoBlocks.stringMechanic(keyLoc.block) != null
+
+            if (hasNexoBlock) {
+                if (player != null) {
+                    NexoBlocks.remove(keyLoc, player)
+                } else {
+                    keyLoc.block.type = org.bukkit.Material.AIR
+                }
+                removed = true
+            }
+        } catch (_: Throwable) {
+            keyLoc.block.type = org.bukkit.Material.AIR
+        }
+
+        // 2) Furniture Nexo
+        val world = keyLoc.world ?: return removed
+        val center = keyLoc.clone().add(0.5, 0.5, 0.5)
+
+        for (entity in world.getNearbyEntities(center, 1.5, 1.5, 1.5)) {
+            if (!entity.isValid || entity.isDead) continue
+            if (entity.location.block.location != keyLoc) continue
+
+            val isFurniture = try {
+                NexoFurniture.isFurniture(entity)
+            } catch (_: Throwable) {
+                false
+            }
+
+            if (!isFurniture) continue
+
+            rotationMap[keyLoc] = Pair(entity.location.yaw, entity.location.pitch)
+
+            if (entity is org.bukkit.entity.ItemFrame) {
+                itemFrameRotationMap[keyLoc] = entity.rotation
+            }
+
+            try {
+                if (player != null) {
+                    NexoFurniture.remove(entity, player, null)
+                } else {
+                    NexoFurniture.remove(entity, null, null)
+                }
+            } catch (_: Throwable) {
+                entity.remove()
+            }
+
+            removed = true
+        }
+
+        if (removed) {
+            cleanupFurnitureEntities(keyLoc)
+            StageData.removeStageData(keyLoc)
+            setRemoving(keyLoc)
+
+            Bukkit.getScheduler().runTaskLater(core, Runnable {
+                if (!stageManager.activeSequences.contains(keyLoc)) {
+                    clearRemoving(keyLoc)
+                }
+            }, 2L)
+        }
+
+        return removed
+    }
+
+    override fun handleCrossCompatibilityRemoveBeforeTarget(
+        player: Player,
+        event: Event,
+        loc: Location,
+        toolUsed: ILiveTool,
+        generic: IGeneric,
+        stage: IStage,
+        targetCompatibility: ICompatibility
+    ): Boolean {
+        return hardRemoveNexoAt(loc, player)
+    }
+
     override fun handleRemove(
         player: Player,
         event: Event,
@@ -449,12 +545,18 @@ class NexoImpl(
         generic: IGeneric,
         stage: IStage
     ) {
+        if (hardRemoveNexoAt(loc, player)) return
         if (event is NexoNoteBlockInteractEvent || event is NexoStringBlockInteractEvent) {
             loc.block.type = org.bukkit.Material.AIR
         }
         if (event is NexoFurnitureInteractEvent) {
             event.baseEntity?.let { entity ->
-                rotationMap[entity.location] = Pair(entity.location.yaw, entity.location.pitch)
+                val key = entity.location.block.location
+                rotationMap[key] = Pair(entity.location.yaw, entity.location.pitch)
+
+                if (entity is org.bukkit.entity.ItemFrame) {
+                    itemFrameRotationMap[key] = entity.rotation
+                }
             }
             setRemoving(event.baseEntity.location.block.location)
 
@@ -466,17 +568,30 @@ class NexoImpl(
         var removedAnyFurniture = false
 
         for (entity in nearby) {
-            if (!NexoFurniture.isFurniture(entity) || !entity.isValid || entity.isDead) continue
+            if (!entity.isValid || entity.isDead) continue
             if (entity.location.block.location != loc.block.location) continue
-            try {
-                val furniture = NexoFurniture.isFurniture(entity)
-                if (furniture != null && entity.isValid && !entity.isDead) {
-                    NexoFurniture.remove(entity)
-                    removedAnyFurniture = true
-                }
-            } catch (_: Exception) {
-                continue
+
+            val furniture = try {
+                NexoFurniture.isFurniture(entity)
+            } catch (_: Throwable) {
+                null
+            } ?: continue
+
+            val key = loc.block.location
+
+            rotationMap[key] = Pair(entity.location.yaw, entity.location.pitch)
+
+            if (entity is org.bukkit.entity.ItemFrame) {
+                itemFrameRotationMap[key] = entity.rotation
             }
+
+            try {
+                NexoFurniture.remove(entity)
+            } catch (_: Throwable) {
+                entity.remove()
+            }
+
+            removedAnyFurniture = true
         }
 
         if (!removedAnyFurniture && loc.block.type != org.bukkit.Material.AIR) {

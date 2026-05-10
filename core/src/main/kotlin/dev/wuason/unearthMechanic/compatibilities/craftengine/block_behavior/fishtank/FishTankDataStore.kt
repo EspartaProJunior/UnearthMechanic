@@ -341,7 +341,7 @@ object FishTankDataStore {
     private fun initDatabase() {
         Class.forName("org.h2.Driver")
 
-        val url = "jdbc:h2:${dbFile.absolutePath};MODE=MySQL;DATABASE_TO_UPPER=false"
+        val url = "jdbc:h2:${dbFile.absolutePath};MODE=MySQL;DATABASE_TO_UPPER=false;DB_CLOSE_ON_EXIT=FALSE"
 
         connection = DriverManager.getConnection(url)
         connection.autoCommit = true
@@ -875,6 +875,15 @@ object FishTankDataStore {
     }
 
     fun close() {
+        if (saveTaskId != -1) {
+            try {
+                Bukkit.getScheduler().cancelTask(saveTaskId)
+            } catch (_: Throwable) {
+            }
+
+            saveTaskId = -1
+        }
+
         try {
             flushSaveNow()
         } catch (t: Throwable) {
@@ -885,7 +894,9 @@ object FishTankDataStore {
 
         if (::connection.isInitialized) {
             try {
-                connection.close()
+                if (!connection.isClosed) {
+                    connection.close()
+                }
             } catch (_: Throwable) {
             }
         }

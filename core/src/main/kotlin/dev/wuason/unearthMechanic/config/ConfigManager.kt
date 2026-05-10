@@ -570,6 +570,17 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
                 stageIndex = -2
             )
 
+            /*core.logger.info(
+                "[UM-TIMED-CFG] outcome loaded " +
+                        "generic=$genericId " +
+                        "stage=$stageKey " +
+                        "outcome=$outcomeKey " +
+                        "tools=${tools.map { it.getAdapterData() }} " +
+                        "fallback=${tools.isEmpty()} " +
+                        "successAdapter=${successStage.getAdapterData()} " +
+                        "successRemove=${successStage.isRemove()}"
+            )*/
+
             outcomes[outcomeKey.lowercase(Locale.ENGLISH)] = TimedSequenceOutcome(
                 id = outcomeKey.lowercase(Locale.ENGLISH),
                 tools = tools,
@@ -591,6 +602,16 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
             )
             return null
         }
+
+        /*core.logger.info(
+            "[UM-TIMED-CFG] loaded timed_interaction " +
+                    "generic=$genericId " +
+                    "stage=$stageKey " +
+                    "collectWindow=$collectWindowTicks " +
+                    "outcomes=${outcomes.map { (id, outcome) ->
+                        "$id tools=${outcome.tools.map { it.getAdapterData() }} fallback=${outcome.isFallback()} success=${outcome.successStage.getAdapterData()}"
+                    }}"
+        )*/
 
         return TimedSequenceInteraction(
             collectWindowTicks = collectWindowTicks,

@@ -208,14 +208,22 @@ class ItemsAdderImpl(
             if (!isPossibleFurnitureEntity(entity) || !entity.isValid || entity.isDead) continue
             if (entity.uniqueId != uuid) continue
 
-            val furniture = try { CustomFurniture.byAlreadySpawned(entity) } catch (_: Throwable) { null } ?: continue
+            val furniture = try {
+                CustomFurniture.byAlreadySpawned(entity)
+            } catch (_: Throwable) {
+                null
+            } ?: continue
 
-            //debug("removeFurnitureByUUID: removing uuid=${entity.uniqueId} id=${furniture.namespacedID} loc=$keyLoc")
+            rotationMap[keyLoc] = Pair(entity.location.yaw, entity.location.pitch)
+
+            if (entity is ItemFrame) {
+                itemFrameRotationMap[keyLoc] = entity.rotation
+            }
+
             furniture.remove(false)
             return true
         }
 
-        //debug("removeFurnitureByUUID: uuid=$uuid not found at $keyLoc")
         return false
     }
 
@@ -402,6 +410,38 @@ class ItemsAdderImpl(
         placeBlock(itemAdapterData.id, loc)
     }
 
+    fun tryReplaceFurnitureAt(loc: Location, targetAdapterId: String): Boolean {
+        val keyLoc = loc.block.location
+        val world = keyLoc.world ?: return false
+        val center = keyLoc.clone().add(0.5, 0.5, 0.5)
+
+        for (entity in world.getNearbyEntities(center, 1.5, 1.5, 1.5)) {
+            if (!isPossibleFurnitureEntity(entity) || !entity.isValid || entity.isDead) continue
+            if (entity.location.block.location != keyLoc) continue
+
+            val furniture = try {
+                CustomFurniture.byAlreadySpawned(entity)
+            } catch (_: Throwable) {
+                null
+            } ?: continue
+
+            rotationMap[keyLoc] = Pair(entity.location.yaw, entity.location.pitch)
+
+            if (entity is ItemFrame) {
+                itemFrameRotationMap[keyLoc] = entity.rotation
+            }
+
+            return try {
+                furniture.replaceFurniture(targetAdapterId.removePrefix("ia:"))
+                true
+            } catch (_: Throwable) {
+                false
+            }
+        }
+
+        return false
+    }
+
     private fun handleFurnitureStage(
         player: Player,
         itemAdapterData: AdapterData,
@@ -476,15 +516,17 @@ class ItemsAdderImpl(
             }, 5L)
         } else {
             // Sequence System
-            val rotation = rotationMap.remove(loc)
-            val cachedFrameRotation = itemFrameRotationMap[loc]
+            val keyLoc = loc.block.location
+            val rotation = rotationMap.remove(keyLoc)
+            val cachedFrameRotation = itemFrameRotationMap.remove(keyLoc)
 
             if(isRemoving(loc.block.location)){
                 if(!stageManager.activeSequences.contains(loc.block.location)){
                     clearRemoving(loc.block.location) }
                 return
             }
-            CustomFurniture.spawn(itemAdapterData.id, loc.block)?.let { customFurniture ->
+            val keyBlock = keyLoc.block
+            CustomFurniture.spawn(itemAdapterData.id, keyBlock)?.let { customFurniture ->
                 val entity: Entity = customFurniture.entity ?: return
                 //Bukkit.getConsoleSender().sendMessage("[IA] spawn Sequence $loc - adapter ${itemAdapterData.id}")
 
@@ -496,6 +538,74 @@ class ItemsAdderImpl(
         }
     }
 
+    private fun hardRemoveItemsAdderAt(loc: Location): Boolean {
+        val keyLoc = loc.block.location
+        var removed = false
+
+        // CustomBlock
+        try {
+            val customBlock = CustomBlock.byAlreadyPlaced(keyLoc.block)
+            if (customBlock != null) {
+                CustomBlock.remove(keyLoc)
+                removed = true
+            }
+        } catch (_: Throwable) {}
+
+        // CustomFurniture
+        val world = keyLoc.world ?: return removed
+        val center = keyLoc.clone().add(0.5, 0.5, 0.5)
+
+        for (entity in world.getNearbyEntities(center, 1.5, 1.5, 1.5)) {
+            if (!isPossibleFurnitureEntity(entity) || !entity.isValid || entity.isDead) continue
+            if (entity.location.block.location != keyLoc) continue
+
+            val furniture = try {
+                CustomFurniture.byAlreadySpawned(entity)
+            } catch (_: Throwable) {
+                null
+            } ?: continue
+
+            rotationMap[keyLoc] = Pair(entity.location.yaw, entity.location.pitch)
+
+            if (entity is ItemFrame) {
+                itemFrameRotationMap[keyLoc] = entity.rotation
+            }
+
+            try {
+                furniture.remove(false)
+            } catch (_: Throwable) {
+                entity.remove()
+            }
+
+            removed = true
+        }
+
+        if (removed) {
+            StageData.removeStageData(keyLoc)
+            setRemoving(keyLoc)
+
+            Bukkit.getScheduler().runTaskLater(core, Runnable {
+                if (!stageManager.activeSequences.contains(keyLoc)) {
+                    clearRemoving(keyLoc)
+                }
+            }, 2L)
+        }
+
+        return removed
+    }
+
+    override fun handleCrossCompatibilityRemoveBeforeTarget(
+        player: Player,
+        event: Event,
+        loc: Location,
+        toolUsed: ILiveTool,
+        generic: IGeneric,
+        stage: IStage,
+        targetCompatibility: ICompatibility
+    ): Boolean {
+        return hardRemoveItemsAdderAt(loc)
+    }
+
     override fun handleRemove(
         player: Player,
         event: Event,
@@ -504,9 +614,7 @@ class ItemsAdderImpl(
         generic: IGeneric,
         stage: IStage
     ) {
-        /*CustomFurniture.byAlreadySpawned(loc.block)?.entity?.let { entity ->
-            rotationMap[loc] = Pair(entity.location.yaw, entity.location.pitch)
-        }*/
+        if (hardRemoveItemsAdderAt(loc)) return
         if (event is CustomBlockInteractEvent) {
             breakBlock(loc)
             return
@@ -514,7 +622,12 @@ class ItemsAdderImpl(
         if (event is FurnitureInteractEvent) {
             event.bukkitEntity?.let { entity ->
                 if (isPossibleFurnitureEntity(entity)) {
-                    rotationMap[entity.location] = Pair(entity.location.yaw, entity.location.pitch)
+                    val key = entity.location.block.location
+                    rotationMap[key] = Pair(entity.location.yaw, entity.location.pitch)
+
+                    if (entity is ItemFrame) {
+                        itemFrameRotationMap[key] = entity.rotation
+                    }
                 }
             }
             setRemoving(event.bukkitEntity.location.block.location)
@@ -536,9 +649,20 @@ class ItemsAdderImpl(
             if (!isPossibleFurnitureEntity(entity) || !entity.isValid || entity.isDead) continue
             if (entity.location.block.location != loc.block.location) continue
 
-            val furniture = try { CustomFurniture.byAlreadySpawned(entity) } catch (_: Throwable) { null } ?: continue
+            val furniture = try {
+                CustomFurniture.byAlreadySpawned(entity)
+            } catch (_: Throwable) {
+                null
+            } ?: continue
 
-            //debug("handleRemove[Sequence]: removing entity=${entity.type} uuid=${entity.uniqueId} id=${furniture.namespacedID} loc=${loc.block.location}")
+            val key = loc.block.location
+
+            rotationMap[key] = Pair(entity.location.yaw, entity.location.pitch)
+
+            if (entity is ItemFrame) {
+                itemFrameRotationMap[key] = entity.rotation
+            }
+
             furniture.remove(false)
             removedAnyFurniture = true
         }

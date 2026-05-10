@@ -200,4 +200,16 @@ abstract class ICompatibility(
     ): Map<String, String> {
         return emptyMap()
     }
+
+    open fun handleCrossCompatibilityRemoveBeforeTarget(
+        player: Player,
+        event: Event,
+        loc: Location,
+        toolUsed: ILiveTool,
+        generic: IGeneric,
+        stage: IStage,
+        targetCompatibility: ICompatibility
+    ): Boolean {
+        return false
+    }
 }

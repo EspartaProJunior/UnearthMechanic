@@ -234,7 +234,7 @@ class CraftEngineImpl(
             return data
         }
 
-        private fun findCeDoubleBlockPropertyStatic(state: ImmutableBlockState): Property<*>? {
+        public fun findCeDoubleBlockPropertyStatic(state: ImmutableBlockState): Property<*>? {
             for (property in state.properties) {
                 if (property.valueClass() == DoubleBlockHalf::class.java) {
                     return property
@@ -243,7 +243,7 @@ class CraftEngineImpl(
             return null
         }
 
-        private fun removeCraftEngineDoubleBlockSilentStatic(
+        public fun removeCraftEngineDoubleBlockSilentStatic(
             loc: Location,
             state: ImmutableBlockState
         ) {
@@ -434,11 +434,20 @@ class CraftEngineImpl(
 
             val furniture = try {
                 CraftEngineFurniture.getLoadedFurnitureByMetaEntity(entity)
-            } catch (_: Throwable) { null } ?: continue
+            } catch (_: Throwable) {
+                null
+            } ?: continue
+
+            val key = fixedKey(keyLoc)
+
+            rotationMap[key] = Pair(entity.location.yaw, entity.location.pitch)
+
+            if (entity is ItemFrame) {
+                itemFrameRotationMap[key] = entity.rotation
+            }
 
             CraftEngineFurniture.remove(furniture.bukkitEntity())
 
-            // extra clean
             cleanupFurnitureEntitiesCE(keyLoc)
 
             return true
@@ -1086,7 +1095,7 @@ class CraftEngineImpl(
                     clearRemoving(loc.block.location) }
                 return
             }
-            CraftEngineFurniture.place(loc,
+            CraftEngineFurniture.place(key,
                 furnitureId,
                 anchor,
                 false)?.let { customFurniture ->
@@ -1143,11 +1152,21 @@ class CraftEngineImpl(
             if (!isPossibleFurnitureEntity(entity) || !entity.isValid || entity.isDead) continue
             if (entity.location.block.location != loc.block.location) continue
 
-            val furniture = CraftEngineFurniture.getLoadedFurnitureByMetaEntity(entity)
-            if (furniture != null && entity.isValid && !entity.isDead) {
-                CraftEngineFurniture.remove(entity)
-                removedAnyFurniture = true
+            val furniture = try {
+                CraftEngineFurniture.getLoadedFurnitureByMetaEntity(entity)
+            } catch (_: Throwable) {
+                null
+            } ?: continue
+
+            val key = fixedKey(loc.block.location)
+            rotationMap[key] = Pair(entity.location.yaw, entity.location.pitch)
+
+            if (entity is ItemFrame) {
+                itemFrameRotationMap[key] = entity.rotation
             }
+
+            CraftEngineFurniture.remove(furniture.bukkitEntity())
+            removedAnyFurniture = true
         }
         if (!removedAnyFurniture && loc.block.type != org.bukkit.Material.AIR) {
             //debug("handleRemove[Sequence]: no furniture found, breakBlock fallback loc=${loc.block.location}")
@@ -1236,4 +1255,76 @@ class CraftEngineImpl(
             emptyMap()
         }
     }
+
+    private fun removeCraftEngineDoubleBlockSilent(
+        loc: Location,
+        state: ImmutableBlockState
+    ) {
+        val doubleProp = findCeDoubleBlockProperty(state)
+
+        if (doubleProp == null) {
+            loc.block.setType(Material.AIR, false)
+            return
+        }
+
+        val half = state.get(doubleProp) as DoubleBlockHalf
+
+        val lowerLoc = when (half) {
+            DoubleBlockHalf.UPPER -> loc.clone().add(0.0, -1.0, 0.0)
+            DoubleBlockHalf.LOWER -> loc.clone()
+        }
+
+        val upperLoc = lowerLoc.clone().add(0.0, 1.0, 0.0)
+
+        upperLoc.block.setType(Material.AIR, false)
+        lowerLoc.block.setType(Material.AIR, false)
+    }
+
+    private fun findCeDoubleBlockProperty(state: ImmutableBlockState): Property<*>? {
+        for (property in state.properties) {
+            if (property.valueClass() == DoubleBlockHalf::class.java) {
+                return property
+            }
+        }
+
+        return null
+    }
+
+    override fun handleCrossCompatibilityRemoveBeforeTarget(
+        player: Player,
+        event: Event,
+        loc: Location,
+        toolUsed: ILiveTool,
+        generic: IGeneric,
+        stage: IStage,
+        targetCompatibility: ICompatibility
+    ): Boolean {
+        val targetAdapterType = targetCompatibility.adapterComp()?.type?.lowercase(Locale.ENGLISH)
+
+        // CE block/furniture -> Minecraft block:
+        if (
+            targetAdapterType == "vanilla" ||
+            targetAdapterType == "minecraft"
+        ) {
+            return false
+        }
+
+        return try {
+            val state = when (event) {
+                is CustomBlockInteractEvent -> event.blockState()
+                else -> CraftEngineBlocks.getCustomBlockState(loc.block.blockData)
+            } ?: return false
+
+            removeCraftEngineDoubleBlockSilent(loc, state)
+
+            StageData.removeStageData(loc)
+            StageData.removeStageData(loc.clone().add(0.0, 1.0, 0.0))
+            StageData.removeStageData(loc.clone().add(0.0, -1.0, 0.0))
+
+            true
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
 }
