@@ -162,27 +162,72 @@ abstract class ICompatibility(
      */
     open fun isValidUUID(loc: Location, expectedAdapterId: String?, expectedUuid: UUID?): Boolean = false
 
+    /**
+     * Checks if the current block or furniture at the given location matches the expected adapter ID.
+     *
+     * This method validates both furniture and block targets using the compatibility implementation.
+     *
+     * @param loc The location to validate.
+     * @param expectedAdapterId The expected adapter ID to compare against.
+     * @return true if either the furniture or block at the location is valid, false otherwise.
+     */
     open fun isValid(loc: Location, expectedAdapterId: String?): Boolean {
         return isValidFurniture(loc, expectedAdapterId) || isValidBlock(loc, expectedAdapterId)
     }
 
+    /**
+     * Checks if the furniture at the given location matches the expected adapter ID.
+     *
+     * @param loc The location to check.
+     * @param expectedAdapterId The expected furniture adapter ID.
+     * @return true if the furniture matches the expected adapter ID, false otherwise.
+     */
     open fun isValidFurniture(loc: Location, expectedAdapterId: String?): Boolean = false
+    /**
+     * Checks if the block at the given location matches the expected adapter ID.
+     *
+     * @param loc The location to check.
+     * @param expectedAdapterId The expected block adapter ID.
+     * @return true if the block matches the expected adapter ID, false otherwise.
+     */
     open fun isValidBlock(loc: Location, expectedAdapterId: String?): Boolean = false
 
+    /**
+     * Removes a furniture entity at the given location using its UUID when supported.
+     *
+     * This is useful when the compatibility layer needs to remove a specific furniture entity
+     * instead of removing any furniture found at the location.
+     *
+     * @param loc The location where the furniture should be removed.
+     * @param uuid The UUID of the furniture entity to remove, or null if unavailable.
+     * @return true if the furniture was removed successfully, false otherwise.
+     */
     open fun removeFurnitureByUUID(loc: Location, uuid: UUID?): Boolean = false
 
     /**
-     * Indicates if the current given UUID is in the process of being removed (e.g., a furniture entity).
+     * Indicates if the target at the given location is currently being removed.
+     *
+     * This prevents duplicate removal operations while a compatibility implementation
+     * is already processing the same location.
+     *
+     * @param location The location to check.
+     * @return true if the location is currently marked as removing, false otherwise.
      */
     abstract fun isRemoving(location: Location): Boolean
 
     /**
-     * Marks the given UUID as being removed, to prevent duplicate removal operations.
+     * Marks the target at the given location as being removed.
+     *
+     * This is used to prevent duplicate removal operations during transformations.
+     *
+     * @param location The location to mark as removing.
      */
     abstract fun setRemoving(location: Location)
 
     /**
-     * Clears the removing mark for the given UUID after removal has completed.
+     * Clears the removing mark for the given location after the removal has completed.
+     *
+     * @param location The location whose removing mark should be cleared.
      */
     abstract fun clearRemoving(location: Location)
 
@@ -194,6 +239,16 @@ abstract class ICompatibility(
      */
     abstract fun getFurnitureUUID(location: Location): UUID?
 
+    /**
+     * Retrieves the current block properties from the event context.
+     *
+     * This can be used to preserve compatibility-specific block data such as facing,
+     * axis, rotation, or other placement properties before applying a transformation.
+     *
+     * @param event The event from which the block properties may be extracted.
+     * @param loc The location of the current block.
+     * @return a map containing the current block properties, or an empty map if unavailable.
+     */
     open fun getCurrentBlockPropsFromEvent(
         event: Event,
         loc: Location
@@ -201,6 +256,38 @@ abstract class ICompatibility(
         return emptyMap()
     }
 
+    /**
+     * Retrieves the current adapter data present at the given location.
+     *
+     * This can be used when the compatibility layer needs to detect the active block
+     * or furniture before deciding how to transform or remove it.
+     *
+     * @param event The event related to the current interaction.
+     * @param loc The location to inspect.
+     * @return the current AdapterData at the location, or null if none is available.
+     */
+    open fun getCurrentAdapterDataAt(
+        event: Event,
+        loc: Location
+    ): AdapterData? {
+        return null
+    }
+
+    /**
+     * Handles a cross-compatibility remove operation before placing or applying the target transformation.
+     *
+     * This allows one compatibility implementation to remove its own block or furniture before
+     * another compatibility implementation places the new target.
+     *
+     * @param player The player involved in the event.
+     * @param event The event that triggered the transformation.
+     * @param loc The location where the target is being transformed.
+     * @param toolUsed The tool used by the player.
+     * @param generic The generic configuration being processed.
+     * @param stage The current stage being applied.
+     * @param targetCompatibility The compatibility that will handle the target transformation.
+     * @return true if the cross-compatibility remove was handled, false otherwise.
+     */
     open fun handleCrossCompatibilityRemoveBeforeTarget(
         player: Player,
         event: Event,
@@ -211,5 +298,26 @@ abstract class ICompatibility(
         targetCompatibility: ICompatibility
     ): Boolean {
         return false
+    }
+
+    /**
+     * Places the new furniture first and then removes the old furniture when supported.
+     *
+     * This can reduce visual flickering during furniture transformations by avoiding
+     * a remove-then-place gap between both operations.
+     *
+     * @param loc The location where the furniture transformation occurs.
+     * @param currentAdapterId The adapter ID of the currently placed furniture.
+     * @param targetAdapterId The adapter ID of the furniture that should be placed.
+     * @param oldUuid The UUID of the old furniture entity, or null if unavailable.
+     * @return the UUID of the newly placed furniture, or null if the operation is not supported.
+     */
+    open fun placeNewFurnitureThenRemoveOld(
+        loc: Location,
+        currentAdapterId: String,
+        targetAdapterId: String,
+        oldUuid: UUID?
+    ): UUID? {
+        return null
     }
 }

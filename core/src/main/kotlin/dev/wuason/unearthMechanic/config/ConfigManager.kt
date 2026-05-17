@@ -181,7 +181,9 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
                             listOf<Sound>(),
                             0,
                             false,
-                            emptyList<IStageCommand>()
+                            emptyList<IStageCommand>(),
+                            0,
+                            0.0f
                         ) as Stage
 
                         val generic: IGeneric = constructor.newInstance(cid, normalTools.toSet(),
@@ -310,6 +312,9 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
         val delay: Long = sectionStage.getLong("delay", 0)
         val toolAnimDelay = sectionStage.getBoolean("tool_anim_on_delay", false)
 
+        val foodAdd: Int = sectionStage.getInt("food_add", 0)
+        val saturationAdd: Float = sectionStage.getDouble("saturation_add", 0.0).toFloat()
+
         val items: List<Item> = sectionStage.getStringList("items_add", emptyList()).mapNotNull {
             try {
                 val split = it.split(";")
@@ -362,7 +367,9 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
             sounds,
             delay,
             toolAnimDelay,
-            executeCommands
+            executeCommands,
+            foodAdd,
+            saturationAdd
         ) as Stage
 
         val rawTargetId = sectionStage.getString("${stageType.getRoute()}_id")

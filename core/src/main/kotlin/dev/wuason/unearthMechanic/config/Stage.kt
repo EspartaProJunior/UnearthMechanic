@@ -18,7 +18,8 @@ open class Stage(
     private val reduceItemHand: Int, private val items: List<Item>, private val onlyOneItem: Boolean,
     private val sounds: List<Sound>,
     private val delay: Long, private val toolAnimDelay: Boolean,
-    private val executeCommands: List<IStageCommand>
+    private val executeCommands: List<IStageCommand>,
+    private val foodAdd: Int = 0, private val saturationAdd: Float = 0.0f
 ) : IStage {
 
     private var randomStageOptions: List<RandomStageOption> = emptyList()
@@ -67,7 +68,9 @@ open class Stage(
             sounds,
             delay,
             toolAnimDelay,
-            executeCommands
+            executeCommands,
+            foodAdd,
+            saturationAdd
         ) as Stage
 
         resolved.setExplicitBlockProperties(getExplicitBlockProperties())
@@ -276,7 +279,9 @@ open class Stage(
             sounds,
             delay,
             toolAnimDelay,
-            executeCommands
+            executeCommands,
+            foodAdd,
+            saturationAdd
         ) as Stage
 
         copy.setExplicitBlockProperties(getExplicitBlockProperties())
@@ -337,5 +342,13 @@ open class Stage(
         return regionConditions.all { condition ->
             condition.matches(currentRegions)
         }
+    }
+
+    override fun getFoodAdd(): Int {
+        return foodAdd
+    }
+
+    override fun getSaturationAdd(): Float {
+        return saturationAdd
     }
 }

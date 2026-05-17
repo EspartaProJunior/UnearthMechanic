@@ -32,5 +32,13 @@ interface ILiveTool {
      */
     fun isValid(): Boolean
 
+    /**
+     * Checks if the current item still matches the original item detected when this live tool was created.
+     *
+     * This is useful to prevent applying tool effects after the player has changed,
+     * replaced, or consumed the item during the same interaction flow.
+     *
+     * @return true if the current item is still the original item, false otherwise.
+     */
     fun isOriginalItem(): Boolean
 }

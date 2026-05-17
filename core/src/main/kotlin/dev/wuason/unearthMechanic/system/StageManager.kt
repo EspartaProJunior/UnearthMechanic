@@ -14,7 +14,6 @@ import dev.wuason.unearthMechanic.system.animations.IAnimationManager
 import dev.wuason.unearthMechanic.system.compatibilities.ICompatibility
 import dev.wuason.unearthMechanic.system.compatibilities.MinecraftImpl
 import dev.wuason.unearthMechanic.system.compatibilities.ce.CraftEngineImpl
-import dev.wuason.unearthMechanic.system.compatibilities.crucible.CrucibleBridgeImpl
 import dev.wuason.unearthMechanic.system.compatibilities.crucible.MythicCrucibleImpl
 import dev.wuason.unearthMechanic.system.compatibilities.ia.ItemsAdderImpl
 import dev.wuason.unearthMechanic.system.compatibilities.nexo.NexoImpl
@@ -22,6 +21,8 @@ import dev.wuason.unearthMechanic.system.compatibilities.or.OraxenImpl
 import dev.wuason.unearthMechanic.system.features.BasicFeatures
 import dev.wuason.unearthMechanic.system.features.DurabilityFeature
 import dev.wuason.unearthMechanic.system.features.Features
+import dev.wuason.unearthMechanic.system.features.FoodFeature
+import dev.wuason.unearthMechanic.system.features.SwingHandFeature
 import dev.wuason.unearthMechanic.system.features.TintFurnitureFeature
 import dev.wuason.unearthMechanic.system.features.ToolSoundFeature
 import dev.wuason.unearthMechanic.utils.Utils
@@ -37,9 +38,6 @@ import org.bukkit.event.Event
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.block.Action
-import org.bukkit.event.block.BlockBreakEvent
-import org.bukkit.event.block.BlockDamageEvent
-import org.bukkit.event.entity.EntityDamageByEntityEvent
 import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.scheduler.BukkitTask
@@ -55,8 +53,12 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
             Features.registerFeature(DurabilityFeature())
             Features.registerFeature(ToolSoundFeature())
             Features.registerFeature(TintFurnitureFeature())
+            Features.registerFeature(FoodFeature())
+            Features.registerFeature(SwingHandFeature())
         }
     }
+
+    private val debugTimedSequence = false
 
     private val compatibilitiesLoaded: MutableList<ICompatibility> = ArrayList()
 
@@ -122,10 +124,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
         }?.let { compatibilitiesLoaded.add(it) }
 
         compCreator("MythicCrucible") { pluginName ->
-            MythicCrucibleImpl(
-                pluginName, core, this, Adapter.getAdapterByName(pluginName),
-                CrucibleBridgeImpl()
-            )
+            MythicCrucibleImpl(pluginName, core, this, Adapter.getAdapterByName(pluginName))
         }?.let { compatibilitiesLoaded.add(it) }
 
         compatibilitiesLoaded.forEach { compatibility ->
@@ -147,8 +146,6 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
             emptyMap()
         }
     }
-
-    private val debugTimedSequence = false
 
     private fun dbgTimed(message: String) {
         if (debugTimedSequence) {
@@ -188,9 +185,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
         val keyLoc = sequenceKey(location)
 
         if (isTransitioning(keyLoc)) {
-            if (event is Cancellable) {
-                event.isCancelled = true
-            }
+            (event as? Cancellable)?.isCancelled = true
             return
         }
 
@@ -327,23 +322,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
         stageData: StageData,
         core: UnearthMechanic
     ): Boolean {
-        val generic = stageData.getGeneric()
-
-        return hasUnearthBypass(player)
-                || generic.isNotProtect()
-                || (
-                !WorldGuardPlugin.isWorldGuardEnabled()
-                        && core.getAntiGriefLib().test(player, Flag.INTERACT, location)
-                        && core.getAntiGriefLib().test(player, Flag.BREAK, location)
-                        && core.getAntiGriefLib().test(player, Flag.PLACE, location)
-                )
-                || (
-                WorldGuardPlugin.isWorldGuardEnabled()
-                        && core.getAntiGriefLib().test(player, Flag.INTERACT, location)
-                        && core.getAntiGriefLib().test(player, Flag.BREAK, location)
-                        && core.getAntiGriefLib().test(player, Flag.PLACE, location)
-                        && core.getWorldGuardComp().canInteractCustom(player, location)
-                )
+        return canUseUnearthInteraction(player, location, stageData.getGeneric())
     }
 
     private fun interactNotExist(
@@ -406,6 +385,14 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
         generic: IGeneric,
         core: UnearthMechanic
     ): Boolean {
+        return canUseUnearthInteraction(player, location, generic)
+    }
+    /*fun canInteractNotExist(
+        player: Player,
+        location: Location,
+        generic: IGeneric,
+        core: UnearthMechanic
+    ): Boolean {
         return hasUnearthBypass(player)
                 || generic.isNotProtect()
                 || (
@@ -421,7 +408,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                         && core.getAntiGriefLib().test(player, Flag.PLACE, location)
                         && core.getWorldGuardComp().canInteractCustom(player, location)
                 )
-    }
+    }*/
 
     private fun onPreApplyStage(
         player: Player,
@@ -532,6 +519,29 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                 }
             } catch (ex: Exception) {
                 core.logger.warning("Error executing stage command '${stageCommand.getCommand()}': ${ex.message}")
+            }
+        }
+    }
+
+    private fun runStageExtras(
+        player: Player,
+        loc: Location,
+        stage: Stage
+    ) {
+        stage.getSounds().forEach { sound ->
+            val task = Runnable {
+                loc.world?.playSound(
+                    loc.clone().add(0.5, 0.5, 0.5),
+                    sound.soundId,
+                    sound.volume,
+                    sound.pitch
+                )
+            }
+
+            if (sound.delay > 0) {
+                Bukkit.getScheduler().runTaskLater(core, task, sound.delay)
+            } else {
+                task.run()
             }
         }
     }
@@ -701,17 +711,61 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
             }
         }
 
+        runStageExtras(player, loc, resolvedStage)
         executeStageCommands(player, resolvedStage)
         //core.logger.info("[UM-DBG] APPLY stageAdapter=${resolvedStage.getAdapterData()}")
         resolvedStage.getAdapterData()?.let {
             if (isSimilarCompatibility(it, compatibility)) {
-                if (!isCurrentObjectValid(compatibility, loc, generic, currentStageData)) {
-                    compatibility.handleRemove(player, event, loc, toolUsed, generic, resolvedStage)
-                    //Bukkit.getConsoleSender().sendMessage("[UM] handleRemove aplicado para $furnitureUuid en $currentTick miwebo")
-                }
-
                 //Bukkit.getConsoleSender().sendMessage("[UM] handleStage aplicado para $furnitureUuid en $currentTick")
                 //Bukkit.getConsoleSender().sendMessage("[UM] handleStage aplicado para ${stage.getAdapterData()?.adapter?.type}:${stage.getAdapterData()?.id} en ${Bukkit.getCurrentTick()}")
+                val currentAdapterData = currentStageData?.getActualAdapterData()
+                    ?: generic.getBaseStage().getAdapterData()
+
+                val currentAdapterId = currentAdapterData?.id
+                val currentExpectedStage = currentAdapterData?.let { adapter ->
+                    generic.getStagesAdapterData()[adapter] as? Stage
+                } ?: generic.getBaseStage()
+
+                if (
+                    currentExpectedStage is IFurnitureStage &&
+                    resolvedStage is IFurnitureStage &&
+                    currentAdapterId != null &&
+                    isCurrentObjectValid(compatibility, loc, generic, currentStageData)
+                ) {
+                    val oldUuid = compatibility.getFurnitureUUID(loc.block.location)
+
+                    if (oldUuid != null) {
+                        val newUuid = compatibility.placeNewFurnitureThenRemoveOld(
+                            loc = loc.block.location,
+                            currentAdapterId = currentAdapterId,
+                            targetAdapterId = it.id,
+                            oldUuid = oldUuid
+                        )
+
+                        if (newUuid != null) {
+                            lockTransition(loc.block.location, 3L)
+
+                            if (resolvedStage.getSequenceStages()?.isNotEmpty() == true) {
+                                activeSequenceUuids[loc.block.location] = newUuid
+
+                                Bukkit.getScheduler().runTaskLater(core, Runnable {
+                                    handleSequence(player, compatibility, loc, toolUsed, generic, resolvedStage)
+                                }, 2L)
+                            }
+
+                            // We skip handleStage because we've already set up the new furniture
+                            return@let
+                        }
+                    }
+                }
+
+                if (!isCurrentObjectValid(compatibility, loc, generic, currentStageData)) {
+                    compatibility.handleRemove(player, event, loc, toolUsed, generic, resolvedStage)
+                }
+
+                if (resolvedStage is IFurnitureStage) {
+                    lockTransition(loc.block.location, 6L)
+                }
                 compatibility.handleStage(player, it, event, loc, toolUsed, generic, resolvedStage)
 
                 if (resolvedStage.getSequenceStages()?.isNotEmpty() == true) {
@@ -752,7 +806,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                     }
                 // remove the current compatibility
                 if (!removedBySourceCompatibility) {
-                    if (c is MinecraftImpl && compatibility.adapterComp()?.type.equals("ItemsAdder", ignoreCase = true)) {
+                    if (c is MinecraftImpl && compatibility.adapterComp().type.equals("ItemsAdder", ignoreCase = true)) {
                         compatibility.handleRemove(player, event, loc, toolUsed, generic, resolvedStage)
                     } else {
                         c.handleRemove(player, event, loc, toolUsed, generic, resolvedStage)
@@ -760,6 +814,9 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                 }
 
                 // place with destination compatibility
+                if (resolvedStage is IFurnitureStage) {
+                    lockTransition(loc.block.location, 6L)
+                }
                 c.handleStage(player, it, event, loc, toolUsed, generic, resolvedStage)
 
                 if (resolvedStage.getSequenceStages()?.isNotEmpty() == true) {
@@ -841,77 +898,6 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
         return "${world?.name}:${blockX},${blockY},${blockZ}"
     }
 
-    private fun hasUnearthBypass(player: Player): Boolean {
-        return player.isOp
-                || (LuckPermsPlugin.isLuckPermsEnabled()
-                && core.getLuckPermsComb().hasPermission(player, "unearthMechanic.bypass"))
-                || player.hasPermission("unearthMechanic.bypass")
-    }
-
-    private fun canModifyAt(player: Player, location: Location, generic: IGeneric? = null): Boolean {
-        val keyLoc = sequenceKey(location)
-
-        if (hasUnearthBypass(player)) {
-            dbgTimed(
-                "canModifyAt ALLOW bypass " +
-                        "player=${player.name} " +
-                        "loc=${keyLoc.toShortString()}"
-            )
-            return true
-        }
-
-        if (generic?.isNotProtect() == true && !isSequenceLocked(location)) {
-            dbgTimed(
-                "canModifyAt ALLOW notProtect and not locked " +
-                        "player=${player.name} " +
-                        "loc=${keyLoc.toShortString()} " +
-                        "generic=${generic.getId()}"
-            )
-            return true
-        }
-
-        val canBreak = core.getAntiGriefLib().test(player, Flag.BREAK, keyLoc)
-        val canPlace = core.getAntiGriefLib().test(player, Flag.PLACE, keyLoc)
-
-        val result = if (WorldGuardPlugin.isWorldGuardEnabled()) {
-            val wgCustom = core.getWorldGuardComp().canInteractCustom(player, keyLoc)
-
-            dbgTimed(
-                "canModifyAt CHECK WorldGuard " +
-                        "player=${player.name} " +
-                        "loc=${keyLoc.toShortString()} " +
-                        "canBreak=$canBreak " +
-                        "canPlace=$canPlace " +
-                        "wgCustom=$wgCustom " +
-                        "generic=${generic?.getId()} " +
-                        "locked=${isSequenceLocked(keyLoc)}"
-            )
-
-            canBreak && canPlace && wgCustom
-        } else {
-            dbgTimed(
-                "canModifyAt CHECK AntiGrief " +
-                        "player=${player.name} " +
-                        "loc=${keyLoc.toShortString()} " +
-                        "canBreak=$canBreak " +
-                        "canPlace=$canPlace " +
-                        "generic=${generic?.getId()} " +
-                        "locked=${isSequenceLocked(keyLoc)}"
-            )
-
-            canBreak && canPlace
-        }
-
-        dbgTimed(
-            "canModifyAt RESULT " +
-                    "player=${player.name} " +
-                    "loc=${keyLoc.toShortString()} " +
-                    "result=$result"
-        )
-
-        return result
-    }
-
     private fun transitionArea(loc: Location): List<Location> {
         val base = sequenceKey(loc)
         val world = base.world ?: return listOf(base)
@@ -951,31 +937,6 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                 }
             }
         }, ticks + 1L)
-    }
-
-    private fun isSequenceLocked(location: Location): Boolean {
-        val keyLoc = sequenceKey(location)
-
-        return isTransitioning(keyLoc)
-                || activeSequences.contains(keyLoc)
-                || startingSequences.contains(keyLoc)
-                || activeTimedSequences.containsKey(keyLoc)
-                || consumingTimedSequences.contains(keyLoc)
-    }
-
-    private fun isTransitioningNearby(loc: Location): Boolean {
-        val base = sequenceKey(loc)
-
-        for (x in -1..1) {
-            for (y in -2..2) {
-                for (z in -1..1) {
-                    val check = base.clone().add(x.toDouble(), y.toDouble(), z.toDouble())
-                    if (isTransitioning(check)) return true
-                }
-            }
-        }
-
-        return false
     }
 
     private fun finishSequenceStepIfNeeded(
@@ -1128,7 +1089,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
             "handleSequence ENTER " +
                     "player=${player.name} " +
                     "loc=${keyLoc.toShortString()} " +
-                    "comp=${compatibility.adapterComp()?.type} " +
+                    "comp=${compatibility.adapterComp().type} " +
                     "generic=${generic.getId()} " +
                     "stage=${stage.getStage()} " +
                     "stageAdapter=${stage.getAdapterData()} " +
@@ -1174,8 +1135,11 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
         sequenceStages.forEach { (delayTicks, sequenceStage) ->
 
             val previewResolvedStage = sequenceStage.resolveStage()
+            val previewHasObjectChange =
+                previewResolvedStage.getAdapterData() != null || previewResolvedStage.isRemove()
+
             val previewIsFurnitureTransition =
-                stage is IFurnitureStage || previewResolvedStage is IFurnitureStage
+                previewHasObjectChange && (stage is IFurnitureStage || previewResolvedStage is IFurnitureStage)
 
             if (previewIsFurnitureTransition) {
                 val preLockDelay = (delayTicks - 1L).coerceAtLeast(0L)
@@ -1216,6 +1180,64 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                 Bukkit.getConsoleSender().sendMessage("[UM] ñññ "
                         +compatibility.isValidUUID(loc,stage.getAdapterData()?.id,activeSequenceUuids[loc])
                 )*/
+                val fakeEvent = FakePlayerInteractEvent(
+                    player,
+                    keyLoc.block,
+                    player.inventory.itemInMainHand,
+                    EquipmentSlot.HAND
+                )
+
+                val resolvedSequenceStage = sequenceStage.resolveStage()
+
+                val hasObjectChange =
+                    resolvedSequenceStage.getAdapterData() != null || resolvedSequenceStage.isRemove()
+
+                if (!hasObjectChange) {
+                    dbgTimed(
+                        "sequence effects-only stage " +
+                                "loc=${keyLoc.toShortString()} " +
+                                "delay=$delayTicks " +
+                                "sounds=${resolvedSequenceStage.getSounds().size} " +
+                                "items=${resolvedSequenceStage.getItems().size} " +
+                                "drops=${resolvedSequenceStage.getDrops().size} " +
+                                "commands=${resolvedSequenceStage.getExecuteCommands().size}"
+                    )
+
+                    runPreApplyFeaturesForStage(
+                        player,
+                        compatibility,
+                        fakeEvent,
+                        keyLoc,
+                        toolUsed,
+                        generic,
+                        resolvedSequenceStage
+                    )
+
+                    runApplyFeaturesForStage(
+                        player,
+                        compatibility,
+                        fakeEvent,
+                        keyLoc,
+                        toolUsed,
+                        generic,
+                        resolvedSequenceStage
+                    )
+
+                    runStageExtras(player, keyLoc, resolvedSequenceStage)
+                    executeStageCommands(player, resolvedSequenceStage)
+
+                    finishSequenceStepIfNeeded(
+                        delayTicks,
+                        sequenceStages,
+                        stage,
+                        generic,
+                        keyLoc,
+                        compatibility
+                    )
+
+                    return@Runnable
+                }
+
                 val prevStage = lastSequenceStageByLoc[keyLoc]
                 val expectedId = prevStage?.getAdapterData()?.id ?: stage.getAdapterData()?.id
 
@@ -1231,7 +1253,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                                 "prevStage=${prevStage?.getAdapterData()} " +
                                 "expectedId=$expectedId " +
                                 "prevStageType=${prevStage?.javaClass?.simpleName} " +
-                                "comp=${compatibility.adapterComp()?.type} " +
+                                "comp=${compatibility.adapterComp().type} " +
                                 "currentUuid=${compatibility.getFurnitureUUID(keyLoc)} " +
                                 "expectedUuid=${activeSequenceUuids[keyLoc]}"
                     )
@@ -1283,13 +1305,6 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                 //val adapterId = sequenceStage.getAdapterData()?.let { "${it.adapter?.type}:${it.id}" } ?: "null"
                 //Bukkit.getConsoleSender().sendMessage("[UM] Ejecutando sequence del stage ${stage.getStage()} con delay $delayTicks ticks para furniture $adapterId")
 
-                val fakeEvent = FakePlayerInteractEvent(player, keyLoc.block, player.inventory.itemInMainHand, EquipmentSlot.HAND)
-
-                val resolvedSequenceStage = sequenceStage.resolveStage()
-
-                val isFurnitureTransition =
-                    prevStage is IFurnitureStage || resolvedSequenceStage is IFurnitureStage
-
                 dbgTimed(
                     "sequence removing previous object " +
                             "loc=${keyLoc.toShortString()} " +
@@ -1301,21 +1316,23 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                 if (prevStage is IFurnitureStage) {
                     val oldUuid = activeSequenceUuids[keyLoc]
                     val targetAdapter = resolvedSequenceStage.getAdapterData()
+                    val currentAdapterId = expectedId
 
                     if (
                         resolvedSequenceStage is IFurnitureStage &&
-                        compatibility is ItemsAdderImpl &&
-                        targetAdapter != null
+                        targetAdapter != null &&
+                        currentAdapterId != null &&
+                        isSimilarCompatibility(targetAdapter, compatibility)
                     ) {
-                        val replaced = compatibility.tryReplaceFurnitureAt(keyLoc, targetAdapter.id)
+                        val newUuid = compatibility.placeNewFurnitureThenRemoveOld(
+                            loc = keyLoc,
+                            currentAdapterId = currentAdapterId,
+                            targetAdapterId = targetAdapter.id,
+                            oldUuid = oldUuid
+                        )
 
-                        if (replaced) {
-                            dbgTimed(
-                                "sequence furniture transition REPLACE INLINE " +
-                                        "loc=${keyLoc.toShortString()} " +
-                                        "oldUuid=$oldUuid " +
-                                        "nextStage=${resolvedSequenceStage.getAdapterData()}"
-                            )
+                        if (newUuid != null) {
+                            lockTransition(keyLoc, 3L)
 
                             runPreApplyFeaturesForStage(
                                 player,
@@ -1337,7 +1354,11 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                                 resolvedSequenceStage
                             )
 
+                            runStageExtras(player, keyLoc, resolvedSequenceStage)
+                            executeStageCommands(player, resolvedSequenceStage)
+
                             lastSequenceStageByLoc[keyLoc] = resolvedSequenceStage
+                            activeSequenceUuids[keyLoc] = newUuid
 
                             registerTimedSequenceIfNeeded(
                                 compatibility,
@@ -1347,55 +1368,64 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                                 resolvedSequenceStage
                             )
 
-                            executeStageCommands(player, resolvedSequenceStage)
-
-                            Bukkit.getScheduler().runTaskLater(core, Runnable {
-                                compatibility.getFurnitureUUID(keyLoc)?.let { uuid ->
-                                    activeSequenceUuids[keyLoc] = uuid
-                                }
-
-                                finishSequenceStepIfNeeded(
-                                    delayTicks,
-                                    sequenceStages,
-                                    stage,
-                                    generic,
-                                    keyLoc,
-                                    compatibility
-                                )
-                            }, 1L)
+                            finishSequenceStepIfNeeded(
+                                delayTicks,
+                                sequenceStages,
+                                stage,
+                                generic,
+                                keyLoc,
+                                compatibility
+                            )
 
                             return@Runnable
                         }
                     }
 
-                    val removed = compatibility.removeFurnitureByUUID(keyLoc, oldUuid)
+                    lockTransition(keyLoc, 6L)
 
-                    dbgTimed(
-                        "sequence removeFurnitureByUUID result " +
-                                "loc=${keyLoc.toShortString()} " +
-                                "removed=$removed " +
-                                "uuid=$oldUuid " +
-                                "currentAfterRemove=${compatibility.getFurnitureUUID(keyLoc)}"
-                    )
+                    val removed = compatibility.removeFurnitureByUUID(keyLoc, oldUuid)
 
                     if (!removed) {
                         compatibility.handleRemove(player, fakeEvent, keyLoc, toolUsed, generic, prevStage)
                     }
 
-                    scheduleFurnitureApplyWhenCleared(
-                        player = player,
-                        compatibility = compatibility,
-                        fakeEvent = fakeEvent,
-                        keyLoc = keyLoc,
-                        toolUsed = toolUsed,
-                        generic = generic,
-                        resolvedSequenceStage = resolvedSequenceStage,
-                        oldUuid = oldUuid,
-                        delayTicks = delayTicks,
-                        sequenceStages = sequenceStages,
-                        stage = stage,
-                        attemptsLeft = 5
-                    )
+                    val stillSameFurniture = oldUuid != null && compatibility.getFurnitureUUID(keyLoc) == oldUuid
+
+                    if (stillSameFurniture) {
+                        scheduleFurnitureApplyWhenCleared(
+                            player = player,
+                            compatibility = compatibility,
+                            fakeEvent = fakeEvent,
+                            keyLoc = keyLoc,
+                            toolUsed = toolUsed,
+                            generic = generic,
+                            resolvedSequenceStage = resolvedSequenceStage,
+                            oldUuid = oldUuid,
+                            delayTicks = delayTicks,
+                            sequenceStages = sequenceStages,
+                            stage = stage,
+                            attemptsLeft = 5
+                        )
+                    } else {
+                        applySequenceStep(
+                            player,
+                            compatibility,
+                            fakeEvent,
+                            keyLoc,
+                            toolUsed,
+                            generic,
+                            resolvedSequenceStage
+                        )
+
+                        finishSequenceStepIfNeeded(
+                            delayTicks,
+                            sequenceStages,
+                            stage,
+                            generic,
+                            keyLoc,
+                            compatibility
+                        )
+                    }
 
                     return@Runnable
                 }
@@ -1464,7 +1494,8 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
         loc: Location,
         toolUsed: LiveTool,
         generic: IGeneric,
-        stage: Stage
+        stage: Stage,
+        executeExtras: Boolean = true
     ) {
         val keyLoc = sequenceKey(loc)
 
@@ -1505,7 +1536,10 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
             runPreApplyFeaturesForStage(player, compatibility, event, keyLoc, toolUsed, generic, resolvedStage)
             runApplyFeaturesForStage(player, compatibility, event, keyLoc, toolUsed, generic, resolvedStage)
 
-            executeStageCommands(player, resolvedStage)
+            if (executeExtras) {
+                runStageExtras(player, keyLoc, resolvedStage)
+                executeStageCommands(player, resolvedStage)
+            }
 
             if (resolvedStage.isRemove()) {
                 compatibility.handleRemove(player, event, keyLoc, toolUsed, generic, resolvedStage)
@@ -1522,9 +1556,16 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                 runPreApplyFeaturesForStage(player, compatibility, event, keyLoc, toolUsed, generic, resolvedStage)
                 runApplyFeaturesForStage(player, compatibility, event, keyLoc, toolUsed, generic, resolvedStage)
 
+                if (resolvedStage is IFurnitureStage) {
+                    lockTransition(keyLoc, 6L)
+                }
+
                 compatibility.handleSequenceStage(player, adapterData, event, keyLoc, toolUsed, generic, resolvedStage)
 
-                executeStageCommands(player, resolvedStage)
+                if (executeExtras) {
+                    runStageExtras(player, keyLoc, resolvedStage)
+                    executeStageCommands(player, resolvedStage)
+                }
                 lastSequenceStageByLoc[keyLoc] = resolvedStage
 
                 registerTimedSequenceIfNeeded(
@@ -1554,7 +1595,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                                 "previousUuid=$previousUuid " +
                                 "newUuid=$newUuid " +
                                 "stage=${resolvedStage.getAdapterData()} " +
-                                "comp=${compatibility.adapterComp()?.type}"
+                                "comp=${compatibility.adapterComp().type}"
                     )
                 }, 1L)
             } else {
@@ -1569,9 +1610,16 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                 runPreApplyFeaturesForStage(player, c, event, keyLoc, toolUsed, generic, resolvedStage)
                 runApplyFeaturesForStage(player, c, event, keyLoc, toolUsed, generic, resolvedStage)
 
+                if (resolvedStage is IFurnitureStage) {
+                    lockTransition(keyLoc, 6L)
+                }
+
                 c.handleSequenceStage(player, adapterData, event, keyLoc, toolUsed, generic, resolvedStage)
 
-                executeStageCommands(player, resolvedStage)
+                if (executeExtras) {
+                    runStageExtras(player, keyLoc, resolvedStage)
+                    executeStageCommands(player, resolvedStage)
+                }
                 lastSequenceStageByLoc[keyLoc] = resolvedStage
 
                 registerTimedSequenceIfNeeded(
@@ -1601,7 +1649,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                                 "previousUuid=$previousUuid " +
                                 "newUuid=$newUuid " +
                                 "stage=${resolvedStage.getAdapterData()} " +
-                                "comp=${c.adapterComp()?.type}"
+                                "comp=${c.adapterComp().type}"
                     )
                 }, 1L)
             }
@@ -1705,7 +1753,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
             return false
         }
 
-        if (!canModifyAt(player, keyLoc, active.generic)) {
+        if (!canUseUnearthInteraction(player, keyLoc, active.generic)) {
             if (event is Cancellable) {
                 event.isCancelled = true
             }
@@ -1762,6 +1810,8 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
         if (event is Cancellable) {
             event.isCancelled = true
         }
+
+        player.swingMainHand()
 
         consumingTimedSequences.add(keyLoc)
 
@@ -1868,7 +1918,8 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
             dbgTimed(
                 "applying success with object replacement " +
                         "loc=${keyLoc.toShortString()} " +
-                        "successAdapter=${successStage.getAdapterData()}"
+                        "outcome=${outcome.id} " +
+                        "adapter=${successStage.getAdapterData()}"
             )
 
             removeCurrentSequenceObject(
@@ -1887,7 +1938,8 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                 keyLoc,
                 outcomeLiveTool,
                 active.generic,
-                successStage
+                successStage,
+                executeExtras = true
             )
 
             cancelSequence(active.compatibility, keyLoc)
@@ -1924,6 +1976,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                 successStage
             )
 
+            runStageExtras(player, keyLoc, successStage)
             executeStageCommands(player, successStage)
         }
 
@@ -1970,59 +2023,84 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
         }
     }
 
-    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
-    fun onSequenceBlockBreak(event: BlockBreakEvent) {
-        val loc = event.block.location
+    private fun hasUnearthBypass(player: Player): Boolean {
+        return player.isOp
+                || (LuckPermsPlugin.isLuckPermsEnabled()
+                && core.getLuckPermsComb().hasPermission(player, "unearthMechanic.bypass"))
+                || player.hasPermission("unearthMechanic.bypass")
+    }
 
-        if (!isSequenceLocked(loc) && !isTransitioningNearby(loc)) return
+    private fun canUseUnearthInteraction(
+        player: Player,
+        location: Location,
+        generic: IGeneric
+    ): Boolean {
+        val keyLoc = sequenceKey(location)
 
-        event.isCancelled = true
-        event.isDropItems = false
-        event.expToDrop = 0
+        if (hasUnearthBypass(player)) {
+            return true
+        }
 
-        dbgTimed(
-            "BLOCK BREAK blocked " +
-                    "player=${event.player.name} " +
-                    "loc=${sequenceKey(loc).toShortString()} " +
-                    "locked=${isSequenceLocked(loc)} " +
-                    "nearTransition=${isTransitioningNearby(loc)}"
-        )
+        if (generic.isNotProtect()) {
+            return true
+        }
+
+        return if (WorldGuardPlugin.isWorldGuardEnabled()) {
+            core.getWorldGuardComp().canInteractCustom(player, keyLoc)
+        } else {
+            core.getAntiGriefLib().test(player, Flag.INTERACT, keyLoc)
+        }
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
-    fun onSequenceBlockDamage(event: BlockDamageEvent) {
-        val loc = event.block.location
+    fun onPreCancelCraftEngineBlockToolPlace(event: PlayerInteractEvent) {
+        if (event.hand != EquipmentSlot.HAND) return
+        if (event.action != Action.RIGHT_CLICK_BLOCK) return
 
-        if (!isSequenceLocked(loc) && !isTransitioningNearby(loc)) return
+        val player = event.player
+        val loc = event.clickedBlock?.location ?: return
+
+        val toolId = Adapter.getAdapterId(
+            animator.getAnimation(player)?.getItemMainHand() ?: player.inventory.itemInMainHand
+        )
+
+        val toolAdapter = Adapter.getAdapterData(toolId).getOrNull() ?: return
+
+        if (!toolAdapter.adapter.type.equals("CraftEngine", ignoreCase = true)
+            && !toolAdapter.adapter.type.equals("ce", ignoreCase = true)
+        ) return
+
+        val craftEngineCompatibility = compatibilitiesLoaded.firstOrNull {
+            it.adapterComp().type.equals("CraftEngine", ignoreCase = true)
+                    || it.adapterComp().type.equals("ce", ignoreCase = true)
+        } ?: return
+
+        val baseAdapter = craftEngineCompatibility.getCurrentAdapterDataAt(event, loc) ?: return
+
+        val mode = InteractionMode.fromSneaking(player.isSneaking)
+
+        val props = try {
+            craftEngineCompatibility.getCurrentBlockPropsFromEvent(event, loc)
+        } catch (_: Throwable) {
+            emptyMap()
+        }
+
+        val generic = core.getConfigManager()
+            .getGeneric(baseAdapter, toolAdapter, mode, props)
+            ?: return
+
+        val canInteract = canUseUnearthInteraction(player, loc, generic)
+
+        if (!canInteract) {
+            event.isCancelled = true
+            event.setUseItemInHand(org.bukkit.event.Event.Result.DENY)
+            event.setUseInteractedBlock(org.bukkit.event.Event.Result.DENY)
+            return
+        }
 
         event.isCancelled = true
-
-        dbgTimed(
-            "BLOCK DAMAGE blocked " +
-                    "player=${event.player.name} " +
-                    "loc=${sequenceKey(loc).toShortString()} " +
-                    "locked=${isSequenceLocked(loc)} " +
-                    "nearTransition=${isTransitioningNearby(loc)}"
-        )
-    }
-
-    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
-    fun onSequenceEntityDamage(event: EntityDamageByEntityEvent) {
-        val player = event.damager as? Player ?: return
-        val loc = event.entity.location
-
-        if (!isSequenceLocked(loc) && !isTransitioningNearby(loc)) return
-
-        event.isCancelled = true
-
-        dbgTimed(
-            "ENTITY DAMAGE blocked " +
-                    "player=${player.name} " +
-                    "entity=${event.entity.type} " +
-                    "entityLoc=${sequenceKey(loc).toShortString()} " +
-                    "locked=${isSequenceLocked(loc)} " +
-                    "nearTransition=${isTransitioningNearby(loc)}"
-        )
+        event.setUseItemInHand(org.bukkit.event.Event.Result.DENY)
+        event.setUseInteractedBlock(org.bukkit.event.Event.Result.ALLOW)
     }
 
     override fun getCompatibilitiesLoaded(): MutableList<ICompatibility> {

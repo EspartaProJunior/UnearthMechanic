@@ -140,4 +140,18 @@ interface IStage {
      * @return a list of stage commands
      */
     fun getExecuteCommands(): List<IStageCommand>
+
+    /**
+     * Retrieves the amount of food points to add to the player when this stage is applied.
+     *
+     * @return the amount of food points to add.
+     */
+    fun getFoodAdd(): Int
+
+    /**
+     * Retrieves the amount of saturation to add to the player when this stage is applied.
+     *
+     * @return the amount of saturation to add.
+     */
+    fun getSaturationAdd(): Float
 }

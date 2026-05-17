@@ -18,7 +18,9 @@ class BlockStage(
     sounds: List<Sound>,
     delay: Long,
     toolAnimDelay: Boolean,
-    executeCommands: List<IStageCommand>
+    executeCommands: List<IStageCommand>,
+    foodAdd: Int = 0,
+    saturationAdd: Float = 0.0f
 ) : Stage(
     stage,
     adapterData,
@@ -35,5 +37,6 @@ class BlockStage(
     sounds,
     delay,
     toolAnimDelay,
-    executeCommands
+    executeCommands,
+    foodAdd, saturationAdd
 ), IBlockStage

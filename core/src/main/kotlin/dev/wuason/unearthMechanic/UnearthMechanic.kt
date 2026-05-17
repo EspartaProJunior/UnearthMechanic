@@ -105,7 +105,7 @@ class UnearthMechanic : UnearthMechanicPlugin() {
     }
 
     private fun onCraftEngineReady() {
-        logger.info("CraftEngine is ready. Loading CraftEngine compatibility...")
+        AdventureUtils.sendMessagePluginConsole(this,"CraftEngine is ready. Loading CraftEngine compatibility...")
 
         try {
             registerSafely(UneKeys.COLUMN_BLOCK_BEHAVIOR.asString()){

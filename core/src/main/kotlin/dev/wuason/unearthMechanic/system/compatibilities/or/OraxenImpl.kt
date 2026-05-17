@@ -363,6 +363,18 @@ class OraxenImpl(
         placeBlock(itemAdapterData, loc)
     }
 
+    // This is null because the furniture might have a barrier as its hitbox,
+    // so when the new piece is spawned and the old one is removed,
+    // the new furniture might end up without a hitbox
+    override fun placeNewFurnitureThenRemoveOld(
+        loc: Location,
+        currentAdapterId: String,
+        targetAdapterId: String,
+        oldUuid: UUID?
+    ): UUID? {
+        return null
+    }
+
     private fun handleFurnitureStage(
         player: Player,
         itemAdapterData: AdapterData,

@@ -37,25 +37,64 @@ class BasicFeatures: AbstractFeature() {
         iStage: IStage,
         iGeneric: IGeneric
     ) {
-        if (iStage.getDrops().isNotEmpty()) iStage.dropItems(loc)
-        if (iStage.getItems().isNotEmpty()) iStage.addItems(p)
+        val plugin = UnearthMechanic.getInstance()
+        val previousHeldSlot = p.inventory.heldItemSlot
+        val shouldDelayItemsAdd = iStage.getItems().isNotEmpty()
 
-        if (iStage.isRemoveItemMainHand() && p.gameMode != GameMode.CREATIVE) liveTool.setItemMainHand(ItemStack(Material.AIR))
+        if (iStage.getDrops().isNotEmpty()) {
+            iStage.dropItems(loc)
+        }
 
-        if (iStage.getReduceItemHand() != 0) liveTool.getItemMainHand()?.let {
-            if (p.gameMode != GameMode.CREATIVE) {
-                if (!it.type.isAir) it.subtract(iStage.getReduceItemHand())
-                UnearthMechanic.getInstance().getStageManager().getAnimator().getAnimation(p)?.let { anim ->
+        // First, we modify the hand.
+        // This allows `items_add` to occupy the previous slot one tick later.
+        if (p.gameMode != GameMode.CREATIVE) {
+            if (iStage.isRemoveItemMainHand()) {
+                liveTool.setItemMainHand(ItemStack(Material.AIR))
+
+                plugin.getStageManager().getAnimator().getAnimation(p)?.let { anim ->
                     anim.updateItemMainHandData()
                 }
             }
+
+            if (iStage.getReduceItemHand() != 0) {
+                liveTool.getItemMainHand()?.let { item ->
+                    if (!item.type.isAir) {
+                        item.subtract(iStage.getReduceItemHand())
+                    }
+
+                    plugin.getStageManager().getAnimator().getAnimation(p)?.let { anim ->
+                        anim.updateItemMainHandData()
+                    }
+                }
+            }
+        }
+
+        // Then we call `items_add` one tick later
+        // If the hand slot is empty, the first item is placed there
+        if (shouldDelayItemsAdd) {
+            Bukkit.getScheduler().runTaskLater(plugin, Runnable {
+                val player = Bukkit.getPlayer(p.uniqueId) ?: return@Runnable
+                if (!player.isOnline) return@Runnable
+
+                val before = player.inventory.contents.map { it?.clone() }.toTypedArray()
+
+                iStage.addItems(player)
+
+                moveNewlyAddedItemToPreviousSlot(player, previousHeldSlot, before)
+
+                plugin.getStageManager().getAnimator().getAnimation(player)?.let { anim ->
+                    anim.updateItemMainHandData()
+                }
+
+                player.updateInventory()
+            }, 1L)
         }
 
         if (iStage.getSounds().isNotEmpty()) {
             iStage.getSounds().forEach { sound ->
                 if (sound.delay > 0) {
-                    Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
-                        p.getWorld().playSound(
+                    Bukkit.getScheduler().runTaskLater(plugin, Runnable {
+                        p.world.playSound(
                             loc,
                             sound.soundId,
                             SoundCategory.BLOCKS,
@@ -64,7 +103,7 @@ class BasicFeatures: AbstractFeature() {
                         )
                     }, sound.delay)
                 } else {
-                    p.getWorld().playSound(
+                    p.world.playSound(
                         loc,
                         sound.soundId,
                         SoundCategory.BLOCKS,
@@ -73,6 +112,63 @@ class BasicFeatures: AbstractFeature() {
                     )
                 }
             }
+        }
+    }
+
+    private fun moveNewlyAddedItemToPreviousSlot(
+        player: Player,
+        previousHeldSlot: Int,
+        before: Array<ItemStack?>
+    ) {
+        val inventory = player.inventory
+
+        val currentSlotItem = inventory.getItem(previousHeldSlot)
+        if (currentSlotItem != null && !currentSlotItem.type.isAir) return
+
+        val after = inventory.contents
+
+        // The slot was empty before, and then a new item appeared.
+        for (slot in after.indices) {
+            if (slot == previousHeldSlot) continue
+
+            val beforeItem = before.getOrNull(slot)
+            val afterItem = after[slot]
+
+            if ((beforeItem == null || beforeItem.type.isAir) && afterItem != null && !afterItem.type.isAir) {
+                inventory.setItem(previousHeldSlot, afterItem.clone())
+                inventory.setItem(slot, ItemStack(Material.AIR))
+                return
+            }
+        }
+
+        // The new item was stacked on top of an existing stack.
+        // We just take the change and put it in our hand.
+        for (slot in after.indices) {
+            if (slot == previousHeldSlot) continue
+
+            val beforeItem = before.getOrNull(slot)
+            val afterItem = after[slot]
+
+            if (beforeItem == null || afterItem == null) continue
+            if (beforeItem.type.isAir || afterItem.type.isAir) continue
+            if (!beforeItem.isSimilar(afterItem)) continue
+            if (afterItem.amount <= beforeItem.amount) continue
+
+            val addedAmount = afterItem.amount - beforeItem.amount
+
+            val movedItem = afterItem.clone()
+            movedItem.amount = addedAmount
+
+            afterItem.amount -= addedAmount
+
+            if (afterItem.amount <= 0) {
+                inventory.setItem(slot, ItemStack(Material.AIR))
+            } else {
+                inventory.setItem(slot, afterItem)
+            }
+
+            inventory.setItem(previousHeldSlot, movedItem)
+            return
         }
     }
 }

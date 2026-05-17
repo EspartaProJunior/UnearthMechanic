@@ -18,7 +18,7 @@ val targetJavaVersion = 21
 allprojects {
 
     project.group = "dev.wuason"
-    project.version = "0.1.13"
+    project.version = "0.1.13a"
 
     //apply kotlin jvm plugin
     apply(plugin = "kotlin")
@@ -220,8 +220,8 @@ subprojects {
         compileOnly("com.sk89q.worldguard:worldguard-bukkit:7.0.12-SNAPSHOT")
         compileOnly("com.nexomc:nexo:0.4.0:dev")
 
-        compileOnly("net.momirealms:craft-engine-core:26.4-SNAPSHOT")
-        compileOnly("net.momirealms:craft-engine-bukkit:26.4-SNAPSHOT")
+        compileOnly("net.momirealms:craft-engine-core:26.5-SNAPSHOT")
+        compileOnly("net.momirealms:craft-engine-bukkit:26.5-SNAPSHOT")
 
         compileOnly("net.momirealms:craft-engine-nms-helper:1.0.157")
 
@@ -230,7 +230,8 @@ subprojects {
 
         implementation("dev.jorel:commandapi-paper-shade:11.2.0")
 
-        compileOnly("io.lumine:Mythic-Dist:5.6.1")
+        compileOnly("io.lumine:Mythic-Dist:5.6.1") //MythicMobs
+        compileOnly("io.lumine:MythicCrucible-Dist:2.1.0") //MythicCrucible
 
         compileOnly("me.clip:placeholderapi:2.12.2")
         implementation("com.jeff-media:custom-block-data:2.2.4")

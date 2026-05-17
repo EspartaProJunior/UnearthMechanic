@@ -25,7 +25,7 @@ class WorldGuardComp(private val core: UnearthMechanic) {
         core.logger.info("WorldGuard found! Enabling compatibility...")
         val registry = WorldGuard.getInstance().flagRegistry
 
-        unearthInteractFlag = registerStateFlag(registry, INTERACT_FLAG, false)
+        unearthInteractFlag = registerStateFlag(registry, INTERACT_FLAG, true)
         unearthAshesSpawnFlag = registerStateFlag(registry, ASHES_SPAWN_FLAG, true)
         /*try {
             val flag = StateFlag(INTERACT_FLAG, false)
@@ -61,27 +61,45 @@ class WorldGuardComp(private val core: UnearthMechanic) {
     }
 
     fun canInteractCustom(player: Player, target: Location?): Boolean {
-        if (target == null) return false
+        if (target == null) return true
 
+        val flag = unearthInteractFlag ?: return true
         val localPlayer = WorldGuardPlugin.inst().wrapPlayer(player)
-        return WorldGuard.getInstance().platform.regionContainer.createQuery()
-            .testBuild(BukkitAdapter.adapt(target), localPlayer, unearthInteractFlag)
-                || WorldGuard.getInstance().platform.sessionManager.hasBypass(
+
+        val hasBypass = WorldGuard.getInstance().platform.sessionManager.hasBypass(
             localPlayer,
             BukkitAdapter.adapt(player.world)
         )
+
+        if (hasBypass) return true
+
+        return WorldGuard.getInstance().platform.regionContainer.createQuery()
+            .testState(BukkitAdapter.adapt(target), localPlayer, flag)
     }
 
     fun canInteract(player: Player, target: Location?): Boolean {
-        if (target == null) return false
+        if (target == null) return true
 
         val localPlayer = WorldGuardPlugin.inst().wrapPlayer(player)
-        return WorldGuard.getInstance().platform.regionContainer.createQuery()
-            .testBuild(BukkitAdapter.adapt(target), localPlayer, Flags.INTERACT)
-                || WorldGuard.getInstance().platform.sessionManager.hasBypass(
+        val query = WorldGuard.getInstance().platform.regionContainer.createQuery()
+        val wgLocation = BukkitAdapter.adapt(target)
+
+        val hasBypass = WorldGuard.getInstance().platform.sessionManager.hasBypass(
             localPlayer,
             BukkitAdapter.adapt(player.world)
         )
+
+        if (hasBypass) return true
+
+        val regions = query.getApplicableRegions(wgLocation)
+
+        // Outside regions: allow normal interaction.
+        if (regions.size() == 0) {
+            return true
+        }
+
+        // Within the region: follow the standard INTERACT procedure.
+        return regions.testState(localPlayer, Flags.INTERACT)
     }
 
     fun canSpawnAshes(target: Location?): Boolean {
