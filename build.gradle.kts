@@ -3,11 +3,12 @@ import org.jetbrains.dokka.DokkaConfiguration.Visibility
 import java.net.URL
 import org.jetbrains.dokka.Platform
 import java.net.URI
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 
 plugins {
     java
-    kotlin("jvm") version "2.0.20-RC2"
+    kotlin("jvm") version "2.3.0"
     id("com.gradleup.shadow") version "8.3.10"
     id("maven-publish")
     id("org.jetbrains.dokka") version "1.9.20"
@@ -18,7 +19,7 @@ val targetJavaVersion = 21
 allprojects {
 
     project.group = "dev.wuason"
-    project.version = "0.1.13a"
+    project.version = "0.1.14"
 
     //apply kotlin jvm plugin
     apply(plugin = "kotlin")
@@ -42,12 +43,16 @@ allprojects {
         maven("https://maven.enginehub.org/repo/") {
             name = "enginehub"
         }
-        maven("https://repo.nexomc.com/snapshots/") {
+        maven("https://repo.nexomc.com/snapshots") {
             name = "nexo-snapshots"
         }
-        maven("https://repo.nexomc.com/releases/") {
+        maven("https://repo.nexomc.com/releases") {
             name = "nexo-releases"
         }
+        maven("https://repo.triumphteam.dev/snapshots") {
+            name = "triumph-snapshots"
+        }
+
         maven("https://maven.devs.beer/") {
             name = "matteodev"
         }
@@ -84,8 +89,21 @@ allprojects {
         jvmToolchain(targetJavaVersion)
     }
 
+    configurations.configureEach {
+        resolutionStrategy {
+            force("com.google.code.gson:gson:2.10.1")
+
+            eachDependency {
+                if (requested.group == "com.google.code.gson" && requested.name == "gson") {
+                    useVersion("2.10.1")
+                    because("Paper/WorldGuard/Mojang provide Gson 2.10.1")
+                }
+            }
+        }
+    }
+
     dependencies {
-        compileOnly("org.jetbrains.kotlin:kotlin-stdlib:2.0.20")
+        compileOnly("org.jetbrains.kotlin:kotlin-stdlib:2.3.0")
     }
 
     tasks {
@@ -218,7 +236,9 @@ subprojects {
         compileOnly("io.th0rgal:oraxen:1.189.0") // 1.174.0 supported version
         compileOnly("dev.lone:api-itemsadder:4.0.2-beta-release-11")
         compileOnly("com.sk89q.worldguard:worldguard-bukkit:7.0.12-SNAPSHOT")
-        compileOnly("com.nexomc:nexo:0.4.0:dev")
+        compileOnly("com.nexomc:nexo:1.23") {
+            exclude(group = "com.google.code.gson", module = "gson")
+        }
 
         compileOnly("net.momirealms:craft-engine-core:26.5-SNAPSHOT")
         compileOnly("net.momirealms:craft-engine-bukkit:26.5-SNAPSHOT")
@@ -242,6 +262,8 @@ subprojects {
         implementation(kotlin("stdlib"))
 
         implementation("com.h2database:h2:2.2.224")
+
+        implementation("com.tcoded:FoliaLib:0.5.1")
     }
 }
 
@@ -280,6 +302,8 @@ tasks.shadowJar {
     relocate ("com.jeff_media.customblockdata", "dev.wuason.libs.jeff_media.customblockdata")
     relocate ("com.h2database", "dev.wuason.libs.h2database")
 
+    relocate("com.tcoded.folialib", "dev.wuason.libs.folialib")
+
     manifest {
         attributes["paperweight-mappings-namespace"] = "mojang"
     }
@@ -305,3 +329,18 @@ gradle.projectsEvaluated {
     println("Readme.md updated")
 }
 
+tasks.withType<KotlinCompile>().configureEach {
+    compilerOptions {
+        freeCompilerArgs.add("-Xskip-prerelease-check")
+        freeCompilerArgs.add("-Xskip-metadata-version-check")
+    }
+}
+
+subprojects {
+    tasks.withType<KotlinCompile>().configureEach {
+        compilerOptions {
+            freeCompilerArgs.add("-Xskip-prerelease-check")
+            freeCompilerArgs.add("-Xskip-metadata-version-check")
+        }
+    }
+}

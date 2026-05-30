@@ -17,6 +17,7 @@ import dev.wuason.unearthMechanic.system.ILiveTool
 import dev.wuason.unearthMechanic.system.StageData
 import dev.wuason.unearthMechanic.system.StageManager
 import dev.wuason.unearthMechanic.system.compatibilities.ICompatibility
+import dev.wuason.unearthMechanic.utils.FoliaUtils
 import dev.wuason.unearthMechanic.utils.Utils
 import net.momirealms.craftengine.bukkit.api.BukkitAdaptor
 import net.momirealms.craftengine.bukkit.api.CraftEngineBlocks
@@ -379,22 +380,78 @@ class CraftEngineImpl(
 
     override fun getFurnitureUUID(location: Location): UUID? {
         val world = location.world ?: return null
+        val keyLoc = location.block.location
+        val center = keyLoc.clone().add(0.5, 0.5, 0.5)
 
-        val entities = world.getNearbyEntities(location, 1.0, 1.0, 1.0)
+        val entities = world.getNearbyEntities(center, 1.5, 1.5, 1.5)
+
         for (entity in entities) {
+            if (!entity.isValid || entity.isDead) continue
+            if (!isPossibleFurnitureEntity(entity)) continue
+
             try {
-                //val furniture = CraftEngineFurniture.getLoadedFurnitureByBaseEntity(entity)
                 val furniture = CraftEngineFurniture.getLoadedFurnitureByMetaEntity(entity)
-                if (furniture != null) {
+                if (furniture != null && entity.location.block.location == keyLoc) {
                     return entity.uniqueId
                 }
-            } catch (e: Exception) {
-                // If it throws an error, it is because that entity is not a valid piece of furniture.
+            } catch (_: Throwable) {
                 continue
             }
         }
 
         return null
+    }
+
+    override fun getFurnitureUUID(
+        loc: Location,
+        expectedAdapterId: String
+    ): UUID? {
+        val keyLoc = loc.block.location
+        val world = keyLoc.world ?: return null
+
+        val cleanExpectedId = expectedAdapterId
+            .removePrefix("ce:")
+            .removePrefix("craftengine:")
+            .substringBefore("[")
+
+        val center = keyLoc.clone().add(0.5, 0.5, 0.5)
+
+        val nearby = world.getNearbyEntities(center, 2.0, 2.0, 2.0)
+
+        var bestEntity: Entity? = null
+        var bestDistance = Double.MAX_VALUE
+
+        for (entity in nearby) {
+            if (!entity.isValid || entity.isDead) continue
+            if (!isPossibleFurnitureEntity(entity)) continue
+
+            val furniture = try {
+                CraftEngineFurniture.getLoadedFurnitureByMetaEntity(entity)
+            } catch (_: Throwable) {
+                null
+            } ?: continue
+
+            val furnitureId = furniture.id().toString()
+
+            if (!furnitureId.equals(cleanExpectedId, ignoreCase = true)) {
+                continue
+            }
+
+            val entityBlockLoc = entity.location.block.location
+
+            if (entityBlockLoc == keyLoc) {
+                return entity.uniqueId
+            }
+
+            val distance = entity.location.distanceSquared(center)
+
+            if (distance < bestDistance) {
+                bestDistance = distance
+                bestEntity = entity
+            }
+        }
+
+        return bestEntity?.uniqueId
     }
 
     fun isPossibleFurnitureEntity(entity: Entity): Boolean {
@@ -759,19 +816,24 @@ class CraftEngineImpl(
         setRemoving(loc)
 
         if (!stageManager.activeSequences.contains(loc)) {
-            Bukkit.getScheduler().runTaskLater(core, Runnable {
-                clearRemoving(loc)
-            }, 5L)
+            FoliaUtils.runLater(5L) {
+                FoliaUtils.runAtLocation(loc) {
+                    clearRemoving(loc)
+                }
+            }
         }
     }
 
     @EventHandler
     fun onFurniturePlace(event: FurniturePlaceEvent) {
+        val loc = event.furniture().location().block.location
 
-        Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
-            clearRemoving(event.furniture().location().block.location)
-            //Bukkit.getConsoleSender().sendMessage("[DEBUG] Furniture desbloqueado en ${event.furniture().location().block.location}")
-        }, 3L)
+        FoliaUtils.runLater(3L) {
+            FoliaUtils.runAtLocation(loc) {
+                clearRemoving(loc)
+                //Bukkit.getConsoleSender().sendMessage("[DEBUG] Furniture desbloqueado en $loc")
+            }
+        }
     }
 
     private fun placeBlock(adapterId: String, location: Location?) {
@@ -812,12 +874,21 @@ class CraftEngineImpl(
         generic: IGeneric,
         stage: IStage
     ) {
-        if (stage is IBlockStage) {
-            handleBlockStage(player, itemAdapterData, event, loc, toolUsed, generic, stage)
-        } else if (stage is IFurnitureStage) {
-            Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
-                handleFurnitureStage(player, itemAdapterData, event, loc, toolUsed, generic, stage)
-            }, 1L)
+        when (stage) {
+            is IBlockStage -> {
+                FoliaUtils.runAtLocation(loc) {
+                    handleBlockStage(player, itemAdapterData, event, loc, toolUsed, generic, stage)
+                }
+            }
+            is IFurnitureStage -> {
+                val keyLoc = loc.block.location
+
+                FoliaUtils.runLater(1L) {
+                    FoliaUtils.runAtLocation(keyLoc) {
+                        handleFurnitureStage(player, itemAdapterData, event, keyLoc, toolUsed, generic, stage)
+                    }
+                }
+            }
         }
     }
 
@@ -862,11 +933,37 @@ class CraftEngineImpl(
             }
         }
 
-        explicit.forEach { (key, value) ->
-            when (value.lowercase()) {
-                "true" -> result.putBoolean(key, true)
-                "false" -> result.putBoolean(key, false)
-                else -> result.putString(key, value)
+        explicit.forEach { (key, rawValue) ->
+            val value = rawValue.trim()
+
+            when {
+                value.equals("true", ignoreCase = true) -> {
+                    result.putBoolean(key, true)
+                }
+
+                value.equals("false", ignoreCase = true) -> {
+                    result.putBoolean(key, false)
+                }
+
+                value.toIntOrNull() != null -> {
+                    result.putInt(key, value.toInt())
+                }
+
+                value.toLongOrNull() != null -> {
+                    result.putLong(key, value.toLong())
+                }
+
+                value.toFloatOrNull() != null -> {
+                    result.putFloat(key, value.toFloat())
+                }
+
+                value.toDoubleOrNull() != null -> {
+                    result.putDouble(key, value.toDouble())
+                }
+
+                else -> {
+                    result.putString(key, value)
+                }
             }
         }
 
@@ -1300,11 +1397,15 @@ class CraftEngineImpl(
 
                 applyPostPlacementRotation(entity, snapshot)
             }
-            Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
-                if(!stageManager.activeSequences.contains(event.furniture().bukkitEntity.location.block.location)){
-                    clearRemoving(event.furniture().bukkitEntity.location.block.location)
+            val entityLoc = event.furniture().bukkitEntity.location.block.location
+
+            FoliaUtils.runLater(5L) {
+                FoliaUtils.runAtLocation(entityLoc) {
+                    if (!stageManager.activeSequences.contains(entityLoc)) {
+                        clearRemoving(entityLoc)
+                    }
                 }
-            }, 5L)
+            }
         }else{
             // Sequence System
             val furnitureId = Key.of(getItemAdapterDataId(itemAdapterData))

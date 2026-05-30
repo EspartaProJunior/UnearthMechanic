@@ -20,7 +20,7 @@ class CraftEnginePlugin {
 
         @EventHandler
         fun craftEngineLoadEvent(event: CraftEngineReloadEvent) {
-            if (event.isFirstReload()) isLoaded = true;
+            if (event.isFirstReload() && !isLoaded) isLoaded = true;
         }
 
         fun isCraftEngineLoaded(): Boolean {

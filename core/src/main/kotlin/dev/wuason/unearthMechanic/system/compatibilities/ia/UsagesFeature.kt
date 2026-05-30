@@ -7,6 +7,7 @@ import dev.wuason.unearthMechanic.config.IStage
 import dev.wuason.unearthMechanic.system.ILiveTool
 import dev.wuason.unearthMechanic.system.compatibilities.ICompatibility
 import dev.wuason.unearthMechanic.system.features.AbstractFeature
+import dev.wuason.unearthMechanic.utils.FoliaUtils
 import org.bukkit.GameMode
 import org.bukkit.Location
 import org.bukkit.entity.Player
@@ -24,15 +25,22 @@ class UsagesFeature: AbstractFeature() {
         iStage: IStage,
         iGeneric: IGeneric
     ) {
-        val itemMainHand: ItemStack = liveTool.getItemMainHand()?: return
-        if (p.gameMode == GameMode.CREATIVE) return
-        if (iStage.getUsagesIaToRemove() > 0 && !itemMainHand.type.isAir) {
+        FoliaUtils.runAtEntity(p) {
+            val itemMainHand: ItemStack = liveTool.getItemMainHand() ?: return@runAtEntity
+
+            if (p.gameMode == GameMode.CREATIVE) return@runAtEntity
+            if (iStage.getUsagesIaToRemove() <= 0) return@runAtEntity
+            if (itemMainHand.type.isAir) return@runAtEntity
+
             CustomStack.byItemStack(itemMainHand)?.let { customStack ->
                 customStack.reduceUsages(iStage.getUsagesIaToRemove())
                 itemMainHand.itemMeta = customStack.itemStack.itemMeta
-                UnearthMechanic.getInstance().getStageManager().getAnimator().getAnimation(p)?.let { anim ->
-                    anim.updateItemMainHandData()
-                }
+
+                UnearthMechanic.getInstance()
+                    .getStageManager()
+                    .getAnimator()
+                    .getAnimation(p)
+                    ?.updateItemMainHandData()
             }
         }
     }

@@ -2,6 +2,7 @@ package dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.as
 
 import dev.wuason.unearthMechanic.UnearthMechanic
 import dev.wuason.unearthMechanic.compatibilities.worldguard.WorldGuardPlugin
+import dev.wuason.unearthMechanic.utils.FoliaUtils
 import net.momirealms.craftengine.bukkit.api.CraftEngineBlocks
 import net.momirealms.craftengine.core.util.Key
 import net.momirealms.craftengine.libraries.nbt.CompoundTag
@@ -47,9 +48,11 @@ class BurnToAshesListener(
             return
         }
 
-        Bukkit.getScheduler().runTaskLater(core, Runnable {
-            tryPlaceBurnResult(location, result, 0)
-        }, 1L)
+        FoliaUtils.runLater(1L) {
+            FoliaUtils.runAtLocation(location) {
+                tryPlaceBurnResult(location, result, 0)
+            }
+        }
     }
 
     private fun buildBurnResult(block: Block, originalType: Material): BurnResult? {
@@ -121,9 +124,11 @@ class BurnToAshesListener(
 
         if (type == Material.FIRE || type == Material.SOUL_FIRE) {
             //core.logger.info("Burn place retry: still fire at $location attempt=$attempt")
-            Bukkit.getScheduler().runTaskLater(core, Runnable {
-                tryPlaceBurnResult(location, result, attempt + 1)
-            }, RETRY_DELAY_TICKS)
+            FoliaUtils.runLater(RETRY_DELAY_TICKS) {
+                FoliaUtils.runAtLocation(location) {
+                    tryPlaceBurnResult(location, result, attempt + 1)
+                }
+            }
             return
         }
 

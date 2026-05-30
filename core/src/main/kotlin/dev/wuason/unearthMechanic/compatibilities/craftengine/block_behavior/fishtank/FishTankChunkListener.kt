@@ -2,6 +2,7 @@ package dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.fi
 
 import dev.wuason.unearthMechanic.UnearthMechanic
 import dev.wuason.unearthMechanic.compatibilities.craftengine.types.FishType
+import dev.wuason.unearthMechanic.utils.FoliaUtils
 import net.momirealms.craftengine.bukkit.api.BukkitAdaptor
 import net.momirealms.craftengine.bukkit.api.CraftEngineBlocks
 import net.momirealms.craftengine.core.block.UpdateFlags
@@ -29,14 +30,25 @@ import org.bukkit.inventory.ItemStack
 class FishTankChunkListener : Listener {
     @EventHandler
     fun onChunkLoad(e: ChunkLoadEvent) {
-        Bukkit.getScheduler().runTaskLater(
-            UnearthMechanic.getInstance(),
-            Runnable {
-                FishTankBehavior.ensureTaskRunning()
-                FishTankBehavior.enqueueChunkResync(e.world, e.chunk)
-            },
-            20L
+        val world = e.world
+        val chunkX = e.chunk.x
+        val chunkZ = e.chunk.z
+
+        val chunkCenterLoc = Location(
+            world,
+            (chunkX shl 4) + 8.0,
+            world.minHeight.toDouble(),
+            (chunkZ shl 4) + 8.0
         )
+
+        FoliaUtils.runLater(20L) {
+            FoliaUtils.runAtLocation(chunkCenterLoc) {
+                FishTankBehavior.ensureTaskRunning()
+
+                val chunk = world.getChunkAt(chunkX, chunkZ)
+                FishTankBehavior.enqueueChunkResync(world, chunk)
+            }
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
@@ -77,7 +89,11 @@ class FishTankChunkListener : Listener {
         e.setUseInteractedBlock(Event.Result.DENY)
 
         // Execute your insert/swap logic manually
-        runTankInsertLikeCE(e.player, tankBlock, item, fishType)
+        FoliaUtils.runAtLocation(tankBlock.location) {
+            FoliaUtils.runAtEntity(e.player) {
+                runTankInsertLikeCE(e.player, tankBlock, item, fishType)
+            }
+        }
     }
 
     private fun findTankBlockNear(b: Block, r: Int = 1): Block? {
@@ -106,7 +122,7 @@ class FishTankChunkListener : Listener {
 
         val inSnapshot = handItem.clone().also { it.amount = 1 }
 
-        // bucket que devuelves si había pez
+        // the bucket you return if there was a fish
         val bw = tankBlock.world
         val center = Location(bw, pos.x() + 0.5, pos.y() + 0.5, pos.z() + 0.5)
         val rootState = CraftEngineBlocks.getCustomBlockState(bw.getBlockAt(pos.x(), pos.y(), pos.z()).blockData)
@@ -123,7 +139,7 @@ class FishTankChunkListener : Listener {
         FishTankBehavior.ensureTaskRunning()
         FishTankBehavior.syncFishDisplay(ceWorld, pos, fishFromBucket, inSnapshot)
 
-        // aplica item en mano (igual que tu CE handler)
+        // Apply the item in hand
         if (player.gameMode != GameMode.CREATIVE) {
             handItem.type = out.type
             handItem.itemMeta = out.itemMeta
@@ -162,40 +178,43 @@ class FishTankChunkListener : Listener {
     fun onBucketEntity(e: PlayerBucketEntityEvent) {
         val le = e.entity as? LivingEntity ?: return
 
-        // ONLY your display fish
         if (!le.scoreboardTags.contains("um_fishtank")) return
 
-        // Cancel vanilla capture (prevents rare dupe/respawn)
         e.isCancelled = true
 
+        val entityLoc = le.location.clone()
         val bw = le.world
+
         val tankKey = le.persistentDataContainer
-            .get(FishTankBehavior.PDC_TANK_KEY_PUBLIC, org.bukkit.persistence.PersistentDataType.STRING)
+            .get(
+                FishTankBehavior.PDC_TANK_KEY_PUBLIC,
+                org.bukkit.persistence.PersistentDataType.STRING
+            )
             ?: return
 
-        val fishType = FishTankBehavior.fishTypeOfEntityPublic(le) // expón helper público
+        val fishType = FishTankBehavior.fishTypeOfEntityPublic(le)
+        val pos = BlockPos(entityLoc.blockX, entityLoc.blockY, entityLoc.blockZ)
 
-        // Build the correct bucket (with target if snapshot exists)
-        val pos = BlockPos(le.location.blockX, le.location.blockY, le.location.blockZ)
-        val bucket = FishTankBehavior.bucketToGive(bw,tankKey,pos,fishType)
+        FoliaUtils.runAtEntity(le) {
+            val bucket = FishTankBehavior.bucketToGive(bw, tankKey, pos, fishType)
 
-        // Consumir 1 cubeta vacía del jugador (si está en mano)
-        val p = e.player
-        val hand = e.hand
-        val item = p.inventory.getItem(hand)
-        if (item.type == Material.BUCKET) {
-            // reemplaza por el bucket lleno
-            p.inventory.setItem(hand, bucket)
-        } else {
-            // fallback
-            p.inventory.addItem(bucket)
+            FoliaUtils.runAtEntity(e.player) {
+                val p = e.player
+                val hand = e.hand
+                val item = p.inventory.getItem(hand)
+
+                if (item.type == Material.BUCKET) {
+                    p.inventory.setItem(hand, bucket)
+                } else {
+                    p.inventory.addItem(bucket)
+                }
+
+                le.remove()
+
+                FoliaUtils.runAtLocation(entityLoc) {
+                    FishTankBehavior.removeOneFishFromTankAndResync(bw, tankKey, fishType)
+                }
+            }
         }
-
-        // Remover el entity display
-        le.remove()
-
-        // IMPORTANTÍSIMO: limpiar 1 “slot” en el tanque (fish -> none)
-        // Aquí debes usar TU lógica de cambiar la propiedad del bloque.
-        FishTankBehavior.removeOneFishFromTankAndResync(bw, tankKey, fishType)
     }
 }

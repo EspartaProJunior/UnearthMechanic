@@ -239,6 +239,13 @@ abstract class ICompatibility(
      */
     abstract fun getFurnitureUUID(location: Location): UUID?
 
+    open fun getFurnitureUUID(
+        loc: Location,
+        expectedAdapterId: String
+    ): UUID? {
+        return getFurnitureUUID(loc)
+    }
+
     /**
      * Retrieves the current block properties from the event context.
      *

@@ -3,13 +3,14 @@ package dev.wuason.unearthMechanic
 import dev.jorel.commandapi.CommandAPI
 import dev.jorel.commandapi.CommandAPIPaperConfig
 import dev.wuason.adapter.Adapter
-import dev.wuason.unearthMechanic.compatibilities.craftengine.CraftEngineComp
 import dev.wuason.unearthMechanic.compatibilities.craftengine.CraftEnginePlugin
 import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.*
 import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.ashes.AshesEnvironmentListener
 import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.ashes.BurnToAshesListener
 import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.fishtank.FishTankBehavior
 import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.fishtank.FishTankDataStore
+import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.mini_cubes.MiniCubesBlockBehavior
+import dev.wuason.unearthMechanic.compatibilities.craftengine.item_behavior.ShiftPlaceBlockItemBehavior
 import dev.wuason.unearthMechanic.compatibilities.craftengine.types.UneKeys
 import dev.wuason.unearthMechanic.compatibilities.craftengine.types.UneProperties
 import dev.wuason.unearthMechanic.compatibilities.luckperms.LuckPermsComp
@@ -21,9 +22,11 @@ import dev.wuason.unearthMechanic.system.IStageManager
 import dev.wuason.unearthMechanic.system.PreviousBlockDataStore
 import dev.wuason.unearthMechanic.system.StageManager
 import dev.wuason.unearthMechanic.utils.AdventureUtils
+import dev.wuason.unearthMechanic.utils.FoliaUtils
 import dev.wuason.unearthMechanic.utils.ItemRemoverManager
 import net.momirealms.antigrieflib.AntiGriefLib
 import net.momirealms.craftengine.core.block.behavior.BlockBehaviors
+import net.momirealms.craftengine.core.item.behavior.ItemBehaviors
 import net.momirealms.craftengine.core.util.Key
 import org.bukkit.Bukkit
 
@@ -57,7 +60,6 @@ class UnearthMechanic : UnearthMechanicPlugin() {
 
     private lateinit var worldGuardComp: WorldGuardComp
     private lateinit var luckPermsComb: LuckPermsComp
-    private lateinit var craftEngineComb: CraftEngineComp
 
     private var antiGriefLib: AntiGriefLib? = null
 
@@ -65,13 +67,14 @@ class UnearthMechanic : UnearthMechanicPlugin() {
         CommandAPI.onLoad(CommandAPIPaperConfig(this).verboseOutput(false))
         if(WorldGuardPlugin.isWorldGuardLoaded()) worldGuardComp = WorldGuardComp(this)
         if(LuckPermsPlugin.isLuckPermsLoaded()) luckPermsComb = LuckPermsComp(this)
-        if(CraftEnginePlugin.isCraftEngineLoaded()) craftEngineComb = CraftEngineComp(this)
     }
 
     lateinit var ashesEnvironmentListener: AshesEnvironmentListener
         private set
 
     override fun onEnable(){
+
+        FoliaUtils.init(this)
 
         AdventureUtils.sendMessagePluginConsole(this, " <gold>Starting UnearthMechanic...")
         AdventureUtils.sendMessagePluginConsole(this, "<gray>-----------------------------------------------------------")
@@ -105,9 +108,10 @@ class UnearthMechanic : UnearthMechanicPlugin() {
     }
 
     private fun onCraftEngineReady() {
-        AdventureUtils.sendMessagePluginConsole(this,"CraftEngine is ready. Loading CraftEngine compatibility...")
+        AdventureUtils.sendMessagePluginConsole(this,"<gray>CraftEngine is ready. <green>Loading CraftEngine compatibility<gray>...")
 
         try {
+            // BlockBehaviors
             registerSafely(UneKeys.COLUMN_BLOCK_BEHAVIOR.asString()){
                 BlockBehaviors.register(UneKeys.COLUMN_BLOCK_BEHAVIOR, ColumnBlockBehavior.FACTORY)
             }
@@ -129,11 +133,22 @@ class UnearthMechanic : UnearthMechanicPlugin() {
             registerSafely(UneKeys.SHOWER_CURTAIN_BEHAVIOR.asString()){
                 BlockBehaviors.register(UneKeys.SHOWER_CURTAIN_BEHAVIOR, ShowerCurtainBlockBehavior.FACTORY)
             }
+            registerSafely(UneKeys.MINI_CUBES_BEHAVIOR.asString()){
+                BlockBehaviors.register(UneKeys.MINI_CUBES_BEHAVIOR, MiniCubesBlockBehavior.FACTORY)
+            }
+
+            // ItemBehaviors
+            registerSafely(UneKeys.SHIFT_PLACE_BLOCK_BEHAVIOR.asString()) {
+                ItemBehaviors.register(
+                    UneKeys.SHIFT_PLACE_BLOCK_BEHAVIOR,
+                    ShiftPlaceBlockItemBehavior.FACTORY
+                )
+            }
 
             UneProperties.registerAll()
             FishTankDataStore.load()
 
-            Bukkit.getScheduler().runTaskLater(this, Runnable {
+            FoliaUtils.runLater(40L) {
                 ashesEnvironmentListener = AshesEnvironmentListener(this)
 
                 server.pluginManager.registerEvents(BurnToAshesListener(this,ashesEnvironmentListener), this)
@@ -146,7 +161,7 @@ class UnearthMechanic : UnearthMechanicPlugin() {
                     logger.severe("FishTank init failed: ${t.javaClass.name}: ${t.message}")
                     t.printStackTrace()
                 }
-            }, 40L)
+            }
         } catch (t: Throwable) {
             AdventureUtils.sendMessagePluginConsole(this, " <red>CraftEngine hook failed: ${t.javaClass.name}: ${t.message}")
         }
@@ -167,6 +182,8 @@ class UnearthMechanic : UnearthMechanicPlugin() {
         }
         FishTankDataStore.close()
         PreviousBlockDataStore.close()
+
+        FoliaUtils.shutdown()
     }
 
     override fun getConfigManager(): ConfigManager {
@@ -187,10 +204,6 @@ class UnearthMechanic : UnearthMechanicPlugin() {
 
     fun getLuckPermsComb(): LuckPermsComp {
         return luckPermsComb
-    }
-
-    fun getCraftEngineComb(): CraftEngineComp {
-        return craftEngineComb
     }
 
     fun checkCompatibility(): String? {

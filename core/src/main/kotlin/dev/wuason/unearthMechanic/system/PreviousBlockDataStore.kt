@@ -1,8 +1,10 @@
 package dev.wuason.unearthMechanic.system
 
+import com.tcoded.folialib.wrapper.task.WrappedTask
 import dev.wuason.adapter.Adapter
 import dev.wuason.adapter.AdapterData
 import dev.wuason.unearthMechanic.UnearthMechanic
+import dev.wuason.unearthMechanic.utils.FoliaUtils
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import java.io.File
@@ -57,7 +59,7 @@ object PreviousBlockDataStore {
     private val pendingDeletes = ConcurrentHashMap<String, LocKey>()
 
     @Volatile
-    private var saveTaskId: Int = -1
+    private var saveTask: WrappedTask? = null
 
     private fun locKey(loc: Location): LocKey {
         val world = loc.world?.name ?: "unknown"
@@ -308,12 +310,12 @@ object PreviousBlockDataStore {
     fun scheduleSave(delayTicks: Long = 40L) {
         dirty.set(true)
 
-        if (saveTaskId != -1) return
+        if (saveTask != null) return
 
-        saveTaskId = Bukkit.getScheduler().runTaskLater(plugin, Runnable {
-            saveTaskId = -1
+        saveTask = FoliaUtils.runLater(delayTicks) {
+            saveTask = null
 
-            if (!dirty.get()) return@Runnable
+            if (!dirty.get()) return@runLater
 
             try {
                 flushSaveNow()
@@ -322,10 +324,19 @@ object PreviousBlockDataStore {
                     "[PreviousBlockDataStore] save failed: ${t.javaClass.simpleName}: ${t.message}"
                 )
             }
-        }, delayTicks).taskId
+        }
     }
 
     fun close() {
+        saveTask?.let { task ->
+            try {
+                task.cancel()
+            } catch (_: Throwable) {
+            }
+
+            saveTask = null
+        }
+
         try {
             flushSaveNow()
         } catch (t: Throwable) {

@@ -25,7 +25,7 @@ class WorldGuardComp(private val core: UnearthMechanic) {
         core.logger.info("WorldGuard found! Enabling compatibility...")
         val registry = WorldGuard.getInstance().flagRegistry
 
-        unearthInteractFlag = registerStateFlag(registry, INTERACT_FLAG, true)
+        unearthInteractFlag = registerStateFlag(registry, INTERACT_FLAG, false)
         unearthAshesSpawnFlag = registerStateFlag(registry, ASHES_SPAWN_FLAG, true)
         /*try {
             val flag = StateFlag(INTERACT_FLAG, false)
@@ -65,16 +65,46 @@ class WorldGuardComp(private val core: UnearthMechanic) {
 
         val flag = unearthInteractFlag ?: return true
         val localPlayer = WorldGuardPlugin.inst().wrapPlayer(player)
+        val world = BukkitAdapter.adapt(player.world)
 
         val hasBypass = WorldGuard.getInstance().platform.sessionManager.hasBypass(
             localPlayer,
-            BukkitAdapter.adapt(player.world)
+            world
         )
 
         if (hasBypass) return true
 
-        return WorldGuard.getInstance().platform.regionContainer.createQuery()
-            .testState(BukkitAdapter.adapt(target), localPlayer, flag)
+        val query = WorldGuard.getInstance().platform.regionContainer.createQuery()
+        val wgLocation = BukkitAdapter.adapt(target)
+        val regions = query.getApplicableRegions(wgLocation)
+
+        // Outside the regions: allow normal interaction
+        if (regions.size() == 0) {
+            return true
+        }
+
+        // If the unearth-interact flag is explicitly set in a region,
+        // WorldGuard must decide
+        val hasExplicitUnearthFlag = regions.regions.any { region ->
+            region.getFlag(flag) != null
+        }
+
+        if (hasExplicitUnearthFlag) {
+            return regions.testState(localPlayer, flag)
+        }
+
+        // If the unearth-interact flag does NOT exist in the region,
+        // automatically grant access to owners and members.
+        val isMemberOrOwner = regions.regions.any { region ->
+            region.isOwner(localPlayer) || region.isMember(localPlayer)
+        }
+
+        if (isMemberOrOwner) {
+            return true
+        }
+
+        // If you are not a member or owner and there is no explicit flag, deny access.
+        return false
     }
 
     fun canInteract(player: Player, target: Location?): Boolean {

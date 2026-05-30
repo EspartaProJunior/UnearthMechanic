@@ -10,6 +10,7 @@ import dev.wuason.unearthMechanic.system.ILiveTool
 import dev.wuason.unearthMechanic.system.StageData
 import dev.wuason.unearthMechanic.system.StageManager
 import dev.wuason.unearthMechanic.system.compatibilities.ICompatibility
+import dev.wuason.unearthMechanic.utils.FoliaUtils
 import dev.wuason.unearthMechanic.utils.Utils
 import io.th0rgal.oraxen.api.OraxenBlocks
 import io.th0rgal.oraxen.api.OraxenFurniture
@@ -86,6 +87,63 @@ class OraxenImpl(
         }
 
         return null
+    }
+
+    override fun getFurnitureUUID(
+        loc: Location,
+        expectedAdapterId: String
+    ): UUID? {
+        val keyLoc = loc.block.location
+        val world = keyLoc.world ?: return null
+
+        val cleanExpectedId = expectedAdapterId
+            .removePrefix("oraxen:")
+            .removePrefix("or:")
+            .substringBefore("[")
+
+        val center = keyLoc.clone().add(0.5, 0.5, 0.5)
+
+        val nearby = world.getNearbyEntities(center, 1.5, 1.5, 1.5)
+
+        var bestEntity: Entity? = null
+        var bestDistance = Double.MAX_VALUE
+
+        for (entity in nearby) {
+            if (!entity.isValid || entity.isDead) continue
+
+            val isFurniture = try {
+                OraxenFurniture.isFurniture(entity)
+            } catch (_: Throwable) {
+                false
+            }
+
+            if (!isFurniture) continue
+
+            val mechanic = try {
+                OraxenFurniture.getFurnitureMechanic(entity)
+            } catch (_: Throwable) {
+                null
+            } ?: continue
+
+            if (!mechanic.itemID.equals(cleanExpectedId, ignoreCase = true)) {
+                continue
+            }
+
+            val entityBlockLoc = entity.location.block.location
+
+            if (entityBlockLoc == keyLoc) {
+                return entity.uniqueId
+            }
+
+            val distance = entity.location.distanceSquared(center)
+
+            if (distance < bestDistance) {
+                bestDistance = distance
+                bestEntity = entity
+            }
+        }
+
+        return bestEntity?.uniqueId
     }
 
     override fun isValidUUID(loc: Location, expectedAdapterId: String?, expectedUuid: UUID?): Boolean {
@@ -283,12 +341,18 @@ class OraxenImpl(
 
     @EventHandler
     fun onFurniturePlace(event: OraxenFurniturePlaceEvent) {
-        Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
-            clearRemoving(event.baseEntity.location.block.location)
-        }, 3L)
+        val entity = event.baseEntity
+
+        FoliaUtils.runAtEntity(entity) {
+            val loc = entity.location.block.location
+
+            FoliaUtils.runLater(3L) {
+                FoliaUtils.runAtLocation(loc) {
+                    clearRemoving(loc)
+                }
+            }
+        }
     }
-
-
 
     private fun placeBlock(itemAdapterData: AdapterData, location: Location) {
         OraxenBlocks.place(itemAdapterData.id, location)
@@ -326,12 +390,21 @@ class OraxenImpl(
         generic: IGeneric,
         stage: IStage
     ) {
-        if (stage is IBlockStage) {
-            handleBlockStage(player, itemAdapterData, event, loc, toolUsed, generic, stage)
-        } else if (stage is IFurnitureStage) {
-            Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
-                handleFurnitureStage(player, itemAdapterData, event, loc, toolUsed, generic, stage)
-            }, 2L)
+        when (stage) {
+            is IBlockStage -> {
+                FoliaUtils.runAtLocation(loc) {
+                    handleBlockStage(player, itemAdapterData, event, loc, toolUsed, generic, stage)
+                }
+            }
+            is IFurnitureStage -> {
+                val keyLoc = loc.block.location
+
+                FoliaUtils.runLater(2L) {
+                    FoliaUtils.runAtLocation(keyLoc) {
+                        handleFurnitureStage(player, itemAdapterData, event, keyLoc, toolUsed, generic, stage)
+                    }
+                }
+            }
         }
     }
 
@@ -419,21 +492,27 @@ class OraxenImpl(
             OraxenFurniture.getFurnitureMechanic(itemAdapterData.id)
                 ?.place(oldLoc, oldYaw, oldFace)
 
-            Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
-                val center = oldLoc.clone().add(0.5, 0.5, 0.5)
-                oldLoc.world?.getNearbyEntities(center, 1.5, 1.5, 1.5)?.forEach { entity ->
-                    if (entity.location.block.location != oldLoc) return@forEach
-                    if (!entity.isValid || entity.isDead) return@forEach
-                    if (!OraxenFurniture.isFurniture(entity)) return@forEach
+            FoliaUtils.runLater(2L) {
+                FoliaUtils.runAtLocation(oldLoc) {
+                    val center = oldLoc.clone().add(0.5, 0.5, 0.5)
 
-                    entity.setRotation(oldYaw, oldPitch)
-                    if (oldFrameRotation != null && entity is org.bukkit.entity.ItemFrame) {
-                        entity.rotation = oldFrameRotation
+                    oldLoc.world?.getNearbyEntities(center, 1.5, 1.5, 1.5)?.forEach { entity ->
+                        if (entity.location.block.location != oldLoc) return@forEach
+                        if (!entity.isValid || entity.isDead) return@forEach
+                        if (!OraxenFurniture.isFurniture(entity)) return@forEach
+
+                        entity.setRotation(oldYaw, oldPitch)
+
+                        if (oldFrameRotation != null && entity is org.bukkit.entity.ItemFrame) {
+                            entity.rotation = oldFrameRotation
+                        }
+                    }
+
+                    if (!stageManager.activeSequences.contains(oldLoc)) {
+                        clearRemoving(oldLoc)
                     }
                 }
-
-                if (!stageManager.activeSequences.contains(oldLoc)) clearRemoving(oldLoc)
-            }, 2L)
+            }
 
         } else {
             val rotation = rotationMap.remove(keyLoc)
@@ -447,19 +526,25 @@ class OraxenImpl(
             OraxenFurniture.getFurnitureMechanic(itemAdapterData.id)
                 ?.place(keyLoc, rotation?.first ?: 0f, BlockFace.UP)
 
-            Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
-                val center = keyLoc.clone().add(0.5, 0.5, 0.5)
-                keyLoc.world?.getNearbyEntities(center, 1.5, 1.5, 1.5)?.forEach { entity ->
-                    if (entity.location.block.location != keyLoc) return@forEach
-                    if (!entity.isValid || entity.isDead) return@forEach
-                    if (!OraxenFurniture.isFurniture(entity)) return@forEach
+            FoliaUtils.runLater(2L) {
+                FoliaUtils.runAtLocation(keyLoc) {
+                    val center = keyLoc.clone().add(0.5, 0.5, 0.5)
 
-                    if (rotation != null) entity.setRotation(rotation.first, rotation.second)
-                    if (cachedFrameRotation != null && entity is org.bukkit.entity.ItemFrame) {
-                        entity.rotation = cachedFrameRotation
+                    keyLoc.world?.getNearbyEntities(center, 1.5, 1.5, 1.5)?.forEach { entity ->
+                        if (entity.location.block.location != keyLoc) return@forEach
+                        if (!entity.isValid || entity.isDead) return@forEach
+                        if (!OraxenFurniture.isFurniture(entity)) return@forEach
+
+                        if (rotation != null) {
+                            entity.setRotation(rotation.first, rotation.second)
+                        }
+
+                        if (cachedFrameRotation != null && entity is org.bukkit.entity.ItemFrame) {
+                            entity.rotation = cachedFrameRotation
+                        }
                     }
                 }
-            }, 2L)
+            }
         }
     }
 
@@ -525,11 +610,13 @@ class OraxenImpl(
             StageData.removeStageData(keyLoc)
             setRemoving(keyLoc)
 
-            Bukkit.getScheduler().runTaskLater(core, Runnable {
-                if (!stageManager.activeSequences.contains(keyLoc)) {
-                    clearRemoving(keyLoc)
+            FoliaUtils.runLater(2L) {
+                FoliaUtils.runAtLocation(keyLoc) {
+                    if (!stageManager.activeSequences.contains(keyLoc)) {
+                        clearRemoving(keyLoc)
+                    }
                 }
-            }, 2L)
+            }
         }
 
         return removed

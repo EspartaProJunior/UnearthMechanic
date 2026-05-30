@@ -13,9 +13,15 @@ object UneProperties {
 
         Properties.register(UneKeys.FISH_TYPE_PROPERTY, EnumProperty.factory(FishType::class.java))
         registerCurtainYPos()
+
+        registerMiniCubes()
     }
 
     fun registerCurtainYPos() {
         Properties.register(UneKeys.CURTAIN_YPOS_PROPERTY, EnumProperty.factory(CurtainYPos::class.java))
+    }
+
+    fun registerMiniCubes() {
+        Properties.register(UneKeys.MINI_CUBES_PROPERTY, EnumProperty.factory(MiniCubeMaskState::class.java))
     }
 }

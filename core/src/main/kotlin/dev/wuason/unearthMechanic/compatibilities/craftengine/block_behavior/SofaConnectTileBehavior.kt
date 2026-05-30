@@ -1,6 +1,7 @@
 package dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior
 
 import dev.wuason.unearthMechanic.compatibilities.craftengine.types.SofaTile
+import dev.wuason.unearthMechanic.utils.FoliaUtils
 import net.momirealms.craftengine.bukkit.api.BukkitAdaptor
 import net.momirealms.craftengine.bukkit.block.behavior.BukkitBlockBehavior
 import net.momirealms.craftengine.bukkit.util.BlockStateUtils
@@ -15,6 +16,7 @@ import net.momirealms.craftengine.core.world.BlockPos
 import net.momirealms.craftengine.core.world.World
 import net.momirealms.craftengine.core.world.context.BlockPlaceContext
 import org.bukkit.Bukkit
+import org.bukkit.Location
 import java.util.concurrent.ConcurrentHashMap
 
 class SofaConnectTileBehavior(
@@ -315,13 +317,32 @@ class SofaConnectTileBehavior(
             return
         }
 
-        Bukkit.getScheduler().runTaskLater(plugin, Runnable {
-            try {
-                updateNeighbors(world, pos)
-            } finally {
-                pending.remove(key)
+        val bukkitLoc = toBukkitLocation(world, pos)
+        if (bukkitLoc == null) {
+            pending.remove(key)
+            return
+        }
+
+        FoliaUtils.runLater(delay) {
+            FoliaUtils.runAtLocation(bukkitLoc) {
+                try {
+                    updateNeighbors(world, pos)
+                } finally {
+                    pending.remove(key)
+                }
             }
-        }, delay)
+        }
+    }
+
+    private fun toBukkitLocation(world: World, pos: BlockPos): Location? {
+        val bukkitWorld = Bukkit.getWorld(world.name()) ?: return null
+
+        return Location(
+            bukkitWorld,
+            pos.x().toDouble(),
+            pos.y().toDouble(),
+            pos.z().toDouble()
+        )
     }
 
     private fun updateNeighbors(world: World, origin: BlockPos) {

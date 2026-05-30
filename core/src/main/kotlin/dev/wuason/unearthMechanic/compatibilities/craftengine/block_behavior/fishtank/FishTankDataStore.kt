@@ -1,5 +1,6 @@
 package dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.fishtank
 
+import com.tcoded.folialib.wrapper.task.WrappedTask
 import dev.dejvokep.boostedyaml.YamlDocument
 import dev.dejvokep.boostedyaml.settings.dumper.DumperSettings
 import dev.dejvokep.boostedyaml.settings.general.GeneralSettings
@@ -7,6 +8,7 @@ import dev.dejvokep.boostedyaml.settings.loader.LoaderSettings
 import dev.dejvokep.boostedyaml.settings.updater.UpdaterSettings
 import dev.wuason.unearthMechanic.UnearthMechanic
 import dev.wuason.unearthMechanic.compatibilities.craftengine.types.FishType
+import dev.wuason.unearthMechanic.utils.FoliaUtils
 import org.bukkit.Bukkit
 import java.io.File
 import java.sql.Connection
@@ -55,7 +57,7 @@ object FishTankDataStore {
     private val deletedTankKeys = ConcurrentHashMap.newKeySet<String>()
 
     @Volatile
-    private var saveTaskId: Int = -1
+    private var saveTask: WrappedTask? = null
 
     private fun chunkKey(worldName: String, chunkX: Int, chunkZ: Int): String =
         "$worldName:$chunkX,$chunkZ"
@@ -654,12 +656,12 @@ object FishTankDataStore {
     fun scheduleSave(delayTicks: Long = 40L) {
         dirty.set(true)
 
-        if (saveTaskId != -1) return
+        if (saveTask != null) return
 
-        saveTaskId = Bukkit.getScheduler().runTaskLater(plugin, Runnable {
-            saveTaskId = -1
+        saveTask = FoliaUtils.runLater(delayTicks) {
+            saveTask = null
 
-            if (!dirty.get()) return@Runnable
+            if (!dirty.get()) return@runLater
 
             try {
                 flushSaveNow()
@@ -668,7 +670,7 @@ object FishTankDataStore {
                     "[FishTankDataStore] save failed: ${t.javaClass.simpleName}: ${t.message}"
                 )
             }
-        }, delayTicks).taskId
+        }
     }
 
     private fun get(tankKey: String): TankData =
@@ -875,13 +877,13 @@ object FishTankDataStore {
     }
 
     fun close() {
-        if (saveTaskId != -1) {
+        saveTask?.let { task ->
             try {
-                Bukkit.getScheduler().cancelTask(saveTaskId)
+                task.cancel()
             } catch (_: Throwable) {
             }
 
-            saveTaskId = -1
+            saveTask = null
         }
 
         try {

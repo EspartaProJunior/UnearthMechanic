@@ -16,6 +16,7 @@ import dev.wuason.unearthMechanic.system.ILiveTool
 import dev.wuason.unearthMechanic.system.StageData
 import dev.wuason.unearthMechanic.system.StageManager
 import dev.wuason.unearthMechanic.system.compatibilities.ICompatibility
+import dev.wuason.unearthMechanic.utils.FoliaUtils
 import dev.wuason.unearthMechanic.utils.Utils
 import org.bukkit.Bukkit
 import org.bukkit.Location
@@ -104,6 +105,60 @@ class ItemsAdderImpl(
         }
 
         return null
+    }
+
+    override fun getFurnitureUUID(
+        loc: Location,
+        expectedAdapterId: String
+    ): UUID? {
+        val keyLoc = loc.block.location
+        val world = keyLoc.world ?: return null
+
+        val cleanExpectedId = expectedAdapterId
+            .removePrefix("ia:")
+            .removePrefix("itemsadder:")
+            .substringBefore("[")
+
+        val center = keyLoc.clone().add(0.5, 0.5, 0.5)
+
+        val nearby = world.getNearbyEntities(center, 1.5, 1.5, 1.5)
+            .sortedBy { it.location.distanceSquared(center) }
+
+        var bestEntity: Entity? = null
+        var bestDistance = Double.MAX_VALUE
+
+        for (entity in nearby) {
+            if (!isPossibleFurnitureEntity(entity)) continue
+            if (!entity.isValid || entity.isDead) continue
+            if (!isSameFurnitureArea(entity, keyLoc)) continue
+
+            val furniture = try {
+                CustomFurniture.byAlreadySpawned(entity)
+            } catch (_: Throwable) {
+                null
+            } ?: continue
+
+            if (!furniture.namespacedID.equals(cleanExpectedId, ignoreCase = true)) {
+                continue
+            }
+
+            rememberFurnitureBase(entity, keyLoc)
+
+            val entityBlockLoc = entity.location.block.location
+
+            if (entityBlockLoc == keyLoc) {
+                return entity.uniqueId
+            }
+
+            val distance = entity.location.distanceSquared(center)
+
+            if (distance < bestDistance) {
+                bestDistance = distance
+                bestEntity = entity
+            }
+        }
+
+        return bestEntity?.uniqueId
     }
 
     private fun rememberFurnitureBase(entity: Entity, baseLoc: Location) {
@@ -335,44 +390,48 @@ class ItemsAdderImpl(
     @EventHandler
     fun onFurniturePlace(event: FurniturePlaceEvent) {
         val player = event.player
-        val targetLoc = lastFurniturePlace[player.uniqueId] ?: player.location.block.location
+        val playerId = player.uniqueId
 
-        Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
-            val world = targetLoc.world ?: return@Runnable
-            val center = targetLoc.clone().add(0.5, 0.5, 0.5)
+        FoliaUtils.runAtEntity(player) {
+            val targetLoc = lastFurniturePlace[playerId] ?: player.location.block.location
 
-            val placedEntity = world.getNearbyEntities(center, 1.5, 1.5, 1.5)
-                .asSequence()
-                .filter { isPossibleFurnitureEntity(it) }
-                .filter { it.isValid && !it.isDead }
-                .filter {
-                    try {
-                        CustomFurniture.byAlreadySpawned(it) != null
-                    } catch (_: Throwable) {
-                        false
+            FoliaUtils.runLater(3L) {
+                FoliaUtils.runAtLocation(targetLoc) {
+                    val world = targetLoc.world ?: return@runAtLocation
+                    val center = targetLoc.clone().add(0.5, 0.5, 0.5)
+
+                    val placedEntity = world.getNearbyEntities(center, 1.5, 1.5, 1.5)
+                        .asSequence()
+                        .filter { isPossibleFurnitureEntity(it) }
+                        .filter { it.isValid && !it.isDead }
+                        .filter {
+                            try {
+                                CustomFurniture.byAlreadySpawned(it) != null
+                            } catch (_: Throwable) {
+                                false
+                            }
+                        }
+                        .sortedBy { it.location.distanceSquared(center) }
+                        .firstOrNull()
+
+                    if (placedEntity != null) {
+                        val loc = placedEntity.location.block.location
+
+                        rememberFurnitureBase(placedEntity, loc)
+
+                        if (isRemoving(loc)) {
+                            clearRemoving(loc)
+                        }
                     }
-                }
-                .sortedBy { it.location.distanceSquared(center) }
-                .firstOrNull()
 
-            if (placedEntity != null) {
-                val loc = placedEntity.location.block.location
+                    if (isRemoving(targetLoc)) {
+                        clearRemoving(targetLoc)
+                    }
 
-                rememberFurnitureBase(placedEntity, loc)
-
-                // Only remove if that loc was actually marked for removing
-                if (isRemoving(loc)) {
-                    clearRemoving(loc)
+                    lastFurniturePlace.remove(playerId)
                 }
             }
-
-            // clears `targetLoc` if that was the point that was blocked
-            if (isRemoving(targetLoc)) {
-                clearRemoving(targetLoc)
-            }
-
-            lastFurniturePlace.remove(player.uniqueId)
-        }, 3L)
+        }
     }
 
     private fun placeBlock(adapterId: String, location: Location?) {
@@ -396,14 +455,21 @@ class ItemsAdderImpl(
         generic: IGeneric,
         stage: IStage
     ) {
-        //Bukkit.getConsoleSender().sendMessage("[UM][ItemsAdderImpl] handleStage ejecutado con adapterData: ${stage.getAdapterData()?.adapter?.type}:${stage.getAdapterData()?.id}")
-        //Bukkit.getConsoleSender().sendMessage("[UM] handleStage en $loc - TICK: ${Bukkit.getCurrentTick()}")
-        if (stage is IBlockStage) {
-            handleBlockStage(player, itemAdapterData, event, loc, toolUsed, generic, stage)
-        } else if (stage is IFurnitureStage) {
-            Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
-                handleFurnitureStage(player, itemAdapterData, event, loc, toolUsed, generic, stage)
-            }, 2L)
+        when (stage) {
+            is IBlockStage -> {
+                FoliaUtils.runAtLocation(loc) {
+                    handleBlockStage(player, itemAdapterData, event, loc, toolUsed, generic, stage)
+                }
+            }
+            is IFurnitureStage -> {
+                val keyLoc = loc.block.location
+
+                FoliaUtils.runLater(2L) {
+                    FoliaUtils.runAtLocation(keyLoc) {
+                        handleFurnitureStage(player, itemAdapterData, event, keyLoc, toolUsed, generic, stage)
+                    }
+                }
+            }
         }
     }
 
@@ -515,12 +581,15 @@ class ItemsAdderImpl(
                 //debug("handleFurnitureStage: AFTER SPAWN target=${itemAdapterData.id} spawned=${customFurniture.entity?.uniqueId}")
 
             }
-            Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
-                if(!stageManager.activeSequences.contains(event.bukkitEntity.location.block.location)){
-                    //Bukkit.getConsoleSender().sendMessage("clearRemoving "+event.bukkitEntity.location.block.location)
-                    clearRemoving(event.bukkitEntity.location.block.location)
+            val entityLoc = event.bukkitEntity.location.block.location
+
+            FoliaUtils.runLater(5L) {
+                FoliaUtils.runAtLocation(entityLoc) {
+                    if (!stageManager.activeSequences.contains(entityLoc)) {
+                        clearRemoving(entityLoc)
+                    }
                 }
-            }, 5L)
+            }
         } else {
             // Sequence System
             val keyLoc = loc.block.location
@@ -593,11 +662,13 @@ class ItemsAdderImpl(
             StageData.removeStageData(keyLoc)
             setRemoving(keyLoc)
 
-            Bukkit.getScheduler().runTaskLater(core, Runnable {
-                if (!stageManager.activeSequences.contains(keyLoc)) {
-                    clearRemoving(keyLoc)
+            FoliaUtils.runLater(2L) {
+                FoliaUtils.runAtLocation(keyLoc) {
+                    if (!stageManager.activeSequences.contains(keyLoc)) {
+                        clearRemoving(keyLoc)
+                    }
                 }
-            }, 2L)
+            }
         }
 
         return removed

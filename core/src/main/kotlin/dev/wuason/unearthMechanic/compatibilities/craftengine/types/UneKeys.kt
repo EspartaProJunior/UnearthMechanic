@@ -20,4 +20,9 @@ object UneKeys {
     val ASHES_MERGE_BEHAVIOR: Key = Key.of("$NAMESPACE:ashes_merge")
     val CURTAIN_BEHAVIOR: Key = Key.of("$NAMESPACE:curtain_block")
     val SHOWER_CURTAIN_BEHAVIOR: Key = Key.of("$NAMESPACE:shower_curtain_block")
+
+    val SHIFT_PLACE_BLOCK_BEHAVIOR: Key = Key.of("$NAMESPACE:shift_place_block")
+
+    val MINI_CUBES_PROPERTY: Key = Key.of("$NAMESPACE:mini_cubes")
+    val MINI_CUBES_BEHAVIOR: Key = Key.of("$NAMESPACE:mini_cubes")
 }

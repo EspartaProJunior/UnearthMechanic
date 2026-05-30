@@ -1,5 +1,6 @@
 package dev.wuason.unearthMechanic.system
 
+import com.tcoded.folialib.wrapper.task.WrappedTask
 import dev.wuason.adapter.Adapter
 import dev.wuason.adapter.AdapterData
 import dev.wuason.unearthMechanic.UnearthMechanic
@@ -25,6 +26,7 @@ import dev.wuason.unearthMechanic.system.features.FoodFeature
 import dev.wuason.unearthMechanic.system.features.SwingHandFeature
 import dev.wuason.unearthMechanic.system.features.TintFurnitureFeature
 import dev.wuason.unearthMechanic.system.features.ToolSoundFeature
+import dev.wuason.unearthMechanic.utils.FoliaUtils
 import dev.wuason.unearthMechanic.utils.Utils
 import net.momirealms.antigrieflib.Flag
 import org.bukkit.Bukkit
@@ -62,7 +64,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
 
     private val compatibilitiesLoaded: MutableList<ICompatibility> = ArrayList()
 
-    private val delays: HashMap<Location, BukkitTask> = HashMap()
+    private val delays: HashMap<Location, WrappedTask> = HashMap()
 
     private val animator: AnimationManager = AnimationManager(core)
 
@@ -71,7 +73,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
     private val consumingTimedSequences = mutableSetOf<Location>()
 
     private val activeSequenceUuids = mutableMapOf<Location, UUID?>()
-    private val scheduledTasks = mutableMapOf<Location, MutableList<BukkitTask>>()
+    private val scheduledTasks = mutableMapOf<Location, MutableList<WrappedTask>>()
 
     private val lastInteractionProps = mutableMapOf<Location, Map<String, String>>()
 
@@ -539,10 +541,28 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
             }
 
             if (sound.delay > 0) {
-                Bukkit.getScheduler().runTaskLater(core, task, sound.delay)
+                runLaterAtLocation(loc, sound.delay) {
+                    task.run()
+                }
             } else {
-                task.run()
+                FoliaUtils.runAtLocation(loc) {
+                    task.run()
+                }
             }
+        }
+    }
+
+    private fun getFurnitureUUIDSafe(
+        compatibility: ICompatibility,
+        loc: Location,
+        expectedAdapterId: String?
+    ): UUID? {
+        val keyLoc = sequenceKey(loc)
+
+        return if (!expectedAdapterId.isNullOrBlank()) {
+            compatibility.getFurnitureUUID(keyLoc, expectedAdapterId)
+        } else {
+            compatibility.getFurnitureUUID(keyLoc)
         }
     }
 
@@ -732,7 +752,11 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                     currentAdapterId != null &&
                     isCurrentObjectValid(compatibility, loc, generic, currentStageData)
                 ) {
-                    val oldUuid = compatibility.getFurnitureUUID(loc.block.location)
+                    val oldUuid = getFurnitureUUIDSafe(
+                        compatibility = compatibility,
+                        loc = loc.block.location,
+                        expectedAdapterId = currentAdapterId
+                    )
 
                     if (oldUuid != null) {
                         val newUuid = compatibility.placeNewFurnitureThenRemoveOld(
@@ -748,9 +772,9 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                             if (resolvedStage.getSequenceStages()?.isNotEmpty() == true) {
                                 activeSequenceUuids[loc.block.location] = newUuid
 
-                                Bukkit.getScheduler().runTaskLater(core, Runnable {
+                                runLaterAtLocation(loc, 2L) {
                                     handleSequence(player, compatibility, loc, toolUsed, generic, resolvedStage)
-                                }, 2L)
+                                }
                             }
 
                             // We skip handleStage because we've already set up the new furniture
@@ -770,12 +794,12 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
 
                 if (resolvedStage.getSequenceStages()?.isNotEmpty() == true) {
                     if (resolvedStage is IFurnitureStage) {
-                        Bukkit.getScheduler().runTaskLater(core, Runnable {
+                        runLaterAtLocation(loc, 3L) {
                             compatibility.getFurnitureUUID(loc.block.location)?.let { uuid ->
                                 activeSequenceUuids[loc.block.location] = uuid
                             }
                             handleSequence(player, compatibility, loc, toolUsed, generic, resolvedStage)
-                        }, 3L)
+                        }
                     } else {
                         compatibility.getFurnitureUUID(loc.block.location)?.let { uuid ->
                             activeSequenceUuids[loc.block.location] = uuid
@@ -821,12 +845,12 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
 
                 if (resolvedStage.getSequenceStages()?.isNotEmpty() == true) {
                     if (resolvedStage is IFurnitureStage) {
-                        Bukkit.getScheduler().runTaskLater(core, Runnable {
-                            c.getFurnitureUUID(loc.block.location)?.let { uuid ->
+                        runLaterAtLocation(loc, 3L) {
+                            compatibility.getFurnitureUUID(loc.block.location)?.let { uuid ->
                                 activeSequenceUuids[loc.block.location] = uuid
                             }
-                            handleSequence(player, c, loc, toolUsed, generic, resolvedStage)
-                        }, 3L)
+                            handleSequence(player, compatibility, loc, toolUsed, generic, resolvedStage)
+                        }
                     } else {
                         c.getFurnitureUUID(loc.block.location)?.let { uuid ->
                             activeSequenceUuids[loc.block.location] = uuid
@@ -898,6 +922,20 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
         return "${world?.name}:${blockX},${blockY},${blockZ}"
     }
 
+    private fun runLaterAtLocation(
+        loc: Location,
+        delayTicks: Long,
+        block: () -> Unit
+    ): WrappedTask {
+        val keyLoc = sequenceKey(loc)
+
+        return FoliaUtils.runLater(delayTicks) {
+            FoliaUtils.runAtLocation(keyLoc) {
+                block()
+            }
+        }
+    }
+
     private fun transitionArea(loc: Location): List<Location> {
         val base = sequenceKey(loc)
         val world = base.world ?: return listOf(base)
@@ -927,7 +965,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
             addTransitioning(transitionLoc, ticks)
         }
 
-        Bukkit.getScheduler().runTaskLater(core, Runnable {
+        runLaterAtLocation(loc, ticks + 1L) {
             transitionArea(loc).forEach { transitionLoc ->
                 val keyLoc = sequenceKey(transitionLoc)
                 val until = transitioningLocations[keyLoc] ?: return@forEach
@@ -936,7 +974,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                     transitioningLocations.remove(keyLoc)
                 }
             }
-        }, ticks + 1L)
+        }
     }
 
     private fun finishSequenceStepIfNeeded(
@@ -1000,8 +1038,8 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
         stage: Stage,
         attemptsLeft: Int = 5
     ) {
-        val task = Bukkit.getScheduler().runTaskLater(core, Runnable {
-            if (!activeSequences.contains(keyLoc)) return@Runnable
+        val task = runLaterAtLocation(keyLoc, 1L) {
+            if (!activeSequences.contains(keyLoc)) return@runLaterAtLocation
 
             val currentUuid = compatibility.getFurnitureUUID(keyLoc)
 
@@ -1031,7 +1069,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                     stage,
                     attemptsLeft - 1
                 )
-                return@Runnable
+                return@runLaterAtLocation
             }
 
             if (oldUuid != null && currentUuid == oldUuid) {
@@ -1069,7 +1107,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                 keyLoc,
                 compatibility
             )
-        }, 1L)
+        }
 
         scheduledTasks.getOrPut(keyLoc) { mutableListOf() }.add(task)
     }
@@ -1118,9 +1156,15 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
 
         //Bukkit.getConsoleSender().sendMessage("[UM] Stage ${stage.getStage()} tiene ${sequenceStages.size} pasos de sequence.")
 
-        val tasks = mutableListOf<BukkitTask>()
+        val tasks = mutableListOf<WrappedTask>()
 
-        compatibility.getFurnitureUUID(keyLoc)?.let { uuid ->
+        val expectedId = stage.getAdapterData()?.id
+
+        getFurnitureUUIDSafe(
+            compatibility = compatibility,
+            loc = keyLoc,
+            expectedAdapterId = expectedId
+        )?.let { uuid ->
             activeSequenceUuids[keyLoc] = uuid
         }
         dbgTimed(
@@ -1144,8 +1188,8 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
             if (previewIsFurnitureTransition) {
                 val preLockDelay = (delayTicks - 1L).coerceAtLeast(0L)
 
-                val preLockTask = Bukkit.getScheduler().runTaskLater(core, Runnable {
-                    if (!activeSequences.contains(keyLoc)) return@Runnable
+                val preLockTask = runLaterAtLocation(keyLoc, preLockDelay) {
+                    if (!activeSequences.contains(keyLoc)) return@runLaterAtLocation
 
                     lockTransition(keyLoc, 8L)
 
@@ -1156,13 +1200,13 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                                 "preLockDelay=$preLockDelay " +
                                 "nextStage=${previewResolvedStage.getAdapterData()}"
                     )
-                }, preLockDelay)
+                }
 
                 tasks.add(preLockTask)
             }
 
-            val task = Bukkit.getScheduler().runTaskLater(core, Runnable {
-                if (!activeSequences.contains(keyLoc)) return@Runnable
+            val task = runLaterAtLocation(keyLoc, delayTicks) {
+                if (!activeSequences.contains(keyLoc)) return@runLaterAtLocation
                 dbgTimed(
                     "sequence task ENTER " +
                             "loc=${keyLoc.toShortString()} " +
@@ -1235,7 +1279,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                         compatibility
                     )
 
-                    return@Runnable
+                    return@runLaterAtLocation
                 }
 
                 val prevStage = lastSequenceStageByLoc[keyLoc]
@@ -1259,7 +1303,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                     )
 
                     cancelSequence(compatibility, keyLoc)
-                    return@Runnable
+                    return@runLaterAtLocation
                 }
 
                 /*val center = loc.clone().add(0.5, 0.5, 0.5)
@@ -1298,7 +1342,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                         )
 
                         cancelSequence(compatibility, keyLoc)
-                        return@Runnable
+                        return@runLaterAtLocation
                     }
                 }
 
@@ -1377,7 +1421,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                                 compatibility
                             )
 
-                            return@Runnable
+                            return@runLaterAtLocation
                         }
                     }
 
@@ -1427,7 +1471,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                         )
                     }
 
-                    return@Runnable
+                    return@runLaterAtLocation
                 }
 
                 prevStage?.let {
@@ -1444,7 +1488,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                     keyLoc,
                     compatibility
                 )
-            }, delayTicks)
+            }
             tasks.add(task)
         }
 
@@ -1584,7 +1628,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                     return
                 }
 
-                Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
+                runLaterAtLocation(keyLoc, 1L) {
                     val previousUuid = activeSequenceUuids[keyLoc]
                     val newUuid = compatibility.getFurnitureUUID(keyLoc)
                     activeSequenceUuids[keyLoc] = newUuid
@@ -1597,7 +1641,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                                 "stage=${resolvedStage.getAdapterData()} " +
                                 "comp=${compatibility.adapterComp().type}"
                     )
-                }, 1L)
+                }
             } else {
                 val c: ICompatibility =
                     getCompatibilityByAdapterId(adapterData)
@@ -1638,7 +1682,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                     return
                 }
 
-                Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
+                runLaterAtLocation(keyLoc, 1L) {
                     val previousUuid = activeSequenceUuids[keyLoc]
                     val newUuid = c.getFurnitureUUID(keyLoc)
                     activeSequenceUuids[keyLoc] = newUuid
@@ -1651,7 +1695,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                                 "stage=${resolvedStage.getAdapterData()} " +
                                 "comp=${c.adapterComp().type}"
                     )
-                }, 1L)
+                }
             }
         }
     }
@@ -2119,10 +2163,9 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
         return animator
     }
 
-    fun getDelays(): HashMap<Location, BukkitTask> {
+    fun getDelays(): HashMap<Location, WrappedTask> {
         return delays
     }
-
 
     private fun multipleInteract(comp: ICompatibility, event: Event, player: Player, location: Location, toolUsed: LiveTool) {
         if (toolUsed.getITool().isMultiple() && !StageData.hasMultiple(location)) {

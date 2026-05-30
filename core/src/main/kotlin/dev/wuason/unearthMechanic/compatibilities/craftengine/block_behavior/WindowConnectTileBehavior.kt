@@ -1,6 +1,7 @@
 package dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior
 
 import dev.wuason.unearthMechanic.compatibilities.craftengine.types.WindowTile
+import dev.wuason.unearthMechanic.utils.FoliaUtils
 import net.momirealms.craftengine.bukkit.api.BukkitAdaptor
 import net.momirealms.craftengine.bukkit.block.behavior.BukkitBlockBehavior
 import net.momirealms.craftengine.bukkit.util.BlockStateUtils
@@ -16,6 +17,7 @@ import net.momirealms.craftengine.core.world.BlockPos
 import net.momirealms.craftengine.core.world.World
 import net.momirealms.craftengine.core.world.context.BlockPlaceContext
 import org.bukkit.Bukkit
+import org.bukkit.Location
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -130,13 +132,34 @@ class WindowConnectTileBehavior(
             //log.info("[WindowTile] scheduleNeighborUpdate(): SKIP dup for $key")
             return
         }
-        val plugin = Bukkit.getPluginManager().getPlugin("UnearthMechanic") ?: return
-        if (!plugin.isEnabled) return
         //log.info("[WindowTile] scheduleNeighborUpdate(): ($key) +${delay}t")
-        Bukkit.getScheduler().runTaskLater(plugin, Runnable {
-            try { updateNeighbors(world, pos) } finally { pending.remove(key) }
-        }, delay)
 
+        val bukkitLoc = toBukkitLocation(world, pos)
+        if (bukkitLoc == null) {
+            pending.remove(key)
+            return
+        }
+
+        FoliaUtils.runLater(delay) {
+            FoliaUtils.runAtLocation(bukkitLoc) {
+                try {
+                    updateNeighbors(world, pos)
+                } finally {
+                    pending.remove(key)
+                }
+            }
+        }
+    }
+
+    private fun toBukkitLocation(world: World, pos: BlockPos): Location? {
+        val bukkitWorld = Bukkit.getWorld(world.name()) ?: return null
+
+        return Location(
+            bukkitWorld,
+            pos.x().toDouble(),
+            pos.y().toDouble(),
+            pos.z().toDouble()
+        )
     }
 
     // ================== Connection logic ==================

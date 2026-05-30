@@ -3,6 +3,7 @@ package dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.fi
 
 import dev.wuason.unearthMechanic.UnearthMechanic
 import dev.wuason.unearthMechanic.compatibilities.craftengine.types.FishType
+import dev.wuason.unearthMechanic.utils.FoliaUtils
 import net.momirealms.craftengine.bukkit.api.BukkitAdaptor
 import net.momirealms.craftengine.bukkit.api.CraftEngineBlocks
 import net.momirealms.craftengine.bukkit.block.behavior.BukkitBlockBehavior
@@ -286,11 +287,10 @@ class FishTankBehavior(
 
         fun ensureTaskRunning() {
             if (taskStarted) return
-            val plugin = Bukkit.getPluginManager().getPlugin("UnearthMechanic") ?: return
             taskStarted = true
 
-            Bukkit.getScheduler().runTaskTimer(plugin, Runnable {
-                if (tanks.isEmpty()) return@Runnable
+            FoliaUtils.runTimer(1L,1L){
+                if (tanks.isEmpty()) return@runTimer
 
                 for ((k, ref) in tanks) {
                     var tankKey = k
@@ -490,7 +490,7 @@ class FishTankBehavior(
                         ent.teleport(Location(bw, loc.x + nx*step, loc.y + ny*step, loc.z + nz*step, yaw, 0f))
                     }
                 }
-            }, 1L, 1L)
+            }
         }
 
         data class TankRef(
@@ -1069,13 +1069,11 @@ class FishTankBehavior(
 
         private fun ensureChunkResyncTaskRunning() {
             if (chunkResyncTaskStarted) return
-
-            val plugin = Bukkit.getPluginManager().getPlugin("UnearthMechanic") ?: return
             chunkResyncTaskStarted = true
 
-            Bukkit.getScheduler().runTaskTimer(plugin, Runnable {
+            FoliaUtils.runTimer(1L,1L){
                 repeat(MAX_CHUNK_RESYNCS_PER_TICK) {
-                    val job = pendingChunkResyncs.poll() ?: return@Runnable
+                    val job = pendingChunkResyncs.poll() ?: return@runTimer
                     pendingChunkResyncSet.remove(job.token())
 
                     val bw = Bukkit.getWorld(job.worldName) ?: return@repeat
@@ -1083,7 +1081,7 @@ class FishTankBehavior(
 
                     resyncTankFromQueue(bw, job.chunkX, job.chunkZ, job.tankKey)
                 }
-            }, 1L, 1L)
+            }
         }
 
         private fun resyncTankFromQueue(
@@ -1320,7 +1318,13 @@ class FishTankBehavior(
                 cellToTankKey[worldName]?.remove(packedCell)
 
                 // 5) “Quick resync”: from neighbors who remain aquarium
-                Bukkit.getScheduler().runTask(UnearthMechanic.getInstance(), Runnable {
+                val removedLoc = Location(
+                    bw,
+                    removed.x().toDouble(),
+                    removed.y().toDouble(),
+                    removed.z().toDouble()
+                )
+                FoliaUtils.runAtLocation(removedLoc){
                     val seen = HashSet<String>()
                     var didResync = false
 
@@ -1357,7 +1361,7 @@ class FishTankBehavior(
                         FishTankDataStore.removeTank(tankKey)
                         cellToTankKey[worldName]?.entries?.removeIf { it.value == tankKey }
                     }
-                })
+                }
 
                 val center = Location(bw, removed.x() + 0.5, removed.y() + 0.5, removed.z() + 0.5)
                 for (near in bw.getNearbyEntities(center, 1.2, 1.2, 1.2)) {

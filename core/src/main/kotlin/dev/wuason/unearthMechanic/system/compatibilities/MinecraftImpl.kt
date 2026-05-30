@@ -9,6 +9,7 @@ import dev.wuason.unearthMechanic.config.*
 import dev.wuason.unearthMechanic.system.ILiveTool
 import dev.wuason.unearthMechanic.system.StageData
 import dev.wuason.unearthMechanic.system.StageManager
+import dev.wuason.unearthMechanic.utils.FoliaUtils
 import dev.wuason.unearthMechanic.utils.Utils
 import org.bukkit.Bukkit
 import org.bukkit.Location
@@ -204,28 +205,28 @@ class MinecraftImpl(
         val keyLoc = loc.block.location
         val explicitProps = (stage as? Stage)?.getExplicitBlockProperties() ?: emptyMap()
 
-        Bukkit.getScheduler().runTask(core, Runnable {
+        FoliaUtils.runAtLocation(keyLoc) {
 
             val handledByCe = tryReplaceWithCraftEngineBridge(
-                loc = keyLoc,
-                event = event,
-                oldData = oldData,
-                newMaterial = newMaterial,
-                explicitProps = explicitProps
+                keyLoc,
+                event,
+                oldData,
+                newMaterial,
+                explicitProps
             )
 
             if (handledByCe) {
-                return@Runnable
+                return@runAtLocation
             }
 
             if (newMaterial.createBlockData() is Door) {
                 placeVanillaDoorBothHalves(
-                    clickedLoc = keyLoc,
-                    newMaterial = newMaterial,
-                    oldData = oldData,
-                    explicitProps = explicitProps
+                    keyLoc,
+                    newMaterial,
+                    oldData,
+                    explicitProps
                 )
-                return@Runnable
+                return@runAtLocation
             }
 
             keyLoc.block.type = newMaterial
@@ -238,7 +239,7 @@ class MinecraftImpl(
 
             newBlock.blockData = newData
             newBlock.state.update(true, false)
-        })
+        }
     }
 
     private fun placeVanillaDoorBothHalves(
@@ -416,7 +417,7 @@ class MinecraftImpl(
             return true
         }
 
-        // Seguridad: no borres media puerta ajena de otro material.
+        // Safety: Do not remove half of someone else's door made of a different material.
         if (lowerBlock.type != block.type && upperBlock.type != block.type) {
             block.setType(Material.AIR, false)
             return true
@@ -437,13 +438,22 @@ class MinecraftImpl(
         generic: IGeneric,
         stage: IStage
     ) {
-        if (stage is IBlockStage) {
-            handleBlockStage(player, itemAdapterData, event, loc, toolUsed, generic, stage)
-        }
-        else if (stage is IFurnitureStage) {
-            Bukkit.getScheduler().runTaskLater(core, Runnable {
-                handleFurnitureStage(player, itemAdapterData, event, loc, toolUsed, generic, stage)
-            }, 2L)
+        when (stage) {
+            is IBlockStage -> {
+                FoliaUtils.runAtLocation(loc) {
+                    handleBlockStage(player, itemAdapterData, event, loc, toolUsed, generic, stage)
+                }
+            }
+
+            is IFurnitureStage -> {
+                val keyLoc = loc.block.location
+
+                FoliaUtils.runLater(2L) {
+                    FoliaUtils.runAtLocation(keyLoc) {
+                        handleFurnitureStage(player, itemAdapterData, event, keyLoc, toolUsed, generic, stage)
+                    }
+                }
+            }
         }
     }
 

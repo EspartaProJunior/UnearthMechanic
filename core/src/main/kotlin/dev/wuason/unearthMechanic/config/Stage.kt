@@ -190,7 +190,10 @@ open class Stage(
             if (results.isEmpty()) return
             results.random().addItem(player, true)
 
-            //items[Random.nextInt(items.size)].addItem(player, true)
+            try {//items[Random.nextInt(items.size)].addItem(player, true)
+            } catch (e: Exception) {
+                TODO("Not yet implemented")
+            }
             return
         }
         items.forEach { it.addItem(player, true) }

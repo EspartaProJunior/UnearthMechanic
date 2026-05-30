@@ -1,6 +1,7 @@
 package dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.ashes
 
 import dev.wuason.unearthMechanic.UnearthMechanic
+import dev.wuason.unearthMechanic.utils.FoliaUtils
 import net.momirealms.craftengine.bukkit.api.CraftEngineBlocks
 import org.bukkit.Bukkit
 import org.bukkit.Chunk
@@ -15,6 +16,7 @@ import org.bukkit.event.entity.EntityDamageEvent
 import org.bukkit.event.world.ChunkLoadEvent
 import org.bukkit.event.world.ChunkUnloadEvent
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 class AshesEnvironmentListener(
     private val core: UnearthMechanic
@@ -50,11 +52,6 @@ class AshesEnvironmentListener(
 
     init {
         startRainTask()
-
-        // Reindex existing ashes once the plugin has finished loading
-        /*Bukkit.getScheduler().runTask(core, Runnable {
-            scanLoadedChunks()
-        })*/
     }
 
     fun trackAsh(location: Location, layers: Int) {
@@ -64,8 +61,11 @@ class AshesEnvironmentListener(
 
     private fun putAsh(pos: TrackedPos, layers: Int) {
         trackedAshes[pos] = layers
+
         ashesByChunk
-            .getOrPut(TrackedChunk.of(pos)) { hashSetOf() }
+            .computeIfAbsent(TrackedChunk.of(pos)) {
+                ConcurrentHashMap.newKeySet()
+            }
             .add(pos)
     }
 
@@ -224,64 +224,89 @@ class AshesEnvironmentListener(
         }
     }
 
-    private fun removeAshFromIterator(
-        iterator: MutableIterator<MutableMap.MutableEntry<TrackedPos, Int>>,
-        pos: TrackedPos
-    ) {
-        iterator.remove()
+    private fun removeAshTracked(pos: TrackedPos) {
+        trackedAshes.remove(pos)
 
         val chunk = TrackedChunk.of(pos)
         val positions = ashesByChunk[chunk]
         positions?.remove(pos)
+
         if (positions != null && positions.isEmpty()) {
             ashesByChunk.remove(chunk)
         }
     }
 
     private fun startRainTask() {
-        Bukkit.getScheduler().runTaskTimer(core, Runnable {
-            if (trackedAshes.isEmpty()) return@Runnable
-            if (Bukkit.getWorlds().none { it.hasStorm() }) return@Runnable
+        FoliaUtils.runTimer(400L, 600L) {
+            if (trackedAshes.isEmpty()) return@runTimer
 
-            val iterator = trackedAshes.entries.iterator()
-            while (iterator.hasNext()) {
-                val entry = iterator.next()
+            val stormWorldIds = Bukkit.getWorlds()
+                .filter { it.hasStorm() }
+                .map { it.uid }
+                .toSet()
+
+            if (stormWorldIds.isEmpty()) return@runTimer
+
+            val snapshot = trackedAshes.entries.toList()
+
+            for (entry in snapshot) {
                 val pos = entry.key
                 val trackedLayers = entry.value
 
-                val world = Bukkit.getWorld(pos.worldId)
+                if (pos.worldId !in stormWorldIds) continue
 
-                if(world == null){
-                    removeAshFromIterator(iterator, pos)
+                val world = Bukkit.getWorld(pos.worldId)
+                if (world == null) {
+                    removeAshTracked(pos)
                     continue
                 }
-
-                if (!world.hasStorm()) continue
 
                 if (!world.isChunkLoaded(pos.x shr 4, pos.z shr 4)) {
-                    removeAshFromIterator(iterator, pos)
+                    removeAshTracked(pos)
                     continue
                 }
 
-                val block = world.getBlockAt(pos.x, pos.y, pos.z)
-                val actualLayers = getAshLayers(block)
+                val loc = Location(
+                    world,
+                    pos.x.toDouble(),
+                    pos.y.toDouble(),
+                    pos.z.toDouble()
+                )
 
-                if (actualLayers == null) {
-                    removeAshFromIterator(iterator, pos)
-                    continue
-                }
+                FoliaUtils.runAtLocation(loc) {
+                    val currentWorld = loc.world
+                    if (currentWorld == null) {
+                        removeAshTracked(pos)
+                        return@runAtLocation
+                    }
 
-                if (actualLayers != trackedLayers) {
-                    entry.setValue(actualLayers)
-                }
+                    if (!currentWorld.hasStorm()) return@runAtLocation
 
-                if (!isRainingOn(block)) continue
+                    if (!currentWorld.isChunkLoaded(pos.x shr 4, pos.z shr 4)) {
+                        removeAshTracked(pos)
+                        return@runAtLocation
+                    }
 
-                if (CraftEngineBlocks.remove(block)) {
-                    removeAshFromIterator(iterator, pos)
+                    val block = currentWorld.getBlockAt(pos.x, pos.y, pos.z)
+                    val actualLayers = getAshLayers(block)
+
+                    if (actualLayers == null) {
+                        removeAshTracked(pos)
+                        return@runAtLocation
+                    }
+
+                    if (actualLayers != trackedLayers) {
+                        trackedAshes[pos] = actualLayers
+                    }
+
+                    if (!isRainingOn(block)) return@runAtLocation
+
+                    if (CraftEngineBlocks.remove(block)) {
+                        removeAshTracked(pos)
+                    }
                 }
             }
-        }, 400L, 600L)
+        }
     }
 
     private fun getAshLayers(block: Block): Int? {

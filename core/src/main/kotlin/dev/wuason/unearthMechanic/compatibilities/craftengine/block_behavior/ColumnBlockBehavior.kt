@@ -3,6 +3,7 @@ package dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior
 import dev.wuason.unearthMechanic.UnearthMechanic
 import dev.wuason.unearthMechanic.compatibilities.craftengine.types.ColumnPosition
 import dev.wuason.unearthMechanic.compatibilities.craftengine.types.WindowTile
+import dev.wuason.unearthMechanic.utils.FoliaUtils
 import net.momirealms.craftengine.bukkit.api.BukkitAdaptor
 import net.momirealms.craftengine.bukkit.api.CraftEngineBlocks
 import net.momirealms.craftengine.bukkit.block.behavior.BukkitBlockBehavior
@@ -19,6 +20,7 @@ import net.momirealms.craftengine.core.world.BlockPos
 import net.momirealms.craftengine.core.world.World
 import net.momirealms.craftengine.core.world.context.BlockPlaceContext
 import org.bukkit.Bukkit
+import org.bukkit.Location
 
 class ColumnBlockBehavior(
     customBlock: BlockDefinition,
@@ -32,9 +34,7 @@ class ColumnBlockBehavior(
         val world = args[3] as? World ?: return super.updateShape(thisBlock, args)
         val pos = args[4] as? BlockPos ?: return super.updateShape(thisBlock, args)
 
-        Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
-                updateNeighbors(world, pos)
-            }, 1L)
+        scheduleNeighborUpdate(world, pos, 1L)
 
         val newPosition = calculateNewPosition(world, pos)
         return state.with(positionProperty, newPosition).customBlockState().minecraftState()
@@ -94,13 +94,7 @@ class ColumnBlockBehavior(
         //Bukkit.getConsoleSender().sendMessage("CraftEngine.World y BlockPos convertidos correctamente (${craftWorld.name} @ $x, $y, $z)")
 
         // Run updateNeighbors one tick later
-        Bukkit.getScheduler().runTaskLater(
-            Bukkit.getPluginManager().getPlugin("UnearthMechanic")!!,
-            Runnable {
-                updateNeighbors(ceWorld, cePos)
-            },
-            1L
-        )
+        scheduleNeighborUpdate(ceWorld, cePos, 1L)
 
         super.onPlace(thisBlock, args)
     }
@@ -193,6 +187,27 @@ class ColumnBlockBehavior(
         superMethod.call()
     }*/
 
+    private fun scheduleNeighborUpdate(world: World, pos: BlockPos, delay: Long = 1L) {
+        val bukkitLoc = toBukkitLocation(world, pos) ?: return
+
+        FoliaUtils.runLater(delay) {
+            FoliaUtils.runAtLocation(bukkitLoc) {
+                updateNeighbors(world, pos)
+            }
+        }
+    }
+
+    private fun toBukkitLocation(world: World, pos: BlockPos): Location? {
+        val bukkitWorld = Bukkit.getWorld(world.name()) ?: return null
+
+        return Location(
+            bukkitWorld,
+            pos.x().toDouble(),
+            pos.y().toDouble(),
+            pos.z().toDouble()
+        )
+    }
+
     private fun calculateNewPosition(world: World, pos: BlockPos): ColumnPosition {
         val aboveState = world.getBlock(pos.offset(0, 1, 0)).blockState()
         val belowState = world.getBlock(pos.offset(0, -1, 0)).blockState()
@@ -246,7 +261,9 @@ class ColumnBlockBehavior(
 
                 //Bukkit.getConsoleSender().sendMessage("Actualizando bloque en ${bukkitLoc.blockX}, ${bukkitLoc.blockY}, ${bukkitLoc.blockZ}")
 
-                BukkitAdaptor.adapt(bukkitLoc.world).setBlockState(
+                val worldAtLocation = bukkitLoc.world ?: return@forEach
+
+                BukkitAdaptor.adapt(worldAtLocation).setBlockState(
                     bukkitLoc.blockX,
                     bukkitLoc.blockY,
                     bukkitLoc.blockZ,

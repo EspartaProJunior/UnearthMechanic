@@ -12,6 +12,7 @@ import dev.wuason.unearthMechanic.system.ILiveTool
 import dev.wuason.unearthMechanic.system.StageData
 import dev.wuason.unearthMechanic.system.StageManager
 import dev.wuason.unearthMechanic.system.compatibilities.ICompatibility
+import dev.wuason.unearthMechanic.utils.FoliaUtils
 import dev.wuason.unearthMechanic.utils.Utils
 import io.lumine.mythic.bukkit.BukkitAdapter
 import io.lumine.mythiccrucible.MythicCrucible
@@ -157,6 +158,57 @@ class MythicCrucibleImpl(
         return findFurnitureEntity(location)?.uniqueId
     }
 
+    override fun getFurnitureUUID(
+        loc: Location,
+        expectedAdapterId: String
+    ): UUID? {
+        val keyLoc = loc.block.location
+        val expected = cleanAdapterId(expectedAdapterId) ?: return null
+
+        val directEntity = findFurnitureEntity(keyLoc)
+        if (directEntity != null) {
+            val currentId = getCrucibleFurnitureId(directEntity)
+
+            if (currentId != null && currentId.equals(expected, ignoreCase = true)) {
+                return directEntity.uniqueId
+            }
+        }
+
+        val world = keyLoc.world ?: return null
+        val center = keyLoc.clone().add(0.5, 0.5, 0.5)
+
+        var bestEntity: Entity? = null
+        var bestDistance = Double.MAX_VALUE
+
+        val nearby = world.getNearbyEntities(center, 1.5, 1.5, 1.5)
+
+        for (entity in nearby) {
+            if (!entity.isValid || entity.isDead) continue
+            if (!isPossibleFurnitureEntity(entity)) continue
+
+            val currentId = getCrucibleFurnitureId(entity) ?: continue
+
+            if (!currentId.equals(expected, ignoreCase = true)) {
+                continue
+            }
+
+            val entityBlockLoc = entity.location.block.location
+
+            if (entityBlockLoc == keyLoc) {
+                return entity.uniqueId
+            }
+
+            val distance = entity.location.distanceSquared(center)
+
+            if (distance < bestDistance) {
+                bestDistance = distance
+                bestEntity = entity
+            }
+        }
+
+        return bestEntity?.uniqueId
+    }
+
     override fun isValidBlock(loc: Location, expectedAdapterId: String?): Boolean {
         val currentId = getCrucibleBlockId(loc.block) ?: return false
         val expected = cleanAdapterId(expectedAdapterId)
@@ -222,11 +274,13 @@ class MythicCrucibleImpl(
         removeStageData(keyLoc)
         removeFurnitureEntity(entity, null, false)
 
-        Bukkit.getScheduler().runTaskLater(core, Runnable {
-            if (!stageManager.activeSequences.contains(keyLoc)) {
-                clearRemoving(keyLoc)
+        FoliaUtils.runLater(2L) {
+            FoliaUtils.runAtLocation(keyLoc) {
+                if (!stageManager.activeSequences.contains(keyLoc)) {
+                    clearRemoving(keyLoc)
+                }
             }
-        }, 2L)
+        }
 
         return true
     }
@@ -305,22 +359,26 @@ class MythicCrucibleImpl(
         removeStageData(loc)
         setRemoving(loc)
 
-        Bukkit.getScheduler().runTaskLater(core, Runnable {
-            if (!stageManager.activeSequences.contains(loc)) {
-                clearRemoving(loc)
+        FoliaUtils.runLater(2L) {
+            FoliaUtils.runAtLocation(loc) {
+                if (!stageManager.activeSequences.contains(loc)) {
+                    clearRemoving(loc)
+                }
             }
-        }, 2L)
+        }
     }
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
     fun onCrucibleFurniturePlace(event: MythicFurniturePlaceEvent) {
         val loc = event.block.location.block.location
 
-        Bukkit.getScheduler().runTaskLater(core, Runnable {
-            if (isRemoving(loc)) {
-                clearRemoving(loc)
+        FoliaUtils.runLater(3L) {
+            FoliaUtils.runAtLocation(loc) {
+                if (isRemoving(loc)) {
+                    clearRemoving(loc)
+                }
             }
-        }, 3L)
+        }
     }
 
     override fun handleStage(
@@ -333,10 +391,20 @@ class MythicCrucibleImpl(
         stage: IStage
     ) {
         when (stage) {
-            is IBlockStage -> handleBlockStage(player, itemAdapterData, event, loc, toolUsed, generic, stage)
-            is IFurnitureStage -> Bukkit.getScheduler().runTaskLater(core, Runnable {
-                handleFurnitureStage(player, itemAdapterData, event, loc, toolUsed, generic, stage)
-            }, 2L)
+            is IBlockStage -> {
+                FoliaUtils.runAtLocation(loc) {
+                    handleBlockStage(player, itemAdapterData, event, loc, toolUsed, generic, stage)
+                }
+            }
+            is IFurnitureStage -> {
+                val keyLoc = loc.block.location
+
+                FoliaUtils.runLater(2L) {
+                    FoliaUtils.runAtLocation(keyLoc) {
+                        handleFurnitureStage(player, itemAdapterData, event, keyLoc, toolUsed, generic, stage)
+                    }
+                }
+            }
         }
     }
 
@@ -413,11 +481,13 @@ class MythicCrucibleImpl(
 
         spawnFurniture(player, itemAdapterData.id, keyLoc)
 
-        Bukkit.getScheduler().runTaskLater(core, Runnable {
-            if (!stageManager.activeSequences.contains(keyLoc)) {
-                clearRemoving(keyLoc)
+        FoliaUtils.runLater(5L) {
+            FoliaUtils.runAtLocation(keyLoc) {
+                if (!stageManager.activeSequences.contains(keyLoc)) {
+                    clearRemoving(keyLoc)
+                }
             }
-        }, 5L)
+        }
     }
 
     private fun hardRemoveCrucibleAt(
@@ -449,11 +519,13 @@ class MythicCrucibleImpl(
         }
 
         if (removed) {
-            Bukkit.getScheduler().runTaskLater(core, Runnable {
-                if (!stageManager.activeSequences.contains(keyLoc)) {
-                    clearRemoving(keyLoc)
+            FoliaUtils.runLater(2L) {
+                FoliaUtils.runAtLocation(keyLoc) {
+                    if (!stageManager.activeSequences.contains(keyLoc)) {
+                        clearRemoving(keyLoc)
+                    }
                 }
-            }, 2L)
+            }
         }
 
         return removed

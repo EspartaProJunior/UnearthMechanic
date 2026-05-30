@@ -1,6 +1,7 @@
 package dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior
 
 import dev.wuason.unearthMechanic.UnearthMechanic
+import dev.wuason.unearthMechanic.utils.FoliaUtils
 import net.momirealms.craftengine.bukkit.api.BukkitAdaptor
 import net.momirealms.craftengine.bukkit.block.behavior.BukkitBlockBehavior
 import net.momirealms.craftengine.core.block.BlockDefinition
@@ -10,6 +11,7 @@ import net.momirealms.craftengine.core.block.property.Property
 import net.momirealms.craftengine.core.world.BlockPos
 import net.momirealms.craftengine.core.world.World
 import org.bukkit.Bukkit
+import org.bukkit.Location
 import java.util.concurrent.ConcurrentHashMap
 
 abstract class BaseConnectBlockBehavior<T : Enum<T>>(
@@ -53,13 +55,32 @@ abstract class BaseConnectBlockBehavior<T : Enum<T>>(
         val key = "${world.name()}:${pos.x()},${pos.y()},${pos.z()}"
         if (pendingUpdates.putIfAbsent(key, true) != null) return
 
-        Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
-            try {
-                updateNeighbors(world, pos)
-            } finally {
-                pendingUpdates.remove(key)
+        val bukkitLoc = toBukkitLocation(world, pos)
+        if (bukkitLoc == null) {
+            pendingUpdates.remove(key)
+            return
+        }
+
+        FoliaUtils.runLater(delay) {
+            FoliaUtils.runAtLocation(bukkitLoc) {
+                try {
+                    updateNeighbors(world, pos)
+                } finally {
+                    pendingUpdates.remove(key)
+                }
             }
-        }, delay)
+        }
+    }
+
+    private fun toBukkitLocation(world: World, pos: BlockPos): Location? {
+        val bukkitWorld = Bukkit.getWorld(world.name()) ?: return null
+
+        return Location(
+            bukkitWorld,
+            pos.x().toDouble(),
+            pos.y().toDouble(),
+            pos.z().toDouble()
+        )
     }
 
     protected fun scheduleNeighborUpdateFromArgs(args: Array<Any>, delay: Long = 1L) {

@@ -12,16 +12,14 @@ import com.nexomc.nexo.api.events.furniture.NexoFurniturePlaceEvent
 import com.nexomc.nexo.utils.drops.Drop
 import dev.wuason.adapter.AdapterComp
 import dev.wuason.adapter.AdapterData
-import dev.wuason.unearthMechanic.UnearthMechanic
 import dev.wuason.unearthMechanic.UnearthMechanicPlugin
 import dev.wuason.unearthMechanic.config.*
 import dev.wuason.unearthMechanic.system.ILiveTool
 import dev.wuason.unearthMechanic.system.StageData
 import dev.wuason.unearthMechanic.system.StageManager
 import dev.wuason.unearthMechanic.system.compatibilities.ICompatibility
+import dev.wuason.unearthMechanic.utils.FoliaUtils
 import dev.wuason.unearthMechanic.utils.Utils
-import io.th0rgal.oraxen.api.OraxenBlocks
-import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.block.Block
 import org.bukkit.block.BlockFace
@@ -33,7 +31,6 @@ import org.bukkit.event.EventPriority
 import org.bukkit.event.block.Action
 import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
-import org.bukkit.persistence.PersistentDataType
 import java.util.Collections
 import java.util.UUID
 
@@ -46,6 +43,27 @@ class NexoImpl(
     pluginName,
     adapterComp
 ) {
+
+    private val debugNexo = false
+
+    private fun dbg(message: String) {
+        if (!debugNexo) return
+        core.logger.info("[UM-NEXO-DBG] $message")
+    }
+
+    private fun warnDbg(message: String, throwable: Throwable? = null) {
+        if (!debugNexo) return
+
+        core.logger.warning("[UM-NEXO-DBG] $message")
+
+        if (throwable != null) {
+            throwable.printStackTrace()
+        }
+    }
+
+    private fun Location.shortLoc(): String {
+        return "${world?.name ?: "null"}:${blockX},${blockY},${blockZ}"
+    }
 
     private val removedLocations = Collections.synchronizedSet(mutableSetOf<Location>())
 
@@ -71,22 +89,115 @@ class NexoImpl(
     }
 
     override fun getFurnitureUUID(location: Location): UUID? {
-        val world = location.world ?: return null
+        val keyLoc = location.block.location
+        val world = keyLoc.world ?: run {
+            dbg("getFurnitureUUID FAIL world=null loc=${keyLoc.shortLoc()}")
+            return null
+        }
 
-        val entities = world.getNearbyEntities(location, 1.0, 1.0, 1.0)
-        for (entity in entities) {
-            try {
-                val furniture = NexoFurniture.isFurniture(entity)
-                if (furniture != null) {
-                    return entity.uniqueId
+        val center = keyLoc.clone().add(0.5, 0.5, 0.5)
+        val nearby = world.getNearbyEntities(center, 1.5, 1.5, 1.5)
+
+        dbg("getFurnitureUUID START loc=${keyLoc.shortLoc()} nearby=${nearby.size}")
+
+        val found = nearby
+            .asSequence()
+            .filter { it.isValid && !it.isDead }
+            .filter { it.location.block.location == keyLoc }
+            .filter {
+                val result = try {
+                    NexoFurniture.isFurniture(it)
+                } catch (ex: Throwable) {
+                    warnDbg("getFurnitureUUID isFurniture threw entity=${it.type} uuid=${it.uniqueId}", ex)
+                    false
                 }
-            } catch (e: Exception) {
-                // Si lanza error es porque esa entidad no es un mueble válido
+
+                dbg(
+                    "getFurnitureUUID scan entity=${it.type} uuid=${it.uniqueId} " +
+                            "entityLoc=${it.location.block.location.shortLoc()} isFurniture=$result"
+                )
+
+                result
+            }
+            .sortedBy { it.location.distanceSquared(center) }
+            .firstOrNull()
+
+        dbg("getFurnitureUUID RESULT loc=${keyLoc.shortLoc()} uuid=${found?.uniqueId}")
+
+        return found?.uniqueId
+    }
+
+    override fun getFurnitureUUID(
+        loc: Location,
+        expectedAdapterId: String
+    ): UUID? {
+        val keyLoc = loc.block.location
+        val world = keyLoc.world ?: run {
+            dbg("getFurnitureUUID(expected) FAIL world=null loc=${keyLoc.shortLoc()}")
+            return null
+        }
+
+        val cleanExpectedId = expectedAdapterId
+            .removePrefix("nexo:")
+            .substringBefore("[")
+
+        val center = keyLoc.clone().add(0.5, 0.5, 0.5)
+        val nearby = world.getNearbyEntities(center, 1.5, 1.5, 1.5)
+
+        dbg(
+            "getFurnitureUUID(expected) START loc=${keyLoc.shortLoc()} " +
+                    "expected=$cleanExpectedId nearby=${nearby.size}"
+        )
+
+        var bestEntity: Entity? = null
+        var bestDistance = Double.MAX_VALUE
+
+        for (entity in nearby) {
+            if (!entity.isValid || entity.isDead) continue
+
+            val entityLoc = entity.location.block.location
+
+            val isFurniture = try {
+                NexoFurniture.isFurniture(entity)
+            } catch (ex: Throwable) {
+                warnDbg("getFurnitureUUID(expected) isFurniture threw entity=${entity.type} uuid=${entity.uniqueId}", ex)
+                false
+            }
+
+            if (!isFurniture) continue
+
+            val mechanic = try {
+                NexoFurniture.furnitureMechanic(entity)
+            } catch (ex: Throwable) {
+                warnDbg("getFurnitureUUID(expected) furnitureMechanic threw entity=${entity.type} uuid=${entity.uniqueId}", ex)
+                null
+            } ?: continue
+
+            dbg(
+                "getFurnitureUUID(expected) scan entity=${entity.type} uuid=${entity.uniqueId} " +
+                        "entityLoc=${entityLoc.shortLoc()} itemID=${mechanic.itemID}"
+            )
+
+            if (!mechanic.itemID.equals(cleanExpectedId, ignoreCase = true)) {
                 continue
+            }
+
+            if (entityLoc == keyLoc) {
+                dbg("getFurnitureUUID(expected) DIRECT MATCH uuid=${entity.uniqueId}")
+                return entity.uniqueId
+            }
+
+            val distance = entity.location.distanceSquared(center)
+
+            if (distance < bestDistance) {
+                bestDistance = distance
+                bestEntity = entity
             }
         }
 
-        return null
+        dbg("getFurnitureUUID(expected) RESULT loc=${keyLoc.shortLoc()} uuid=${bestEntity?.uniqueId}")
+
+        return bestEntity?.uniqueId
     }
 
     override fun isValidUUID(loc: Location, expectedAdapterId: String?, expectedUuid: UUID?): Boolean {
@@ -155,24 +266,42 @@ class NexoImpl(
     }
 
     override fun removeFurnitureByUUID(loc: Location, uuid: UUID?): Boolean {
-        if (uuid == null) return false
+        if (uuid == null) {
+            dbg("removeFurnitureByUUID SKIP uuid=null loc=${loc.block.location.shortLoc()}")
+            return false
+        }
 
         val keyLoc = loc.block.location
-        val world = keyLoc.world ?: return false
-        val center = keyLoc.clone().add(0.5, 0.5, 0.5)
+        val world = keyLoc.world ?: run {
+            dbg("removeFurnitureByUUID FAIL world=null loc=${keyLoc.shortLoc()} uuid=$uuid")
+            return false
+        }
 
+        val center = keyLoc.clone().add(0.5, 0.5, 0.5)
         val nearby = world.getNearbyEntities(center, 1.5, 1.5, 1.5)
 
+        dbg("removeFurnitureByUUID START loc=${keyLoc.shortLoc()} uuid=$uuid nearby=${nearby.size}")
+
         for (entity in nearby) {
+            dbg(
+                "removeFurnitureByUUID scan entity=${entity.type} uuid=${entity.uniqueId} " +
+                        "valid=${entity.isValid} dead=${entity.isDead} loc=${entity.location.block.location.shortLoc()}"
+            )
+
             if (entity.location.block.location != keyLoc) continue
             if (!entity.isValid || entity.isDead) continue
             if (entity.uniqueId != uuid) continue
 
-            val furniture = try {
+            val isFurniture = try {
                 NexoFurniture.isFurniture(entity)
-            } catch (_: Throwable) {
-                null
-            } ?: continue
+            } catch (ex: Throwable) {
+                warnDbg("removeFurnitureByUUID isFurniture threw uuid=${entity.uniqueId}", ex)
+                false
+            }
+
+            dbg("removeFurnitureByUUID matched uuid=$uuid isFurniture=$isFurniture")
+
+            if (!isFurniture) continue
 
             rotationMap[keyLoc] = Pair(entity.location.yaw, entity.location.pitch)
 
@@ -181,34 +310,45 @@ class NexoImpl(
             }
 
             try {
-                NexoFurniture.remove(entity, null, null)
-            } catch (_: Throwable) {
+                val removed = NexoFurniture.remove(
+                    entity,
+                    null,
+                    emptyNexoDrop("unearth_transform_remove")
+                )
+                dbg("removeFurnitureByUUID NexoFurniture.remove result=$removed uuid=$uuid loc=${keyLoc.shortLoc()}")
+            } catch (ex: Throwable) {
+                warnDbg("removeFurnitureByUUID remove threw, fallback entity.remove uuid=$uuid", ex)
                 entity.remove()
             }
-
-            cleanupFurnitureEntities(keyLoc)
 
             return true
         }
 
+        dbg("removeFurnitureByUUID RESULT false loc=${keyLoc.shortLoc()} uuid=$uuid")
         return false
     }
 
-    private fun cleanupFurnitureEntities(loc: Location) {
-        val world = loc.world ?: return
-        val center = loc.clone().add(0.5, 0.5, 0.5)
+    private fun cleanupFurnitureEntities(loc: Location, keepUuid: UUID? = null) {
+        val keyLoc = loc.block.location
+        val world = keyLoc.world ?: return
+        val center = keyLoc.clone().add(0.5, 0.5, 0.5)
 
         val nearby = world.getNearbyEntities(center, 1.5, 1.5, 1.5)
 
         for (entity in nearby) {
-            if (entity.location.block.location != loc) continue
+            if (entity.uniqueId == keepUuid) continue
+            if (entity.location.block.location != keyLoc) continue
             if (!entity.isValid || entity.isDead) continue
 
-            try {
-                if (NexoFurniture.isFurniture(entity)) {
-                    entity.remove()
-                }
-            } catch (_: Throwable) {}
+            val isFurniture = try {
+                NexoFurniture.isFurniture(entity)
+            } catch (_: Throwable) {
+                false
+            }
+
+            if (!isFurniture) continue
+
+            entity.remove()
         }
     }
 
@@ -240,21 +380,32 @@ class NexoImpl(
 
     @EventHandler(priority = EventPriority.HIGHEST)
     fun onInteractFurniture(event: NexoFurnitureInteractEvent) {
-        if (stageManager.isTransitioning(event.baseEntity.location.block.location)) {
+        val loc = event.baseEntity.location.block.location
+
+        dbg(
+            "FurnitureInteract hand=${event.hand} player=${event.player.name} " +
+                    "itemID=${event.mechanic.itemID} path=${getPath(event.mechanic.itemID)} " +
+                    "entity=${event.baseEntity.type} uuid=${event.baseEntity.uniqueId} " +
+                    "loc=${loc.shortLoc()} transitioning=${stageManager.isTransitioning(loc)} " +
+                    "removing=${isRemoving(loc)} emptyHand=${isEmptyHand(event.player)}"
+        )
+
+        if (stageManager.isTransitioning(loc)) {
+            dbg("FurnitureInteract CANCELLED because transitioning loc=${loc.shortLoc()}")
             event.isCancelled = true
             return
         }
 
-        if (event.hand == EquipmentSlot.HAND) {
-            stageManager.interact(
-                event.player,
-                getPath(event.mechanic.itemID),
-                event.baseEntity.location,
-                event,
-                this
-            )
-        }
+        if (event.hand != EquipmentSlot.HAND) return
+        event.isCancelled = true
 
+        stageManager.interact(
+            event.player,
+            getPath(event.mechanic.itemID),
+            event.baseEntity.location,
+            event,
+            this
+        )
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -287,14 +438,38 @@ class NexoImpl(
 
     @EventHandler
     fun onFurniturePlace(event: NexoFurniturePlaceEvent) {
-        Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
-            clearRemoving(event.baseEntity.location.block.location)
-        }, 3L)
+        val entity = event.baseEntity
+
+        FoliaUtils.runAtEntity(entity) {
+            val loc = entity.location.block.location
+
+            FoliaUtils.runLater(3L) {
+                FoliaUtils.runAtLocation(loc) {
+                    clearRemoving(loc)
+                }
+            }
+        }
     }
 
+    private fun cleanNexoId(id: String): String {
+        return id.removePrefix("nexo:")
+    }
+
+    private fun isEmptyHand(player: Player): Boolean {
+        return player.inventory.itemInMainHand.type.isAir
+    }
+
+    private fun emptyNexoDrop(sourceId: String = "unearth_internal_remove"): Drop {
+        return Drop(
+            mutableListOf(),
+            silktouch = false,
+            fortune = false,
+            sourceID = sourceId
+        )
+    }
 
     private fun placeBlock(itemAdapterData: AdapterData, location: Location) {
-        NexoBlocks.place(itemAdapterData.id, location)
+        NexoBlocks.place(cleanNexoId(itemAdapterData.id), location.block.location)
     }
 
     private fun breakBlock(location: Location, player: Player) {
@@ -306,18 +481,34 @@ class NexoImpl(
         location: Location,
         blockFace: BlockFace,
         yaw: Float
-    ) {
-        NexoFurniture.furnitureMechanic(itemAdapterData.id)?.place(location, yaw, blockFace)
+    ): org.bukkit.entity.ItemDisplay? {
+        return NexoFurniture.place(
+            cleanNexoId(itemAdapterData.id),
+            location.block.location,
+            yaw,
+            blockFace
+        )
     }
+
     private fun placeFurniture(
         itemAdapterData: AdapterData,
-        location: Location,
-    ) {
-        NexoFurniture.furnitureMechanic(itemAdapterData.id)?.place(location, 0f, BlockFace.UP)
+        location: Location
+    ): org.bukkit.entity.ItemDisplay? {
+        return NexoFurniture.place(
+            cleanNexoId(itemAdapterData.id),
+            location.block.location,
+            0f,
+            BlockFace.UP
+        )
     }
 
     private fun breakFurniture(entity: Entity, player: Player, id: String) {
-        NexoFurniture.remove(entity, player, Drop(mutableListOf(), silktouch = false, fortune = false, sourceID = id))
+        //NexoFurniture.remove(entity, player, Drop(mutableListOf(), silktouch = false, fortune = false, sourceID = id))
+        NexoFurniture.remove(
+            entity,
+            player,
+            emptyNexoDrop(id)
+        )
     }
 
     override fun handleStage(
@@ -329,12 +520,21 @@ class NexoImpl(
         generic: IGeneric,
         stage: IStage
     ) {
-        if (stage is IBlockStage) {
-            handleBlockStage(player, itemAdapterData, event, loc, toolUsed, generic, stage)
-        } else if (stage is IFurnitureStage) {
-            Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
-                handleFurnitureStage(player, itemAdapterData, event, loc, toolUsed, generic, stage)
-            }, 2L)
+        when (stage) {
+            is IBlockStage -> {
+                FoliaUtils.runAtLocation(loc) {
+                    handleBlockStage(player, itemAdapterData, event, loc, toolUsed, generic, stage)
+                }
+            }
+            is IFurnitureStage -> {
+                val keyLoc = loc.block.location
+
+                FoliaUtils.runLater(1L) {
+                    FoliaUtils.runAtLocation(keyLoc) {
+                        handleFurnitureStage(player, itemAdapterData, event, keyLoc, toolUsed, generic, stage)
+                    }
+                }
+            }
         }
     }
 
@@ -378,28 +578,33 @@ class NexoImpl(
         return null
     }
 
-    private fun findNewestNexoFurnitureAt(
-        keyLoc: Location,
-        expectedId: String,
-        oldUuid: UUID?
-    ): Entity? {
-        val world = keyLoc.world ?: return null
-        val center = keyLoc.clone().add(0.5, 0.5, 0.5)
+    private fun removeFurnitureAt(loc: Location): Boolean {
+        val keyLoc = loc.block.location
 
-        return world.getNearbyEntities(center, 1.5, 1.5, 1.5)
-            .asSequence()
-            .filter { it.uniqueId != oldUuid }
-            .filter { it.isValid && !it.isDead }
-            .firstOrNull { entity ->
-                try {
-                    if (!NexoFurniture.isFurniture(entity)) return@firstOrNull false
+        dbg("removeFurnitureAt START loc=${keyLoc.shortLoc()}")
 
-                    val mechanic = NexoFurniture.furnitureMechanic(entity)
-                    mechanic != null && mechanic.itemID.equals(expectedId, ignoreCase = true)
-                } catch (_: Throwable) {
-                    false
-                }
-            }
+        val uuid = getFurnitureUUID(keyLoc)
+
+        dbg("removeFurnitureAt uuid=$uuid loc=${keyLoc.shortLoc()}")
+
+        if (uuid != null) {
+            val result = removeFurnitureByUUID(keyLoc, uuid)
+            dbg("removeFurnitureAt byUUID result=$result uuid=$uuid loc=${keyLoc.shortLoc()}")
+            return result
+        }
+
+        return try {
+            val result = NexoFurniture.remove(
+                keyLoc,
+                null,
+                emptyNexoDrop("unearth_transform_remove")
+            )
+            dbg("removeFurnitureAt byLocation result=$result loc=${keyLoc.shortLoc()}")
+            result
+        } catch (ex: Throwable) {
+            warnDbg("removeFurnitureAt byLocation threw loc=${keyLoc.shortLoc()}", ex)
+            false
+        }
     }
 
     private fun handleFurnitureStage(
@@ -412,13 +617,120 @@ class NexoImpl(
         stage: IStage
     ) {
         val keyLoc = loc.block.location
+        val targetId = cleanNexoId(itemAdapterData.id)
 
-        if (isRemoving(keyLoc)) {
-            if (!stageManager.activeSequences.contains(keyLoc)) clearRemoving(keyLoc)
-            return
+        dbg(
+            "handleFurnitureStage ENTER player=${player.name} rawTarget=${itemAdapterData.id} " +
+                    "target=$targetId loc=${keyLoc.shortLoc()} event=${event.javaClass.simpleName} " +
+                    "removing=${isRemoving(keyLoc)} activeSequence=${stageManager.activeSequences.contains(keyLoc)}"
+        )
+
+        if (isRemoving(keyLoc) && !stageManager.activeSequences.contains(keyLoc)) {
+            dbg("handleFurnitureStage clearRemoving before replace loc=${keyLoc.shortLoc()}")
+            clearRemoving(keyLoc)
         }
 
-        if (event is NexoFurnitureInteractEvent) {
+        val oldYaw = try {
+            when (event) {
+                is NexoFurnitureInteractEvent -> event.baseEntity.location.yaw
+                else -> rotationMap[keyLoc]?.first
+            }
+        } catch (ex: Throwable) {
+            warnDbg("handleFurnitureStage oldYaw threw loc=${keyLoc.shortLoc()}", ex)
+            rotationMap[keyLoc]?.first
+        } ?: 0f
+
+        val oldPitch = try {
+            when (event) {
+                is NexoFurnitureInteractEvent -> event.baseEntity.location.pitch
+                else -> rotationMap[keyLoc]?.second
+            }
+        } catch (ex: Throwable) {
+            warnDbg("handleFurnitureStage oldPitch threw loc=${keyLoc.shortLoc()}", ex)
+            rotationMap[keyLoc]?.second
+        }
+
+        val oldFace = try {
+            when (event) {
+                is NexoFurnitureInteractEvent -> event.baseEntity.facing
+                else -> BlockFace.UP
+            }
+        } catch (ex: Throwable) {
+            warnDbg("handleFurnitureStage oldFace threw loc=${keyLoc.shortLoc()}", ex)
+            BlockFace.UP
+        }
+
+        dbg(
+            "handleFurnitureStage rotation target=$targetId loc=${keyLoc.shortLoc()} " +
+                    "yaw=$oldYaw pitch=$oldPitch face=$oldFace"
+        )
+
+        val removed = try {
+            removeFurnitureAt(keyLoc)
+        } catch (ex: Throwable) {
+            warnDbg("handleFurnitureStage removeFurnitureAt threw loc=${keyLoc.shortLoc()}", ex)
+            false
+        } finally {
+            clearRemoving(keyLoc)
+        }
+
+        dbg(
+            "handleFurnitureStage after remove removed=$removed loc=${keyLoc.shortLoc()} " +
+                    "removing=${isRemoving(keyLoc)}"
+        )
+
+        try {
+            val removed = removeFurnitureAt(keyLoc)
+
+            dbg(
+                "handleFurnitureStage after remove removed=$removed loc=${keyLoc.shortLoc()} " +
+                        "removing=${isRemoving(keyLoc)}"
+            )
+
+            dbg(
+                "handleFurnitureStage PLACE attempt target=$targetId loc=${keyLoc.shortLoc()} " +
+                        "yaw=$oldYaw face=$oldFace"
+            )
+
+            val placed = NexoFurniture.place(
+                targetId,
+                keyLoc,
+                oldYaw,
+                oldFace
+            )
+
+            dbg(
+                "handleFurnitureStage PLACE result target=$targetId loc=${keyLoc.shortLoc()} " +
+                        "placed=${placed != null} uuid=${placed?.uniqueId} type=${placed?.type}"
+            )
+
+            if (placed == null) {
+                core.logger.warning(
+                    "[UnearthMechanic][Nexo] NexoFurniture.place returned null for id=$targetId at $keyLoc"
+                )
+                return
+            }
+
+            if (oldPitch != null) {
+                dbg("handleFurnitureStage setRotation uuid=${placed.uniqueId} yaw=$oldYaw pitch=$oldPitch")
+                placed.setRotation(oldYaw, oldPitch)
+            }
+
+            clearRemoving(keyLoc)
+
+            dbg(
+                "handleFurnitureStage DONE target=$targetId loc=${keyLoc.shortLoc()} " +
+                        "uuid=${placed.uniqueId} removing=${isRemoving(keyLoc)}"
+            )
+        } catch (ex: Throwable) {
+            warnDbg(
+                "handleFurnitureStage replace threw target=$targetId loc=${keyLoc.shortLoc()}",
+                ex
+            )
+            clearRemoving(keyLoc)
+        }
+
+        /*if (event is NexoFurnitureInteractEvent) {
             val oldEntity = event.baseEntity
             if (!oldEntity.isValid || oldEntity.isDead) return
 
@@ -445,21 +757,27 @@ class NexoImpl(
 
             NexoFurniture.furnitureMechanic(itemAdapterData.id)?.place(oldLoc, oldYaw, oldFace)
 
-            Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
-                val center = oldLoc.clone().add(0.5, 0.5, 0.5)
-                oldLoc.world?.getNearbyEntities(center, 1.5, 1.5, 1.5)?.forEach { entity ->
-                    if (entity.location.block.location != oldLoc) return@forEach
-                    if (!entity.isValid || entity.isDead) return@forEach
-                    if (!NexoFurniture.isFurniture(entity)) return@forEach
+            FoliaUtils.runLater(2L) {
+                FoliaUtils.runAtLocation(oldLoc) {
+                    val center = oldLoc.clone().add(0.5, 0.5, 0.5)
 
-                    entity.setRotation(oldYaw, oldPitch)
-                    if (oldFrameRotation != null && entity is org.bukkit.entity.ItemFrame) {
-                        entity.rotation = oldFrameRotation
+                    oldLoc.world?.getNearbyEntities(center, 1.5, 1.5, 1.5)?.forEach { entity ->
+                        if (entity.location.block.location != oldLoc) return@forEach
+                        if (!entity.isValid || entity.isDead) return@forEach
+                        if (!NexoFurniture.isFurniture(entity)) return@forEach
+
+                        entity.setRotation(oldYaw, oldPitch)
+
+                        if (oldFrameRotation != null && entity is org.bukkit.entity.ItemFrame) {
+                            entity.rotation = oldFrameRotation
+                        }
+                    }
+
+                    if (!stageManager.activeSequences.contains(oldLoc)) {
+                        clearRemoving(oldLoc)
                     }
                 }
-
-                if (!stageManager.activeSequences.contains(oldLoc)) clearRemoving(oldLoc)
-            }, 2L)
+            }
 
         } else {
             val rotation = rotationMap.remove(keyLoc)
@@ -473,31 +791,40 @@ class NexoImpl(
             NexoFurniture.furnitureMechanic(itemAdapterData.id)
                 ?.place(keyLoc, rotation?.first ?: 0f, BlockFace.UP)
 
-            Bukkit.getScheduler().runTaskLater(UnearthMechanic.getInstance(), Runnable {
-                val center = keyLoc.clone().add(0.5, 0.5, 0.5)
-                keyLoc.world?.getNearbyEntities(center, 1.5, 1.5, 1.5)?.forEach { entity ->
-                    if (entity.location.block.location != keyLoc) return@forEach
-                    if (!entity.isValid || entity.isDead) return@forEach
-                    if (!NexoFurniture.isFurniture(entity)) return@forEach
+            FoliaUtils.runLater(2L) {
+                FoliaUtils.runAtLocation(keyLoc) {
+                    val center = keyLoc.clone().add(0.5, 0.5, 0.5)
 
-                    if (rotation != null) entity.setRotation(rotation.first, rotation.second)
-                    if (cachedFrameRotation != null && entity is org.bukkit.entity.ItemFrame) {
-                        entity.rotation = cachedFrameRotation
+                    keyLoc.world?.getNearbyEntities(center, 1.5, 1.5, 1.5)?.forEach { entity ->
+                        if (entity.location.block.location != keyLoc) return@forEach
+                        if (!entity.isValid || entity.isDead) return@forEach
+                        if (!NexoFurniture.isFurniture(entity)) return@forEach
+
+                        if (rotation != null) {
+                            entity.setRotation(rotation.first, rotation.second)
+                        }
+
+                        if (cachedFrameRotation != null && entity is org.bukkit.entity.ItemFrame) {
+                            entity.rotation = cachedFrameRotation
+                        }
                     }
                 }
-            }, 2L)
-        }
+            }
+        }*/
     }
 
     private fun hardRemoveNexoAt(loc: Location, player: Player? = null): Boolean {
         val keyLoc = loc.block.location
         var removed = false
 
-        // 1) Custom block Nexo: note/string
+        dbg("hardRemoveNexoAt START loc=${keyLoc.shortLoc()} player=${player?.name}")
+
         try {
             val hasNexoBlock =
                 NexoBlocks.noteBlockMechanic(keyLoc.block) != null ||
                         NexoBlocks.stringMechanic(keyLoc.block) != null
+
+            dbg("hardRemoveNexoAt blockCheck loc=${keyLoc.shortLoc()} hasNexoBlock=$hasNexoBlock")
 
             if (hasNexoBlock) {
                 if (player != null) {
@@ -507,23 +834,32 @@ class NexoImpl(
                 }
                 removed = true
             }
-        } catch (_: Throwable) {
+        } catch (ex: Throwable) {
+            warnDbg("hardRemoveNexoAt block remove threw loc=${keyLoc.shortLoc()}", ex)
             keyLoc.block.type = org.bukkit.Material.AIR
         }
 
-        // 2) Furniture Nexo
         val world = keyLoc.world ?: return removed
         val center = keyLoc.clone().add(0.5, 0.5, 0.5)
+        val nearby = world.getNearbyEntities(center, 1.5, 1.5, 1.5)
 
-        for (entity in world.getNearbyEntities(center, 1.5, 1.5, 1.5)) {
+        dbg("hardRemoveNexoAt furniture scan loc=${keyLoc.shortLoc()} nearby=${nearby.size}")
+
+        for (entity in nearby) {
             if (!entity.isValid || entity.isDead) continue
             if (entity.location.block.location != keyLoc) continue
 
             val isFurniture = try {
                 NexoFurniture.isFurniture(entity)
-            } catch (_: Throwable) {
+            } catch (ex: Throwable) {
+                warnDbg("hardRemoveNexoAt isFurniture threw uuid=${entity.uniqueId}", ex)
                 false
             }
+
+            dbg(
+                "hardRemoveNexoAt scan entity=${entity.type} uuid=${entity.uniqueId} " +
+                        "isFurniture=$isFurniture loc=${entity.location.block.location.shortLoc()}"
+            )
 
             if (!isFurniture) continue
 
@@ -534,12 +870,15 @@ class NexoImpl(
             }
 
             try {
-                if (player != null) {
-                    NexoFurniture.remove(entity, player, null)
+                val result = if (player != null) {
+                    NexoFurniture.remove(entity, player, emptyNexoDrop("unearth_hard_remove"))
                 } else {
-                    NexoFurniture.remove(entity, null, null)
+                    NexoFurniture.remove(entity, null, emptyNexoDrop("unearth_hard_remove"))
                 }
-            } catch (_: Throwable) {
+
+                dbg("hardRemoveNexoAt remove entity result=$result uuid=${entity.uniqueId}")
+            } catch (ex: Throwable) {
+                warnDbg("hardRemoveNexoAt remove entity threw uuid=${entity.uniqueId}", ex)
                 entity.remove()
             }
 
@@ -547,16 +886,23 @@ class NexoImpl(
         }
 
         if (removed) {
+            dbg("hardRemoveNexoAt removed=true cleanup loc=${keyLoc.shortLoc()}")
+
             cleanupFurnitureEntities(keyLoc)
             StageData.removeStageData(keyLoc)
             setRemoving(keyLoc)
 
-            Bukkit.getScheduler().runTaskLater(core, Runnable {
-                if (!stageManager.activeSequences.contains(keyLoc)) {
-                    clearRemoving(keyLoc)
+            FoliaUtils.runLater(2L) {
+                FoliaUtils.runAtLocation(keyLoc) {
+                    if (!stageManager.activeSequences.contains(keyLoc)) {
+                        dbg("hardRemoveNexoAt delayed clearRemoving loc=${keyLoc.shortLoc()}")
+                        clearRemoving(keyLoc)
+                    }
                 }
-            }, 2L)
+            }
         }
+
+        dbg("hardRemoveNexoAt END loc=${keyLoc.shortLoc()} removed=$removed")
 
         return removed
     }
@@ -607,11 +953,13 @@ class NexoImpl(
             if (!entity.isValid || entity.isDead) continue
             if (entity.location.block.location != loc.block.location) continue
 
-            val furniture = try {
+            val isFurniture = try {
                 NexoFurniture.isFurniture(entity)
             } catch (_: Throwable) {
-                null
-            } ?: continue
+                false
+            }
+
+            if (!isFurniture) continue
 
             val key = loc.block.location
 
@@ -622,7 +970,11 @@ class NexoImpl(
             }
 
             try {
-                NexoFurniture.remove(entity)
+                NexoFurniture.remove(
+                    entity,
+                    player,
+                    emptyNexoDrop("unearth_handle_remove")
+                )
             } catch (_: Throwable) {
                 entity.remove()
             }

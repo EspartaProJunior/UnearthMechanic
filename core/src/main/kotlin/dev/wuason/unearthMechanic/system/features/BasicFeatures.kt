@@ -5,6 +5,7 @@ import dev.wuason.unearthMechanic.config.IGeneric
 import dev.wuason.unearthMechanic.config.IStage
 import dev.wuason.unearthMechanic.system.ILiveTool
 import dev.wuason.unearthMechanic.system.compatibilities.ICompatibility
+import dev.wuason.unearthMechanic.utils.FoliaUtils
 import org.bukkit.Bukkit
 import org.bukkit.GameMode
 import org.bukkit.Location
@@ -72,44 +73,50 @@ class BasicFeatures: AbstractFeature() {
         // Then we call `items_add` one tick later
         // If the hand slot is empty, the first item is placed there
         if (shouldDelayItemsAdd) {
-            Bukkit.getScheduler().runTaskLater(plugin, Runnable {
-                val player = Bukkit.getPlayer(p.uniqueId) ?: return@Runnable
-                if (!player.isOnline) return@Runnable
+            FoliaUtils.runLater(1L) {
+                val player = Bukkit.getPlayer(p.uniqueId) ?: return@runLater
+                if (!player.isOnline) return@runLater
 
-                val before = player.inventory.contents.map { it?.clone() }.toTypedArray()
+                FoliaUtils.runAtEntity(player) {
+                    val before = player.inventory.contents.map { it?.clone() }.toTypedArray()
 
-                iStage.addItems(player)
+                    iStage.addItems(player)
 
-                moveNewlyAddedItemToPreviousSlot(player, previousHeldSlot, before)
+                    moveNewlyAddedItemToPreviousSlot(player, previousHeldSlot, before)
 
-                plugin.getStageManager().getAnimator().getAnimation(player)?.let { anim ->
-                    anim.updateItemMainHandData()
+                    plugin.getStageManager().getAnimator().getAnimation(player)?.let { anim ->
+                        anim.updateItemMainHandData()
+                    }
+
+                    player.updateInventory()
                 }
-
-                player.updateInventory()
-            }, 1L)
+            }
         }
 
         if (iStage.getSounds().isNotEmpty()) {
             iStage.getSounds().forEach { sound ->
                 if (sound.delay > 0) {
-                    Bukkit.getScheduler().runTaskLater(plugin, Runnable {
-                        p.world.playSound(
+                    FoliaUtils.runLater(sound.delay) {
+                        FoliaUtils.runAtLocation(loc) {
+                            loc.world?.playSound(
+                                loc,
+                                sound.soundId,
+                                SoundCategory.BLOCKS,
+                                sound.volume,
+                                sound.pitch
+                            )
+                        }
+                    }
+                } else {
+                    FoliaUtils.runAtLocation(loc) {
+                        loc.world?.playSound(
                             loc,
                             sound.soundId,
                             SoundCategory.BLOCKS,
                             sound.volume,
                             sound.pitch
                         )
-                    }, sound.delay)
-                } else {
-                    p.world.playSound(
-                        loc,
-                        sound.soundId,
-                        SoundCategory.BLOCKS,
-                        sound.volume,
-                        sound.pitch
-                    )
+                    }
                 }
             }
         }
