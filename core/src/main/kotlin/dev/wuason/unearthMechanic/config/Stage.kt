@@ -15,11 +15,17 @@ open class Stage(
     private val durabilityToRemove: Int,
     private val usagesIaToRemove: Int, private val permissionStage: String,
     private val onlyOneDrop: Boolean,
-    private val reduceItemHand: Int, private val items: List<Item>, private val onlyOneItem: Boolean,
+    private val reduceItemHand: Int,
+    private val reduceItemInventory: Int,
+    private val batchItemsWhenReducingInventory: Boolean,
+    private val items: List<Item>,
+    private val onlyOneItem: Boolean,
     private val sounds: List<Sound>,
-    private val delay: Long, private val toolAnimDelay: Boolean,
+    private val delay: Long,
+    private val toolAnimDelay: Boolean,
     private val executeCommands: List<IStageCommand>,
-    private val foodAdd: Int = 0, private val saturationAdd: Float = 0.0f
+    private val foodAdd: Int = 0,
+    private val saturationAdd: Float = 0.0f
 ) : IStage {
 
     private var randomStageOptions: List<RandomStageOption> = emptyList()
@@ -63,6 +69,8 @@ open class Stage(
             permissionStage,
             onlyOneDrop,
             reduceItemHand,
+            reduceItemInventory,
+            batchItemsWhenReducingInventory,
             items,
             onlyOneItem,
             sounds,
@@ -144,6 +152,14 @@ open class Stage(
         return reduceItemHand
     }
 
+    override fun getReduceItemInventory(): Int {
+        return reduceItemInventory
+    }
+
+    override fun isBatchedProcess(): Boolean {
+        return batchItemsWhenReducingInventory
+    }
+
     override fun getItems(): List<Item> {
         return items
     }
@@ -166,7 +182,7 @@ open class Stage(
 
     override fun getExecuteCommands(): List<IStageCommand> = executeCommands
 
-    override fun dropItems(loc: Location) {
+    override fun dropItems(loc: Location, player: Player) {
         if(drops.isEmpty()) return
         if (isOnlyOneDrop()) {
             val results = drops.filter { drop ->
@@ -178,7 +194,7 @@ open class Stage(
             //drops[Random.nextInt(drops.size)].dropItem(loc, false)
             return
         }
-        drops.forEach { it.dropItem(loc, true) }
+        drops.forEach { it.dropItemOrAddToInventory(loc, player, true) }
     }
 
     override fun addItems(player: Player) {
@@ -277,6 +293,8 @@ open class Stage(
             permissionStage,
             onlyOneDrop,
             reduceItemHand,
+            reduceItemInventory,
+            batchItemsWhenReducingInventory,
             items,
             onlyOneItem,
             sounds,

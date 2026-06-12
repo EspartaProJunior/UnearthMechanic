@@ -82,6 +82,20 @@ interface IStage {
     fun getReduceItemHand(): Int
 
     /**
+     * Retrieves the amount of the tool item to remove from the player's inventory (any slot) when the stage is applied.
+     *
+     * @return the amount to consume from inventory, or 0 if not used.
+     */
+    fun getReduceItemInventory(): Int
+
+    /**
+     * If all items should be batched together or done one-by-one.
+     *
+     * @return true to batch all items, false to process one grouping at a time
+     */
+    fun isBatchedProcess(): Boolean
+
+    /**
      * Retrieves a list of items associated with a particular stage or context.
      *
      * @return a List of IItem instances representing the items.
@@ -119,10 +133,12 @@ interface IStage {
 
     /**
      * Drops items at the provided location based on the implementation's drop mechanics.
+     * Attempts to add items to the player's inventory first, then drops at location if inventory is full.
      *
-     * @param loc The location where the items will be dropped.
+     * @param loc The location where the items will be dropped if inventory is full.
+     * @param player The player whose inventory should receive the items first.
      */
-    fun dropItems(loc: Location)
+    fun dropItems(loc: Location, player: Player)
 
     /**
      * Adds items to the specified player's inventory based on certain stage conditions.
@@ -154,4 +170,6 @@ interface IStage {
      * @return the amount of saturation to add.
      */
     fun getSaturationAdd(): Float
+
+
 }

@@ -3,7 +3,6 @@ package dev.wuason.unearthMechanic.system.compatibilities.ce
 import dev.wuason.adapter.Adapter
 import dev.wuason.adapter.AdapterComp
 import dev.wuason.adapter.AdapterData
-import dev.wuason.unearthMechanic.UnearthMechanic
 import dev.wuason.unearthMechanic.UnearthMechanicPlugin
 import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.fishtank.FishTankBehavior
 import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.fishtank.FishTankDataStore
@@ -32,7 +31,6 @@ import net.momirealms.craftengine.core.entity.player.InteractionHand
 import net.momirealms.craftengine.core.util.Key
 import net.momirealms.craftengine.core.world.BlockPos
 import net.momirealms.craftengine.libraries.nbt.CompoundTag
-import org.bukkit.Bukkit
 import org.bukkit.GameMode
 import org.bukkit.Location
 import org.bukkit.Material
@@ -44,6 +42,7 @@ import org.bukkit.entity.*
 import org.bukkit.event.Event
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
+import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.inventory.ItemStack
 import java.util.*
 import kotlin.jvm.optionals.getOrNull
@@ -58,6 +57,12 @@ class CraftEngineImpl(
     adapterComp
 ) {
     private val removedLocations = Collections.synchronizedSet(mutableSetOf<Location>())
+    private val debugCraftEnginePainter = false
+
+    private fun painterDebug(message: String) {
+        if (!debugCraftEnginePainter) return
+        core.logger.info("[UM-DBG-CE] $message")
+    }
 
     override fun isRemoving(location: Location): Boolean {
         return removedLocations.contains(location)
@@ -264,6 +269,22 @@ class CraftEngineImpl(
 
             upperLoc.block.setType(Material.AIR, false)
             lowerLoc.block.setType(Material.AIR, false)
+        }
+
+        public fun getCraftEngineDoubleBlockLowerLocationStatic(loc: Location): Location? {
+            val state = try {
+                CraftEngineBlocks.getCustomBlockState(loc.block.blockData)
+            } catch (_: Throwable) {
+                null
+            } ?: return null
+
+            val doubleProp = findCeDoubleBlockPropertyStatic(state) ?: return null
+            val half = state.get(doubleProp) as? DoubleBlockHalf ?: return null
+
+            return when (half) {
+                DoubleBlockHalf.UPPER -> loc.clone().add(0.0, -1.0, 0.0).block.location
+                DoubleBlockHalf.LOWER -> loc.block.location
+            }
         }
 
         private fun replaceCraftEngineDoubleBlockWithVanillaDoorStatic(
@@ -595,12 +616,16 @@ class CraftEngineImpl(
         return true
     }
 
-    override fun getCurrentAdapterDataAt(
-        event: Event,
-        loc: Location
-    ): AdapterData? {
-        val id = getCurrentCraftEngineId(event, loc) ?: return null
-        return Adapter.getAdapterData("ce:$id").getOrNull()
+    override fun getCurrentAdapterDataAt(event: Event, loc: Location): AdapterData? {
+        val ceId = getCurrentCraftEngineId(event, loc)
+        if (ceId != null) {
+            return Adapter.getAdapterData("ce:$ceId").getOrNull()
+        }
+
+        if (loc.block.type.isAir) return null
+
+        val vanillaId = loc.block.type.key.key.lowercase(Locale.ENGLISH)
+        return Adapter.getAdapterData("mc:$vanillaId").getOrNull()
     }
 
     private fun getCurrentCraftEngineId(event: Event, loc: Location): String? {
@@ -850,7 +875,7 @@ class CraftEngineImpl(
     private fun breakBlock(location: Location?) {
         if (location != null) {
             val data = location.block.blockData
-            //Bukkit.getConsoleSender().sendMessage("💾 [DEBUG] Guardado BlockData en $location: $data")
+            //Bukkit.getConsoleSender().sendMessage("ðŸ’¾ [DEBUG] Guardado BlockData en $location: $data")
 
             CraftEngineBlocks.remove(location.block)
         }
@@ -918,6 +943,19 @@ class CraftEngineImpl(
         }
     }
 
+    private fun normalizeCeBooleanPropertyValue(rawValue: Any): Boolean? {
+        return when (
+            rawValue.toString()
+                .removeSurrounding("\"")
+                .trim()
+                .lowercase(Locale.ENGLISH)
+        ) {
+            "1b", "1", "true" -> true
+            "0b", "0", "false" -> false
+            else -> null
+        }
+    }
+
     private fun mergeCeProperties(
         inherited: CompoundTag?,
         explicit: Map<String, String>
@@ -928,37 +966,28 @@ class CraftEngineImpl(
             for (key in inherited.keySet()) {
                 val value = inherited.get(key)
                 if (value != null) {
-                    result.put(key, value.copy())
+                    val normalizedBoolean = normalizeCeBooleanPropertyValue(value)
+
+                    if (normalizedBoolean != null) {
+                        result.putBoolean(key, normalizedBoolean)
+                    } else {
+                        result.put(key, value.copy())
+                    }
                 }
             }
         }
 
         explicit.forEach { (key, rawValue) ->
             val value = rawValue.trim()
+            val normalizedBoolean = normalizeCeBooleanPropertyValue(value)
 
             when {
-                value.equals("true", ignoreCase = true) -> {
-                    result.putBoolean(key, true)
-                }
-
-                value.equals("false", ignoreCase = true) -> {
-                    result.putBoolean(key, false)
+                normalizedBoolean != null -> {
+                    result.putBoolean(key, normalizedBoolean)
                 }
 
                 value.toIntOrNull() != null -> {
                     result.putInt(key, value.toInt())
-                }
-
-                value.toLongOrNull() != null -> {
-                    result.putLong(key, value.toLong())
-                }
-
-                value.toFloatOrNull() != null -> {
-                    result.putFloat(key, value.toFloat())
-                }
-
-                value.toDoubleOrNull() != null -> {
-                    result.putDouble(key, value.toDouble())
                 }
 
                 else -> {
@@ -968,6 +997,20 @@ class CraftEngineImpl(
         }
 
         return result
+    }
+
+    private fun mergeCePropertiesForHalf(
+        inherited: CompoundTag?,
+        explicit: Map<String, String>,
+        half: DoubleBlockHalf
+    ): CompoundTag {
+        val explicitForHalf = explicit.toMutableMap()
+        explicitForHalf["half"] = when (half) {
+            DoubleBlockHalf.UPPER -> "upper"
+            DoubleBlockHalf.LOWER -> "lower"
+        }
+
+        return mergeCeProperties(inherited, explicitForHalf)
     }
 
     private fun tryUpdateSameCraftEngineBlockState(
@@ -983,26 +1026,108 @@ class CraftEngineImpl(
             return false
         }
 
-        val targetBlock = CraftEngineBlocks.byId(Key.of(targetCleanId)) ?: return false
+        val doubleProp = findCeDoubleBlockProperty(previousBlockState)
+
+        if (doubleProp != null) {
+            val clickedHalf = previousBlockState.get(doubleProp) as DoubleBlockHalf
+            val lowerLoc = when (clickedHalf) {
+                DoubleBlockHalf.UPPER -> loc.clone().add(0.0, -1.0, 0.0)
+                DoubleBlockHalf.LOWER -> loc.clone()
+            }
+            val upperLoc = lowerLoc.clone().add(0.0, 1.0, 0.0)
+
+            val previousLowerState = ImmutableBlockState.with(previousBlockState, doubleProp, DoubleBlockHalf.LOWER)
+            val previousUpperState = ImmutableBlockState.with(previousBlockState, doubleProp, DoubleBlockHalf.UPPER)
+
+            val newLowerState = resolveCraftEngineBlockState(
+                targetCleanId,
+                mergeCePropertiesForHalf(previousLowerState.propertiesNbt(), explicitProps, DoubleBlockHalf.LOWER)
+            ) ?: return false
+
+            val newUpperState = resolveCraftEngineBlockState(
+                targetCleanId,
+                mergeCePropertiesForHalf(previousUpperState.propertiesNbt(), explicitProps, DoubleBlockHalf.UPPER)
+            ) ?: return false
+
+            val world = lowerLoc.world ?: return false
+            val ceWorld = BukkitAdaptor.adapt(world)
+            ceWorld.setBlockState(lowerLoc.blockX, lowerLoc.blockY, lowerLoc.blockZ, newLowerState, 512)
+            ceWorld.setBlockState(upperLoc.blockX, upperLoc.blockY, upperLoc.blockZ, newUpperState, UpdateFlags.UPDATE_ALL)
+            return true
+        }
 
         val mergedProps = mergeCeProperties(
             previousBlockState.propertiesNbt(),
             explicitProps
         )
 
-        val newState = targetBlock.getPossibleStates(mergedProps).firstOrNull()
+        val newState = resolveCraftEngineBlockState(targetCleanId, mergedProps)
             ?: return false
 
-        val world = loc.world ?: return false
-        val ceWorld = BukkitAdaptor.adapt(world)
-        val pos = BlockPos(loc.blockX, loc.blockY, loc.blockZ)
-
-        ceWorld.setBlockState(pos, newState, UpdateFlags.UPDATE_ALL)
-        return true
+        return setCraftEngineBlockState(loc, newState, "same-ce-block")
     }
 
     private fun getItemAdapterDataId(itemAdapterData: AdapterData): String {
         return itemAdapterData.id.removePrefix("ce:").removePrefix("craftengine:").substringBefore("[")
+    }
+
+    private fun resolveCraftEngineBlockState(
+        targetId: String,
+        properties: CompoundTag
+    ): ImmutableBlockState? {
+        val targetBlock = CraftEngineBlocks.byId(Key.of(targetId)) ?: run {
+            painterDebug("resolveBlockState: target block not found id=$targetId props=$properties")
+            return null
+        }
+
+        val possibleState = try {
+            targetBlock.getPossibleStates(properties).firstOrNull()
+        } catch (throwable: Throwable) {
+            painterDebug(
+                "resolveBlockState: getPossibleStates failed id=$targetId props=$properties error=${throwable.javaClass.simpleName}: ${throwable.message}"
+            )
+            null
+        }
+
+        if (possibleState != null) {
+            painterDebug("resolveBlockState: matched possible state id=$targetId props=$properties")
+            return possibleState
+        }
+
+        return try {
+            val fallbackState = targetBlock.getBlockState(properties)
+            painterDebug("resolveBlockState: built fallback state id=$targetId props=$properties")
+            fallbackState
+        } catch (throwable: Throwable) {
+            painterDebug(
+                "resolveBlockState: getBlockState failed id=$targetId props=$properties error=${throwable.javaClass.simpleName}: ${throwable.message}"
+            )
+            null
+        }
+    }
+
+    private fun setCraftEngineBlockState(
+        loc: Location,
+        state: ImmutableBlockState,
+        reason: String
+    ): Boolean {
+        val world = loc.world ?: run {
+            painterDebug("setBlockState[$reason]: world is null loc=$loc")
+            return false
+        }
+
+        return try {
+            val ceWorld = BukkitAdaptor.adapt(world)
+            val pos = BlockPos(loc.blockX, loc.blockY, loc.blockZ)
+            ceWorld.setBlockState(pos, state, UpdateFlags.UPDATE_ALL)
+            painterDebug("setBlockState[$reason]: applied loc=${loc.block.location}")
+            true
+        } catch (throwable: Throwable) {
+            painterDebug(
+                "setBlockState[$reason]: failed loc=${loc.block.location} error=${throwable.javaClass.simpleName}: ${throwable.message}"
+            )
+            false
+        }
     }
 
     private fun handleBlockStage(
@@ -1019,44 +1144,59 @@ class CraftEngineImpl(
         //lastBlockData[loc.block.location.block.location] = data
 
         val state1 = loc.block.blockData //lastBlockData[loc]
+        painterDebug(
+            "handleBlockStage: loc=${loc.block.location} currentType=${loc.block.type} target=${getItemAdapterDataId(itemAdapterData)} event=${event.javaClass.simpleName}"
+        )
         if(state1 != null){
             val previousBlockState : ImmutableBlockState? = CraftEngineBlocks.getCustomBlockState(state1);
             if (previousBlockState == null) {
                 val block = loc.block
-                if (CraftEngineBlocks.isCustomBlock(block)) return;
+                val explicitProps = (stage as? Stage)?.getExplicitBlockProperties() ?: emptyMap()
+                if (CraftEngineBlocks.isCustomBlock(block)) {
+                    painterDebug("handleBlockStage: Bukkit block is custom but CraftEngine state is null loc=${loc.block.location}")
+                    return;
+                }
                 val blockData = block.blockData
                 if (blockData is Door) {
                     val customBlock = CraftEngineBlocks.byId(Key.of(getItemAdapterDataId(itemAdapterData))) ?: return
+                    val lowerBlock = when (blockData.half) {
+                        Bisected.Half.BOTTOM -> block
+                        Bisected.Half.TOP -> block.getRelative(BlockFace.DOWN)
+                    }
+                    val upperBlock = lowerBlock.getRelative(BlockFace.UP)
+                    val lowerDoor = lowerBlock.blockData as? Door ?: return
+                    val upperDoor = upperBlock.blockData as? Door ?: return
                     val otherHalf = when (blockData.half) {
                         Bisected.Half.BOTTOM -> block.getRelative(BlockFace.UP)
                         Bisected.Half.TOP -> block.getRelative(BlockFace.DOWN)
                     }
-                    val relativeDoor = otherHalf.blockData as? Door ?: return
                     //Bukkit.getConsoleSender().sendMessage(" [DEBUG] previousBlockState == null && blockData is Door")
+                    painterDebug("handleBlockStage: vanilla door -> CE target=${getItemAdapterDataId(itemAdapterData)} loc=${block.location} otherHalf=${otherHalf.location} props=$explicitProps")
 
-                    block.setType(Material.AIR, false)
-                    otherHalf.setType(Material.AIR, false)
+                    upperBlock.setType(Material.AIR, false)
+                    lowerBlock.setType(Material.AIR, false)
 
-                    val properties1 = createDoorProperties(blockData)
-                    val newState1 = customBlock.getBlockState(properties1)
-                    CraftEngineBlocks.place(block.location, newState1, UpdateFlags.UPDATE_NONE, false)
+                    val lowerProperties = mergeCePropertiesForHalf(createDoorProperties(lowerDoor), explicitProps, DoubleBlockHalf.LOWER)
+                    val lowerState = customBlock.getBlockState(lowerProperties)
+                    CraftEngineBlocks.place(lowerBlock.location, lowerState, UpdateFlags.UPDATE_NONE, false)
 
-                    val properties2 = createDoorProperties(relativeDoor)
-                    val newState2 = customBlock.getBlockState(properties2)
-                    CraftEngineBlocks.place(otherHalf.location, newState2, UpdateFlags.UPDATE_NONE, false)
+                    val upperProperties = mergeCePropertiesForHalf(createDoorProperties(upperDoor), explicitProps, DoubleBlockHalf.UPPER)
+                    val upperState = customBlock.getBlockState(upperProperties)
+                    CraftEngineBlocks.place(upperBlock.location, upperState, UpdateFlags.UPDATE_ALL, false)
                 }else{
                     //Bukkit.getConsoleSender().sendMessage(" [DEBUG] previousBlockState == null && !(blockData is Door)")
                     val explicitProps = (stage as? Stage)?.getExplicitBlockProperties() ?: emptyMap()
                     val properties = mergeCeProperties(null, explicitProps)
 
                     //core.logger.info("[UM-DBG-CE] place vanilla->ce id=${getItemAdapterDataId(itemAdapterData)} props=$explicitProps")
+                    painterDebug("handleBlockStage: vanilla block -> CE target=${getItemAdapterDataId(itemAdapterData)} loc=${loc.block.location} props=$explicitProps merged=$properties")
 
-                    CraftEngineBlocks.place(
-                        loc,
-                        Key.of(getItemAdapterDataId(itemAdapterData)),
-                        properties,
-                        false
-                    )
+                    val newBlockState = resolveCraftEngineBlockState(
+                        getItemAdapterDataId(itemAdapterData),
+                        properties
+                    ) ?: return
+
+                    setCraftEngineBlockState(loc, newBlockState, "vanilla-block-to-ce")
                 }
 
                 return
@@ -1071,6 +1211,7 @@ class CraftEngineImpl(
                     explicitProps
                 )
             ) {
+                painterDebug("handleBlockStage: updated same CE block target=${getItemAdapterDataId(itemAdapterData)} loc=${loc.block.location} props=$explicitProps")
                 return
             }
 
@@ -1086,44 +1227,35 @@ class CraftEngineImpl(
                 //Bukkit.getConsoleSender().sendMessage(" [DEBUG] doubleBlockProperty != null")
                 //val explicitProps = (stage as? Stage)?.getExplicitBlockProperties() ?: emptyMap()
                 val half = previousBlockState.get(doubleBlockProperty) as DoubleBlockHalf;
-                when(half) {
-                    DoubleBlockHalf.UPPER -> {
-                        val previousLowerState = ImmutableBlockState.with(previousBlockState, doubleBlockProperty, DoubleBlockHalf.LOWER)
-
-                        val newUpperState = CraftEngineBlocks.byId(
-                            Key.of(itemAdapterData.id.removePrefix("ce:"))
-                        )?.getPossibleStates(previousBlockState.propertiesNbt())?.firstOrNull()
-                        val newLowerState = CraftEngineBlocks.byId(
-                            Key.of(itemAdapterData.id.removePrefix("ce:"))
-                        )?.getPossibleStates(previousLowerState.propertiesNbt())?.firstOrNull()
-                        val lowerLoc = Location(loc.world, loc.x, loc.y - 1, loc.z)
-
-                        //CraftEngineBlocks.remove(loc.block)
-                        //CraftEngineBlocks.remove(lowerLoc.block)
-
-                        if (newUpperState == null || newLowerState == null) return;
-                        BukkitAdaptor.adapt(loc.world).setBlockState(
-                            loc.blockX, loc.blockY, loc.blockZ, newUpperState, 512)
-                        BukkitAdaptor.adapt(lowerLoc.world).setBlockState(
-                            lowerLoc.blockX, lowerLoc.blockY, lowerLoc.blockZ, newLowerState, UpdateFlags.UPDATE_ALL)
-                    }
-                    DoubleBlockHalf.LOWER -> {
-                        val previousUpperState = ImmutableBlockState.with(previousBlockState, doubleBlockProperty, DoubleBlockHalf.UPPER)
-
-                        val newUpperState = CraftEngineBlocks.byId(
-                            Key.of(itemAdapterData.id.removePrefix("ce:"))
-                        )?.getPossibleStates(previousUpperState.propertiesNbt())?.firstOrNull()
-                        val newLowerState = CraftEngineBlocks.byId(
-                            Key.of(itemAdapterData.id.removePrefix("ce:"))
-                        )?.getPossibleStates(previousBlockState.propertiesNbt())?.firstOrNull()
-                        val upperLoc = Location(loc.world, loc.x, loc.y + 1, loc.z)
-
-                        if (newUpperState == null || newLowerState == null) return;
-                        BukkitAdaptor.adapt(loc.world).setBlockState(loc.blockX, loc.blockY, loc.blockZ, newLowerState, 512)
-                        BukkitAdaptor.adapt(loc.world).setBlockState(
-                            upperLoc.blockX, upperLoc.blockY, upperLoc.blockZ, newUpperState, UpdateFlags.UPDATE_ALL)
-                    }
+                painterDebug("handleBlockStage: CE double block half=$half target=${getItemAdapterDataId(itemAdapterData)} loc=${loc.block.location} props=$explicitProps")
+                val lowerLoc = when (half) {
+                    DoubleBlockHalf.UPPER -> loc.clone().add(0.0, -1.0, 0.0)
+                    DoubleBlockHalf.LOWER -> loc.clone()
                 }
+                val upperLoc = lowerLoc.clone().add(0.0, 1.0, 0.0)
+
+                val previousLowerState = ImmutableBlockState.with(previousBlockState, doubleBlockProperty, DoubleBlockHalf.LOWER)
+                val previousUpperState = ImmutableBlockState.with(previousBlockState, doubleBlockProperty, DoubleBlockHalf.UPPER)
+
+                val targetBlockId = getItemAdapterDataId(itemAdapterData)
+                val newLowerState = resolveCraftEngineBlockState(
+                    targetBlockId,
+                    mergeCePropertiesForHalf(previousLowerState.propertiesNbt(), explicitProps, DoubleBlockHalf.LOWER)
+                )
+                val newUpperState = resolveCraftEngineBlockState(
+                    targetBlockId,
+                    mergeCePropertiesForHalf(previousUpperState.propertiesNbt(), explicitProps, DoubleBlockHalf.UPPER)
+                )
+
+                if (newUpperState == null || newLowerState == null) {
+                    painterDebug("handleBlockStage: double branch could not resolve states upper=${newUpperState != null} lower=${newLowerState != null}")
+                    return;
+                }
+
+                val world = lowerLoc.world ?: return
+                val ceWorld = BukkitAdaptor.adapt(world)
+                ceWorld.setBlockState(lowerLoc.blockX, lowerLoc.blockY, lowerLoc.blockZ, newLowerState, 512)
+                ceWorld.setBlockState(upperLoc.blockX, upperLoc.blockY, upperLoc.blockZ, newUpperState, UpdateFlags.UPDATE_ALL)
             }else{
                 //Bukkit.getConsoleSender().sendMessage(" [DEBUG] doubleBlockProperty == null")
                 val explicitProps = (stage as? Stage)?.getExplicitBlockProperties() ?: emptyMap()
@@ -1132,25 +1264,27 @@ class CraftEngineImpl(
                     previousBlockState.propertiesNbt(),
                     explicitProps
                 )
-                val newBlockState = CraftEngineBlocks.byId(
-                    Key.of(getItemAdapterDataId(itemAdapterData))
-                )?.getPossibleStates(properties)?.firstOrNull()
+                val newBlockState = resolveCraftEngineBlockState(
+                    getItemAdapterDataId(itemAdapterData),
+                    properties
+                )
                 newBlockState?.let{ state ->
-                    CraftEngineBlocks.place(loc, state, false
-                    )
+                    painterDebug("handleBlockStage: CE block -> CE target=${getItemAdapterDataId(itemAdapterData)} loc=${loc.block.location} props=$explicitProps merged=$properties")
+                    setCraftEngineBlockState(loc, state, "ce-block-to-ce")
                 }
             }
         }else{
             //Bukkit.getConsoleSender().sendMessage(" [DEBUG] state1 == null")
             val explicitProps = (stage as? Stage)?.getExplicitBlockProperties() ?: emptyMap()
             val properties = mergeCeProperties(null, explicitProps)
+            painterDebug("handleBlockStage: blockData is null target=${getItemAdapterDataId(itemAdapterData)} loc=${loc.block.location} props=$explicitProps merged=$properties")
 
-            CraftEngineBlocks.place(
-                loc,
-                Key.of(getItemAdapterDataId(itemAdapterData)),
-                properties,
-                false
-            )
+            val newBlockState = resolveCraftEngineBlockState(
+                getItemAdapterDataId(itemAdapterData),
+                properties
+            ) ?: return
+
+            setCraftEngineBlockState(loc, newBlockState, "null-blockdata-to-ce")
         }
         //placeBlock(itemAdapterData.id, loc)
     }
@@ -1448,10 +1582,17 @@ class CraftEngineImpl(
         generic: IGeneric,
         stage: IStage
     ) {
-        //Bukkit.getConsoleSender().sendMessage("[DEBUG] Se llamó a handleRemove con loc=$loc y event=${event::class.simpleName}")
+        //Bukkit.getConsoleSender().sendMessage("[DEBUG] Se llamÃ³ a handleRemove con loc=$loc y event=${event::class.simpleName}")
 
         if (event is CustomBlockInteractEvent) {
-            breakBlock(loc)
+            val eventLoc = event.location().block.location
+            removeCraftEngineDoubleBlockSilent(eventLoc, event.blockState())
+            StageData.removeStageData(loc.block.location)
+            StageData.removeStageData(loc.block.getRelative(BlockFace.UP).location)
+            StageData.removeStageData(loc.block.getRelative(BlockFace.DOWN).location)
+            StageData.removeStageData(eventLoc)
+            StageData.removeStageData(eventLoc.block.getRelative(BlockFace.UP).location)
+            StageData.removeStageData(eventLoc.block.getRelative(BlockFace.DOWN).location)
             return
         }
         if (event is FurnitureInteractEvent) {
@@ -1536,6 +1677,17 @@ class CraftEngineImpl(
                 entity.facing.hashCode()
             )
         }
+        if (event is PlayerInteractEvent) {
+            val block: Block = event.clickedBlock ?: loc.block
+            return Utils.calculateHashCode(
+                block.location.hashCode(),
+                block.hashCode(),
+                block.type.hashCode(),
+                block.blockData.hashCode(),
+                block.state.hashCode()
+            )
+        }
+        painterDebug("hashCode: unsupported event=${event.javaClass.simpleName} loc=${loc.block.location}")
         return -1
     }
 
@@ -1543,12 +1695,18 @@ class CraftEngineImpl(
         if (event is CustomBlockInteractEvent) {
             return event.item()
         }
+        if (event is PlayerInteractEvent) {
+            return event.item
+        }
         return null
     }
 
     override fun getBlockFace(event: Event): BlockFace? {
         if (event is CustomBlockInteractEvent) {
             return event.clickedFace()
+        }
+        if (event is PlayerInteractEvent) {
+            return event.blockFace
         }
         return null
     }
@@ -1558,9 +1716,11 @@ class CraftEngineImpl(
 
         for (key in this.keySet()) {
             val raw = this.get(key) ?: continue
-            result[key] = raw.toString()
-                .removeSurrounding("\"")
-                .lowercase()
+            val normalizedBoolean = normalizeCeBooleanPropertyValue(raw)
+            result[key] = normalizedBoolean?.toString()
+                ?: raw.toString()
+                    .removeSurrounding("\"")
+                    .lowercase(Locale.ENGLISH)
         }
 
         return result
@@ -1643,21 +1803,29 @@ class CraftEngineImpl(
         }
 
         return try {
+            val eventLoc = if (event is CustomBlockInteractEvent) {
+                event.location().block.location
+            } else {
+                loc
+            }
+
             val state = when (event) {
                 is CustomBlockInteractEvent -> event.blockState()
-                else -> CraftEngineBlocks.getCustomBlockState(loc.block.blockData)
+                else -> CraftEngineBlocks.getCustomBlockState(eventLoc.block.blockData)
             } ?: return false
 
-            removeCraftEngineDoubleBlockSilent(loc, state)
+            removeCraftEngineDoubleBlockSilent(eventLoc, state)
 
             StageData.removeStageData(loc)
             StageData.removeStageData(loc.clone().add(0.0, 1.0, 0.0))
             StageData.removeStageData(loc.clone().add(0.0, -1.0, 0.0))
+            StageData.removeStageData(eventLoc)
+            StageData.removeStageData(eventLoc.clone().add(0.0, 1.0, 0.0))
+            StageData.removeStageData(eventLoc.clone().add(0.0, -1.0, 0.0))
 
             true
         } catch (_: Throwable) {
             false
         }
     }
-
 }

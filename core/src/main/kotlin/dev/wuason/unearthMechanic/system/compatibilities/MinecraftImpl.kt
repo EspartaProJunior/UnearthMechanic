@@ -251,7 +251,7 @@ class MinecraftImpl(
         val clickedHalf = explicitProps["half"]?.lowercase(Locale.ENGLISH)
 
         val lowerLoc = when (clickedHalf) {
-            "upper", "top" -> clickedLoc.clone().add(0.0, -1.0, 0.0)
+            "upper", "top" -> clickedLoc.clone().add(0.0, 0.0, 0.0)
             else -> clickedLoc.clone()
         }
 

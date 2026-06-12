@@ -2,6 +2,7 @@ package dev.wuason.unearthMechanic.config
 
 import org.bukkit.Location
 import org.bukkit.entity.Item
+import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 
 /**
@@ -19,4 +20,9 @@ interface IDrop : IItem {
     fun dropItem(loc: Location, applyChance: Boolean): Item?
 
     fun rollItem(applyChance: Boolean): ItemStack?
+
+    /**
+     * Adds the item to the player's inventory when possible, otherwise drops it at the location.
+     */
+    fun dropItemOrAddToInventory(loc: Location, player: Player, applyChance: Boolean)
 }

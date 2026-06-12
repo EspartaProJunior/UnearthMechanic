@@ -38,7 +38,7 @@ class MiniCubesBlockBehavior(
     private val breakSound: String
 ) : BlockBehavior(customBlock) {
 
-    private val debug = true
+    private val debug = false
 
     private fun debug(message: String) {
         if (!debug) return
@@ -550,6 +550,7 @@ class MiniCubesBlockBehavior(
         }
 
         playSound(world, pos, breakSound)
+        swingHand(bukkitPlayer)
         dropOnePiece(bukkitPlayer)
         return InteractionResult.SUCCESS_AND_CANCEL
     }
@@ -590,6 +591,7 @@ class MiniCubesBlockBehavior(
         }
 
         playSound(world, pos, placeSound)
+        swingHand(bukkitPlayer)
         consumeOne(bukkitPlayer)
         return InteractionResult.SUCCESS_AND_CANCEL
     }
@@ -621,6 +623,7 @@ class MiniCubesBlockBehavior(
         }
 
         playSound(world, pos, placeSound)
+        swingHand(bukkitPlayer)
         consumeOne(bukkitPlayer)
         return InteractionResult.SUCCESS_AND_CANCEL
     }
@@ -727,18 +730,19 @@ class MiniCubesBlockBehavior(
     }
 
     private fun isExpectedMiniCubeItem(handItem: ItemStack): Boolean {
-        val expectedItem = createCraftEngineItem(itemId) ?: run {
-            debug("isExpectedMiniCubeItem=false reason=could_not_create_expected_item expected=$itemId")
+        val handItemId = CraftEngineItems.getCustomItemId(handItem)
+
+        if (handItemId == null) {
+            debug("isExpectedMiniCubeItem=false reason=not_craftengine_item expected=$itemId hand=${handItem.type}")
             return false
         }
 
-        val handCopy = handItem.clone()
-        val expectedCopy = expectedItem.clone()
+        val expectedItemId = Key.of(itemId)
+        val result = handItemId == expectedItemId
 
-        handCopy.amount = 1
-        expectedCopy.amount = 1
+        debug("isExpectedMiniCubeItem expected=$expectedItemId hand=$handItemId result=$result")
 
-        return handCopy.isSimilar(expectedCopy)
+        return result
     }
 
     private fun consumeOne(player: org.bukkit.entity.Player) {
@@ -826,6 +830,10 @@ class MiniCubesBlockBehavior(
         }
 
         return null
+    }
+
+    private fun swingHand(player: org.bukkit.entity.Player) {
+        player.swingMainHand()
     }
 
     override fun isPathFindable(thisBlock: Any, args: Array<out Any>): Boolean {

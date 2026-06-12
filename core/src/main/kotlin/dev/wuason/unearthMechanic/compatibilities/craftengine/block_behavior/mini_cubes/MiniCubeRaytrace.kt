@@ -77,56 +77,6 @@ object MiniCubeRaytrace {
         return null
     }
 
-    fun findNearestActiveHit(
-        player: org.bukkit.entity.Player,
-        pos: BlockPos,
-        mask: Int,
-        fallbackFace: Direction
-    ): Hit? {
-        val hit = player.rayTraceBlocks(6.0)
-        val hitPos = hit?.hitPosition ?: return fallback(mask)
-
-        val face = blockFaceToDirection(hit.hitBlockFace) ?: fallbackFace
-
-        val localX = (hitPos.x - pos.x()).coerceIn(0.0, 0.999999)
-        val localY = (hitPos.y - pos.y()).coerceIn(0.0, 0.999999)
-        val localZ = (hitPos.z - pos.z()).coerceIn(0.0, 0.999999)
-
-        var bestBit = -1
-        var bestDistance = Double.MAX_VALUE
-
-        for (bit in 0..7) {
-            if (!MiniCubeMask.has(mask, bit)) continue
-
-            val centerX = MiniCubeMask.x(bit) * 0.5 + 0.25
-            val centerY = MiniCubeMask.y(bit) * 0.5 + 0.25
-            val centerZ = MiniCubeMask.z(bit) * 0.5 + 0.25
-
-            val dx = localX - centerX
-            val dy = localY - centerY
-            val dz = localZ - centerZ
-            val distance = dx * dx + dy * dy + dz * dz
-
-            if (distance < bestDistance) {
-                bestDistance = distance
-                bestBit = bit
-            }
-        }
-
-        if (!MiniCubeMask.validBit(bestBit)) return fallback(mask)
-
-        return Hit(bestBit, face)
-    }
-
-    fun findTargetedBit(
-        player: Any,
-        world: World,
-        pos: BlockPos,
-        mask: Int
-    ): Int {
-        return findTargetedHit(player, world, pos, mask)?.bit ?: -1
-    }
-
     private fun fallback(mask: Int): Hit? {
         val bit = MiniCubeMask.firstActiveBit(mask)
         if (!MiniCubeMask.validBit(bit)) return null

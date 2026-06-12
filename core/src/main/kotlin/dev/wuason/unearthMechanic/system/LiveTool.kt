@@ -1,16 +1,23 @@
 package dev.wuason.unearthMechanic.system
 
 import dev.wuason.adapter.Adapter
+import dev.wuason.adapter.AdapterData
 import dev.wuason.unearthMechanic.config.ITool
-import dev.wuason.unearthMechanic.system.animations.IAnimationRunner
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
+import kotlin.jvm.optionals.getOrNull
 
-class LiveTool(private var itemMainHand: ItemStack, private val iTool: ITool, private val player: Player, private val stageManager: StageManager): ILiveTool {
+
+class LiveTool(private var toolData: ToolData, private val iTool: ITool, private val player: Player, private val stageManager: StageManager): ILiveTool {
+
+    private val initialSlotType: AdapterData? = if (toolData.slotPos >= 0) {
+        player.inventory.getItem(toolData.slotPos)?.let { Adapter.getAdapterData(Adapter.getAdapterId(it)).getOrNull() }
+    } else null
 
     override fun getItemMainHand(): ItemStack {
         return if (!stageManager.getAnimator().isAnimating(player)) {
-            player.inventory.itemInMainHand
+            // Should always be the correct stack we want
+            toolData.itemStack
         } else {
             stageManager.getAnimator().getAnimation(player)!!.getItemMainHand()
         }
@@ -21,17 +28,28 @@ class LiveTool(private var itemMainHand: ItemStack, private val iTool: ITool, pr
     }
 
     override fun setItemMainHand(item: ItemStack) {
-        itemMainHand = item
-        if (!stageManager.getAnimator().isAnimating(player)) player.inventory.setItemInMainHand(item)
-        else stageManager.getAnimator().getAnimation(player)?.setItemMainHand(item)
+        toolData = toolData.copy(itemStack = item)
+        if (!stageManager.getAnimator().isAnimating(player)) {
+            player.inventory.setItem(toolData.slotPos, item)
+        } else {
+            stageManager.getAnimator().getAnimation(player)?.setItemMainHand(item)
+        }
     }
 
     override fun isValid(): Boolean {
-        if (stageManager.getAnimator().isAnimating(player)) {
-            val data: IAnimationRunner = stageManager.getAnimator().getAnimation(player)!!
-            return data.isValid()
+        val animation = stageManager.getAnimator().getAnimation(player)
+        if (animation != null && (toolData.slotPos < 0 || toolData.slotPos == player.inventory.heldItemSlot)) {
+            val originalToolData = Adapter.getAdapterData(Adapter.getAdapterId(animation.getItemMainHand())).getOrNull()
+            return animation.isValid() && originalToolData == iTool.getAdapterData()
         }
-        return player.inventory.itemInMainHand == itemMainHand
+
+        if (toolData.slotPos >= 0) {
+            val current = player.inventory.getItem(toolData.slotPos)
+            if (current == null || current.type.isAir) return initialSlotType == null
+            val currentType = Adapter.getAdapterData(Adapter.getAdapterId(current)).getOrNull()
+            return currentType == initialSlotType
+        }
+        return player.inventory.itemInMainHand == toolData.itemStack
     }
 
     override fun isOriginalItem(): Boolean {

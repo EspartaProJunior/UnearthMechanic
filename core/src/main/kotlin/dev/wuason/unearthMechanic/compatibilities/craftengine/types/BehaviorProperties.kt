@@ -75,3 +75,71 @@ enum class MiniCubeMaskState {
     }
 }
 
+enum class PointedDripstoneThickness {
+    tip,
+    tip_merge,
+    frustum,
+    middle,
+    base
+}
+
+enum class PointedDripstoneVerticalDirection(val stepY: Int) {
+    up(1),
+    down(-1);
+
+    fun opposite(): PointedDripstoneVerticalDirection {
+        return if (this == up) down else up
+    }
+}
+
+enum class AmethystFacing(val dx: Int, val dy: Int, val dz: Int) {
+    down(0, -1, 0),
+    east(1, 0, 0),
+    north(0, 0, -1),
+    south(0, 0, 1),
+    up(0, 1, 0),
+    west(-1, 0, 0);
+
+    fun opposite(): AmethystFacing {
+        return when (this) {
+            down -> up
+            east -> west
+            north -> south
+            south -> north
+            up -> down
+            west -> east
+        }
+    }
+
+    companion object {
+        fun fromName(name: String): AmethystFacing? {
+            return entries.firstOrNull { it.name == name }
+        }
+    }
+}
+
+enum class BrittleIceStage {
+    normal,
+    cracked,
+    middle,
+    broken
+}
+
+enum class WallConnection {
+    none,
+    low,
+    tall
+}
+
+enum class TermiteNestStage {
+    empty,
+    occupied,
+    fed,
+    friendly
+}
+
+enum class HollowLogStage {
+    hollow,
+    nest
+}
+

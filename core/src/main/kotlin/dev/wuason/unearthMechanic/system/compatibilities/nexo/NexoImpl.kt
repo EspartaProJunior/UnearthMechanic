@@ -665,20 +665,6 @@ class NexoImpl(
                     "yaw=$oldYaw pitch=$oldPitch face=$oldFace"
         )
 
-        val removed = try {
-            removeFurnitureAt(keyLoc)
-        } catch (ex: Throwable) {
-            warnDbg("handleFurnitureStage removeFurnitureAt threw loc=${keyLoc.shortLoc()}", ex)
-            false
-        } finally {
-            clearRemoving(keyLoc)
-        }
-
-        dbg(
-            "handleFurnitureStage after remove removed=$removed loc=${keyLoc.shortLoc()} " +
-                    "removing=${isRemoving(keyLoc)}"
-        )
-
         try {
             val removed = removeFurnitureAt(keyLoc)
 

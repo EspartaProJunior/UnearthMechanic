@@ -13,6 +13,8 @@ class FurnitureStage(
     permissionStage: String,
     onlyOneDrop: Boolean,
     reduceItemHand: Int,
+    reduceItemInventory: Int,
+    batchItemsWhenReducingInventory: Boolean,
     items: List<Item>,
     onlyOneItem: Boolean,
     sounds: List<Sound>,
@@ -23,6 +25,6 @@ class FurnitureStage(
     saturationAdd: Float = 0.0f
 ) : Stage(
     stage, adapterData, drops, remove, removeItemMainHand, durabilityToRemove, usagesIaToRemove, permissionStage,
-    onlyOneDrop, reduceItemHand, items, onlyOneItem, sounds, delay, toolAnimDelay, executeCommands,
+    onlyOneDrop, reduceItemHand, reduceItemInventory, batchItemsWhenReducingInventory, items, onlyOneItem, sounds, delay, toolAnimDelay, executeCommands,
     foodAdd, saturationAdd
 ), IFurnitureStage

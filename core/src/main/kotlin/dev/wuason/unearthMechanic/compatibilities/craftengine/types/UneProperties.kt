@@ -1,6 +1,7 @@
 package dev.wuason.unearthMechanic.compatibilities.craftengine.types
 
 import net.momirealms.craftengine.core.block.property.EnumProperty
+import net.momirealms.craftengine.core.block.property.IntegerProperty
 import net.momirealms.craftengine.core.block.property.Properties
 
 object UneProperties {
@@ -15,6 +16,16 @@ object UneProperties {
         registerCurtainYPos()
 
         registerMiniCubes()
+
+        Properties.register(UneKeys.POINTED_DRIPSTONE_THICKNESS_PROPERTY, EnumProperty.factory(PointedDripstoneThickness::class.java))
+        Properties.register(UneKeys.POINTED_DRIPSTONE_VERTICAL_DIRECTION_PROPERTY, EnumProperty.factory(PointedDripstoneVerticalDirection::class.java))
+        Properties.register(UneKeys.AMETHYST_FACING_PROPERTY, EnumProperty.factory(AmethystFacing::class.java))
+        Properties.register(UneKeys.BRITTLE_ICE_PROPERTY, EnumProperty.factory(BrittleIceStage::class.java))
+        Properties.register(UneKeys.REDSTONE_POWER_PROPERTY, IntegerProperty.FACTORY)
+        Properties.register(UneKeys.WALL_CONNECTION_PROPERTY, EnumProperty.factory(WallConnection::class.java))
+
+        Properties.register(UneKeys.TERMITE_NEST_STAGE_PROPERTY, EnumProperty.factory(TermiteNestStage::class.java))
+        Properties.register(UneKeys.HOLLOW_LOG_STAGE_PROPERTY, EnumProperty.factory(HollowLogStage::class.java))
     }
 
     fun registerCurtainYPos() {

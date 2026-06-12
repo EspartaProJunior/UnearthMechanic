@@ -176,6 +176,8 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
                             "",
                             false,
                             0,
+                            0,
+                            true,
                             listOf<Item>(),
                             false,
                             listOf<Sound>(),
@@ -309,6 +311,8 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
         val onlyOneDrop = sectionStage.getBoolean("only_one_drop", false)
         val onlyOneItem = sectionStage.getBoolean("only_one_add", false)
         val reduceItemMainHand: Int = sectionStage.getInt("reduce_item_main_hand", 0)
+        val reduceItemInventory: Int = sectionStage.getInt("reduce_item_inventory", 0)
+        val batchItemsWhenReducingInventory: Boolean = sectionStage.getBoolean("batch_item_inventory", true)
         val delay: Long = sectionStage.getLong("delay", 0)
         val toolAnimDelay = sectionStage.getBoolean("tool_anim_on_delay", false)
 
@@ -362,6 +366,8 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
             permissionStage,
             onlyOneDrop,
             reduceItemMainHand,
+            reduceItemInventory,
+            batchItemsWhenReducingInventory,
             items,
             onlyOneItem,
             sounds,

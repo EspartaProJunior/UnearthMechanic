@@ -1,5 +1,7 @@
 package dev.wuason.unearthMechanic.system.features
 
+import dev.wuason.adapter.Adapter
+import dev.wuason.adapter.AdapterData
 import dev.wuason.unearthMechanic.UnearthMechanic
 import dev.wuason.unearthMechanic.config.IGeneric
 import dev.wuason.unearthMechanic.config.IStage
@@ -14,6 +16,7 @@ import org.bukkit.SoundCategory
 import org.bukkit.entity.Player
 import org.bukkit.event.Event
 import org.bukkit.inventory.ItemStack
+import kotlin.jvm.optionals.getOrNull
 
 class BasicFeatures: AbstractFeature() {
 
@@ -29,6 +32,30 @@ class BasicFeatures: AbstractFeature() {
     ) {
     }
 
+    private fun countToolInInventory(player: Player, toolAdapterData: AdapterData): Int {
+        return (0..35).sumOf { slot ->
+            val item = player.inventory.getItem(slot) ?: return@sumOf 0
+            if (item.type.isAir) return@sumOf 0
+            val data = Adapter.getAdapterData(Adapter.getAdapterId(item)).getOrNull() ?: return@sumOf 0
+            if (data == toolAdapterData) item.amount else 0
+        }
+    }
+
+    private fun removeToolFromInventory(player: Player, toolAdapterData: AdapterData, amount: Int) {
+        var remaining = amount
+        for (slot in 0..35) {
+            if (remaining <= 0) break
+            val item = player.inventory.getItem(slot) ?: continue
+            if (item.type.isAir) continue
+            val data = Adapter.getAdapterData(Adapter.getAdapterId(item)).getOrNull() ?: continue
+            if (data != toolAdapterData) continue
+            val toRemove = minOf(remaining, item.amount)
+            val newAmount = item.amount - toRemove
+            player.inventory.setItem(slot, if (newAmount <= 0) null else item.clone().apply { this.amount = newAmount })
+            remaining -= toRemove
+        }
+    }
+
     override fun onApply(
         p: Player,
         comp: ICompatibility,
@@ -42,8 +69,20 @@ class BasicFeatures: AbstractFeature() {
         val previousHeldSlot = p.inventory.heldItemSlot
         val shouldDelayItemsAdd = iStage.getItems().isNotEmpty()
 
-        if (iStage.getDrops().isNotEmpty()) {
-            iStage.dropItems(loc)
+        val reduceInv = iStage.getReduceItemInventory()
+        val reduceHand = iStage.getReduceItemHand()
+        val toolAdapterData = liveTool.getITool().getAdapterData()
+
+        var batches = if (p.gameMode != GameMode.CREATIVE) {
+            if (reduceInv > 0) {
+                maxOf(1, countToolInInventory(p, toolAdapterData) / reduceInv)
+            } else if (reduceHand > 0 && liveTool.getItemMainHand() == p.inventory.itemInMainHand) {
+                1
+            } else {
+                0
+            }
+        } else {
+            0
         }
 
         // First, we modify the hand.
@@ -57,18 +96,28 @@ class BasicFeatures: AbstractFeature() {
                 }
             }
 
-            if (iStage.getReduceItemHand() != 0) {
+            if (reduceHand > 0) {
                 liveTool.getItemMainHand()?.let { item ->
-                    if (!item.type.isAir) {
-                        item.subtract(iStage.getReduceItemHand())
+                    if (!item.type.isAir && item == p.inventory.itemInMainHand) {
+                        item.subtract(reduceHand)
                     }
-
                     plugin.getStageManager().getAnimator().getAnimation(p)?.let { anim ->
                         anim.updateItemMainHandData()
                     }
                 }
             }
         }
+
+        if (reduceInv > 0 && p.gameMode != GameMode.CREATIVE) {
+            if (iStage.isBatchedProcess()) {
+                removeToolFromInventory(p, toolAdapterData, batches * reduceInv)
+            } else {
+                removeToolFromInventory(p, toolAdapterData, reduceInv)
+                batches = 1
+            }
+        }
+
+        if (iStage.getDrops().isNotEmpty()) repeat(batches) { iStage.dropItems(loc, p) }
 
         // Then we call `items_add` one tick later
         // If the hand slot is empty, the first item is placed there
@@ -79,6 +128,8 @@ class BasicFeatures: AbstractFeature() {
 
                 FoliaUtils.runAtEntity(player) {
                     val before = player.inventory.contents.map { it?.clone() }.toTypedArray()
+
+                    repeat(batches) { iStage.addItems(player) }
 
                     iStage.addItems(player)
 
