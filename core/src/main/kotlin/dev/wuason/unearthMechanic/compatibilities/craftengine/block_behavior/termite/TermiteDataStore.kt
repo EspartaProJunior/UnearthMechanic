@@ -117,6 +117,16 @@ object TermiteDataStore {
         return accepted
     }
 
+    fun takeFood(key: String, amount: Int = 1): Int {
+        val d = cache[key] ?: return 0
+        val taken = amount.coerceAtMost(d.food.coerceAtLeast(0))
+        if (taken <= 0) return 0
+
+        d.food -= taken
+        touch(key, d)
+        return taken
+    }
+
     fun markFriendly(key: String, ownerUuid: String, now: Long = System.currentTimeMillis()) {
         val d = get(key)
         d.ownerUuid = ownerUuid

@@ -73,16 +73,16 @@ class BasicFeatures: AbstractFeature() {
         val reduceHand = iStage.getReduceItemHand()
         val toolAdapterData = liveTool.getITool().getAdapterData()
 
-        var batches = if (p.gameMode != GameMode.CREATIVE) {
-            if (reduceInv > 0) {
+        var batches = when {
+            reduceInv > 0 && p.gameMode != GameMode.CREATIVE -> {
                 maxOf(1, countToolInInventory(p, toolAdapterData) / reduceInv)
-            } else if (reduceHand > 0 && liveTool.getItemMainHand() == p.inventory.itemInMainHand) {
-                1
-            } else {
-                0
             }
-        } else {
-            0
+
+            reduceHand > 0 && p.gameMode != GameMode.CREATIVE -> {
+                if (liveTool.getItemMainHand() == p.inventory.itemInMainHand) 1 else 0
+            }
+
+            else -> 1
         }
 
         // First, we modify the hand.
@@ -131,7 +131,7 @@ class BasicFeatures: AbstractFeature() {
 
                     repeat(batches) { iStage.addItems(player) }
 
-                    iStage.addItems(player)
+                    //iStage.addItems(player)
 
                     moveNewlyAddedItemToPreviousSlot(player, previousHeldSlot, before)
 

@@ -1,6 +1,7 @@
 package dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.termite
 
 import dev.wuason.unearthMechanic.compatibilities.craftengine.types.HollowLogStage
+import dev.wuason.unearthMechanic.compatibilities.craftengine.types.TermiteComposterStage
 import dev.wuason.unearthMechanic.compatibilities.craftengine.types.TermiteNestStage
 import net.momirealms.craftengine.bukkit.api.BukkitAdaptor
 import net.momirealms.craftengine.bukkit.api.CraftEngineBlocks
@@ -33,6 +34,7 @@ object TermiteGameplay {
     var termiteBucketItemId: String = "elitefantasy:termite_bucket"
     var chewStepsRequired: Int = 5
     var hiveBreakReleaseRadius: Int = 3
+    var composterFoodToBefriend: Int = 64
 
     private data class ChewProgress(val blockKey: String, val block: Block, var steps: Int)
     private val chewing = ConcurrentHashMap<UUID, ChewProgress>()
@@ -97,6 +99,10 @@ object TermiteGameplay {
             cancelChewing(termite)
             return false
         }
+        if (!MythicTermites.isFriendlyTermite(termite) && findNearestFeedableComposter(termite.location, radius * 2) != null) {
+            cancelChewing(termite)
+            return false
+        }
 
         val claimed = claimedBlock(termite)
         if (claimed == null && ThreadLocalRandom.current().nextDouble() > chance) return false
@@ -150,13 +156,57 @@ object TermiteGameplay {
         setNestStage(block, stage)
     }
 
+    fun updateComposterStage(block: Block, food: Int, fullAt: Int) {
+        val stage = when {
+            food >= fullAt -> TermiteComposterStage.full
+            food > 0 -> TermiteComposterStage.log
+            else -> TermiteComposterStage.empty
+        }
+
+        setComposterStage(block, stage)
+    }
+
+    fun composterKey(block: Block): String =
+        "composter:${TermiteKeys.key(block)}"
+
+    fun clearComposter(block: Block) {
+        TermiteDataStore.remove(composterKey(block))
+    }
+
+    fun befriendColonyFromComposter(composter: Block, ownerUuid: String, radius: Int): Int {
+        var changed = 0
+
+        changed += befriendNearbyTermiteEntities(
+            composter,
+            ownerUuid,
+            radius.toDouble()
+        )
+
+        for (nest in findNearestNests(composter.location, radius)) {
+            if (TermiteDataStore.takeFood(composterKey(composter), 1) <= 0) break
+            TermiteDataStore.markFriendly(TermiteKeys.key(nest), ownerUuid)
+            updateNestStage(nest)
+            changed++
+        }
+
+        TermiteDataStore.peek(composterKey(composter))?.let { data ->
+            updateComposterStage(composter, data.food, composterFoodToBefriend)
+        }
+        return changed
+    }
+
     fun releaseStoredTermites(block: Block): Int {
         val key = TermiteKeys.key(block)
-        val stored = TermiteDataStore.peek(key)?.termites?.coerceAtLeast(0) ?: 0
+        val data = TermiteDataStore.peek(key)
+        val stored = data?.termites?.coerceAtLeast(0) ?: 0
         val amount = stored.takeIf { it > 0 } ?: fallbackTermitesFromNestStage(block)
 
         repeat(amount) {
-            MythicTermites.spawn(block.location.add(0.5, 1.0, 0.5), key)
+            if (data?.ownerUuid != null) {
+                MythicTermites.spawnFriendly(block.location.add(0.5, 1.0, 0.5), key)
+            } else {
+                MythicTermites.spawn(block.location.add(0.5, 1.0, 0.5), key)
+            }
         }
 
         TermiteDataStore.remove(key)
@@ -177,17 +227,97 @@ object TermiteGameplay {
     }
 
     fun enterNearestNest(termite: LivingEntity, radius: Int = 8): Boolean {
-        val nest = findNearestNest(termite.location, radius) ?: return false
-        val accepted = TermiteDataStore.addTermites(TermiteKeys.key(nest), 1, maxTermitesPerNest)
-        if (accepted <= 0) return false
+        for (nest in findNearestNests(termite.location, radius)) {
+            val key = TermiteKeys.key(nest)
+            val stored = TermiteDataStore.peek(key)?.termites ?: fallbackTermitesFromNestStage(nest)
+            if (stored >= maxTermitesPerNest) continue
 
-        termite.remove()
-        updateNestStage(nest)
-        return true
+            val accepted = TermiteDataStore.addTermites(key, 1, maxTermitesPerNest)
+            if (accepted <= 0) continue
+
+            termite.remove()
+            updateNestStage(nest)
+            return true
+        }
+
+        return false
     }
 
     fun returnToNestIfClose(termite: LivingEntity, radius: Int = 2): Boolean {
         return enterNearestNest(termite, radius)
+    }
+
+    fun befriendAtNearbyComposter(termite: LivingEntity, radius: Int = 10, eatDistance: Double = 1.7): Boolean {
+        cleanupInvalidChew(termite)
+        if (MythicTermites.isFriendlyTermite(termite)) return false
+        if (shouldPrioritizeCombat(termite)) {
+            cancelChewing(termite)
+            return false
+        }
+
+        val composter = findNearestFeedableComposter(termite.location, radius) ?: return false
+        val targetCenter = composter.location.add(0.5, 0.5, 0.5)
+        if (termite.location.distanceSquared(targetCenter) > eatDistance * eatDistance) {
+            cancelChewing(termite)
+            return moveToward(termite, targetCenter)
+        }
+
+        holdStillWhileChewing(termite, targetCenter)
+        val colonyKey = termite.scoreboardTags
+            .firstOrNull { it.startsWith("um_termite_colony:") }
+            ?.removePrefix("um_termite_colony:")
+            ?: findNearestNest(composter.location, radius)?.let { TermiteKeys.key(it) }
+        val ownerUuid = TermiteDataStore.peek(composterKey(composter))?.ownerUuid
+        if (ownerUuid == null || TermiteDataStore.takeFood(composterKey(composter), 1) <= 0) {
+            TermiteDataStore.peek(composterKey(composter))?.let { data ->
+                updateComposterStage(composter, data.food, composterFoodToBefriend)
+            }
+            return false
+        }
+
+        if (ownerUuid != null && colonyKey != null) {
+            TermiteDataStore.markFriendly(colonyKey, ownerUuid)
+            findNearestNest(composter.location, radius)?.let { updateNestStage(it) }
+        }
+
+        val spawnLocation = termite.location.clone()
+        termite.remove()
+        MythicTermites.spawnFriendly(spawnLocation, colonyKey)?.let { friendly ->
+            MythicTermites.playBefriendedAnimation(friendly)
+        }
+        TermiteDataStore.peek(composterKey(composter))?.let { data ->
+            updateComposterStage(composter, data.food, composterFoodToBefriend)
+        }
+        return true
+    }
+
+    private fun befriendNearbyTermiteEntities(composter: Block, ownerUuid: String, radius: Double): Int {
+        val location = composter.location.add(0.5, 0.5, 0.5)
+        val world = location.world ?: return 0
+        var changed = 0
+        val foodKey = composterKey(composter)
+
+        world.getNearbyEntities(location, radius, radius, radius)
+            .filterIsInstance<LivingEntity>()
+            .filter { MythicTermites.isTermite(it) && !MythicTermites.isFriendlyTermite(it) }
+            .forEach { termite ->
+                if (TermiteDataStore.takeFood(foodKey, 1) <= 0) return@forEach
+                val colonyKey = termite.scoreboardTags
+                    .firstOrNull { it.startsWith("um_termite_colony:") }
+                    ?.removePrefix("um_termite_colony:")
+                    ?: findNearestNest(termite.location, radius.toInt())?.let { TermiteKeys.key(it) }
+
+                if (colonyKey != null) TermiteDataStore.markFriendly(colonyKey, ownerUuid)
+
+                val spawnLocation = termite.location.clone()
+                termite.remove()
+                MythicTermites.spawnFriendly(spawnLocation, colonyKey)?.let { friendly ->
+                    MythicTermites.playBefriendedAnimation(friendly)
+                }
+                changed++
+            }
+
+        return changed
     }
 
     fun releaseFromNest(nest: Block, amount: Int = 1): Int {
@@ -196,7 +326,11 @@ object TermiteGameplay {
 
         repeat(amount.coerceAtLeast(1)) {
             if (!TermiteDataStore.takeTermite(key)) return@repeat
-            MythicTermites.spawn(nest.location.add(0.5, 1.0, 0.5), key)
+            if (TermiteDataStore.peek(key)?.ownerUuid != null) {
+                MythicTermites.spawnFriendly(nest.location.add(0.5, 1.0, 0.5), key)
+            } else {
+                MythicTermites.spawn(nest.location.add(0.5, 1.0, 0.5), key)
+            }
             released++
         }
 
@@ -205,13 +339,32 @@ object TermiteGameplay {
     }
 
     fun findNearestNest(location: Location, radius: Int): Block? {
+        return findNearestNests(location, radius).firstOrNull()
+    }
+
+    private fun findNearestNests(location: Location, radius: Int): List<Block> {
+        val world = location.world ?: return emptyList()
+        val nests = mutableListOf<Pair<Double, Block>>()
+
+        for (dx in -radius..radius) for (dy in -radius..radius) for (dz in -radius..radius) {
+            val block = world.getBlockAt(location.blockX + dx, location.blockY + dy, location.blockZ + dz)
+            if (!isTermiteNest(block)) continue
+
+            val distance = block.location.distanceSquared(location)
+            nests += distance to block
+        }
+
+        return nests.sortedBy { it.first }.map { it.second }
+    }
+
+    private fun findNearestFeedableComposter(location: Location, radius: Int): Block? {
         val world = location.world ?: return null
         var best: Block? = null
         var bestDistance = Double.MAX_VALUE
 
         for (dx in -radius..radius) for (dy in -radius..radius) for (dz in -radius..radius) {
             val block = world.getBlockAt(location.blockX + dx, location.blockY + dy, location.blockZ + dz)
-            if (!isTermiteNest(block)) continue
+            if (!isTermiteComposter(block) || !isFeedableComposter(block)) continue
 
             val distance = block.location.distanceSquared(location)
             if (distance < bestDistance) {
@@ -221,6 +374,11 @@ object TermiteGameplay {
         }
 
         return best
+    }
+
+    private fun isFeedableComposter(block: Block): Boolean {
+        val data = TermiteDataStore.peek(composterKey(block))
+        return data?.ownerUuid != null && data.food > 0
     }
 
     private fun findNearestConsumableWood(location: Location, radius: Int, termiteId: UUID): Block? {
@@ -403,7 +561,7 @@ object TermiteGameplay {
     }
 
     fun isTermiteNest(block: Block): Boolean =
-        customBlockHasProperty(block, "stage") && customBlockId(block).contains("termite")
+        customBlockId(block).contains("termite_nest")
 
     fun isTermiteComposter(block: Block): Boolean =
         customBlockId(block).contains("termite_composter")
@@ -468,12 +626,34 @@ object TermiteGameplay {
         )
     }
 
+    private fun setComposterStage(block: Block, stage: TermiteComposterStage) {
+        val current = CraftEngineBlocks.getCustomBlockState(block.blockData) ?: return
+        val stageProperty = current.owner().value().getProperty("stage") ?: return
+
+        @Suppress("UNCHECKED_CAST")
+        val next = current.with(stageProperty as Property<TermiteComposterStage>, stage)
+
+        BukkitAdaptor.adapt(block.world).setBlockState(
+            block.x,
+            block.y,
+            block.z,
+            next,
+            UpdateFlags.UPDATE_ALL
+        )
+    }
+
     private fun fallbackTermitesFromNestStage(block: Block): Int {
         val current = CraftEngineBlocks.getCustomBlockState(block.blockData) ?: return 0
         val stageProperty = current.owner().value().getProperty("stage") ?: return 0
         val stage = current.get(stageProperty).toString().substringAfterLast('.').lowercase()
 
         return if (stage in setOf("occupied", "fed", "friendly")) 1 else 0
+    }
+
+    private fun composterStage(block: Block): String {
+        val current = CraftEngineBlocks.getCustomBlockState(block.blockData) ?: return ""
+        val stageProperty = current.owner().value().getProperty("stage") ?: return ""
+        return current.get(stageProperty).toString().substringAfterLast('.').lowercase()
     }
 
     private fun BukkitAxis.toCraftEngineAxis(): Direction.Axis = when (this) {

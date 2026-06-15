@@ -39,7 +39,11 @@ class TermiteNestBehavior(
 
         if (ThreadLocalRandom.current().nextInt(releaseChance.coerceAtLeast(1)) == 0) {
             if (TermiteDataStore.takeTermite(key)) {
-                MythicTermites.spawn(location.clone().add(0.5, 1.0, 0.5), key)
+                if (TermiteDataStore.peek(key)?.ownerUuid != null) {
+                    MythicTermites.spawnFriendly(location.clone().add(0.5, 1.0, 0.5), key)
+                } else {
+                    MythicTermites.spawn(location.clone().add(0.5, 1.0, 0.5), key)
+                }
                 changed = true
             }
         }
@@ -77,7 +81,7 @@ class TermiteNestBehavior(
                 return TermiteNestBehavior(
                     customBlock = block,
                     stageProperty = prop as Property<TermiteNestStage>,
-                    maxTermites = section.getInt("max-termites", 6),
+                    maxTermites = section.getInt("max-termites", 1),
                     absorbRadius = section.getDouble("absorb-radius", 2.5),
                     releaseChance = section.getInt("release-chance", 16)
                 )

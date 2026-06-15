@@ -287,7 +287,15 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                 dbgStage("STOP existing stage base adapter null generic=${stageData.getGeneric().getId()} loc=${keyLoc.debugShort()}")
                 return
             }
-            val allTools = findAllToolsAndSlots(player, baseAdapterData)
+            val handItem = animator.getAnimation(player)?.getItemMainHand()
+                ?: player.inventory.itemInMainHand
+
+            val handTool = Adapter.getAdapterData(Adapter.getAdapterId(handItem)).getOrNull()
+
+            val allTools = handTool
+                ?.takeIf { stageData.getGeneric().existsTool(it) }
+                ?.let { listOf(Pair(it, -1)) }
+                ?: emptyList()
             dbgStage(
                 "existing StageData tools=${allTools.map { "${it.first.id}@${it.second}" }} " +
                         "generic=${stageData.getGeneric().getId()} stage=${stageData.getStage()} actual=${stageData.getActualAdapterData().id}"
@@ -346,32 +354,24 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
             "new interaction resolved base=${baseAdapter.id} tool=${toolAdapter.id} " +
                     "mode=$mode props=$props generic=${generic?.getId() ?: "NULL"}"
         )
-
-        val allTools = findAllToolsAndSlots(player, baseAdapter)
-        if (allTools.isEmpty()) {
-            dbgStage("STOP no valid tools found for base=${baseAdapter.id} loc=${keyLoc.debugShort()}")
-            return
-        }
-
         //core.logger.info("[UM-DBG] generic result=${generic?.getId() ?: "NULL"}")
 
         if (generic != null) {
-            for ((candidateTool, candidateSlot) in allTools) {
-                if (StageData.hasStageData(location)) {
-                    dbgStage("BREAK new interaction loop because StageData already exists loc=${keyLoc.debugShort()}")
-                    break
-                }
-
-                if (interactNotExist(player, baseAdapter, location, event, compatibility, candidateTool, candidateSlot)) {
-                    dbgStage(
-                        "BREAK new interaction loop after stage dispatch " +
-                                "tool=${candidateTool.id} slot=$candidateSlot loc=${keyLoc.debugShort()}"
-                    )
-                    break
-                }
+            if (StageData.hasStageData(location)) {
+                dbgStage("STOP new interaction because StageData already exists loc=${keyLoc.debugShort()}")
+                return
             }
+
+            interactNotExist(
+                player,
+                baseAdapter,
+                location,
+                event,
+                compatibility,
+                toolAdapter,
+                -1
+            )
         } else {
-            //core.logger.info("[UM-DBG] STOP no generic matched")
             dbgStage("STOP no generic matched base=${baseAdapter.id} tool=${toolAdapter.id} mode=$mode props=$props loc=${keyLoc.debugShort()}")
         }
     }

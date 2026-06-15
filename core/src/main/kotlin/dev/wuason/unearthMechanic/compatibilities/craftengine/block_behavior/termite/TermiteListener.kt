@@ -28,9 +28,7 @@ import org.bukkit.persistence.PersistentDataType
 import kotlin.math.ceil
 import java.util.concurrent.ConcurrentHashMap
 
-class TermiteListener(
-    private val specialFriendItem: Material = Material.HONEYCOMB
-) : Listener {
+class TermiteListener : Listener {
 
     companion object {
         private data class ComposterConfig(
@@ -45,6 +43,7 @@ class TermiteListener(
 
         fun configureComposter(foodPerWood: Int, foodToBefriend: Int, nestRadius: Int) {
             composterConfig = ComposterConfig(foodPerWood, foodToBefriend, nestRadius)
+            TermiteGameplay.composterFoodToBefriend = foodToBefriend.coerceAtLeast(1)
         }
     }
 
@@ -55,8 +54,7 @@ class TermiteListener(
         val item = event.item ?: return
 
         when {
-            isWoodFood(item.type) && isTermiteComposter(clicked) -> feedComposter(event.player, clicked, item, event)
-            item.type == specialFriendItem && isTermiteNest(clicked) -> claimFriendlyNest(event.player, clicked, item, event)
+            isWoodFood(item) && isTermiteComposter(clicked) -> feedComposter(event.player, clicked, item, event)
             isSawdust(item) && isCrop(clicked) -> applySawdust(event.player, item, event)
         }
     }
@@ -65,6 +63,7 @@ class TermiteListener(
     fun onBucketEntity(event: PlayerInteractEntityEvent) {
         val termite = event.rightClicked as? LivingEntity ?: return
         if (!MythicTermites.isTermite(termite)) return
+        if (!MythicTermites.isFriendlyTermite(termite)) return
 
         val handItem = event.player.inventory.getItem(event.hand)
         if (handItem.type != Material.BUCKET) return
@@ -116,6 +115,11 @@ class TermiteListener(
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun onWoodBreak(event: BlockBreakEvent) {
         val block = event.block
+        if (isTermiteComposter(block)) {
+            TermiteGameplay.clearComposter(block)
+            return
+        }
+
         if (isTermiteNest(block)) {
             TermiteGameplay.releaseStoredTermitesAround(block)
             return
@@ -156,31 +160,30 @@ class TermiteListener(
     }
 
     private fun feedComposter(player: Player, composter: Block, item: ItemStack, event: PlayerInteractEvent) {
-        val nest = findNearestNestBlock(composter, composterConfig.nestRadius) ?: return
-        val nestKey = TermiteKeys.key(nest)
-        val accepted = TermiteDataStore.addFood(nestKey, composterConfig.foodPerWood, composterConfig.foodToBefriend)
+        val composterKey = TermiteGameplay.composterKey(composter)
+        val accepted = TermiteDataStore.addFood(
+            composterKey,
+            composterConfig.foodPerWood,
+            composterConfig.foodToBefriend
+        )
         if (accepted <= 0) return
 
         event.isCancelled = true
         if (player.gameMode != GameMode.CREATIVE) item.amount -= 1
 
-        val data = TermiteDataStore.get(nestKey)
-        if (data.food >= composterConfig.foodToBefriend && data.ownerUuid == null) {
-            TermiteDataStore.markFriendly(nestKey, player.uniqueId.toString())
+        val data = TermiteDataStore.get(composterKey)
+        if (data.food >= composterConfig.foodToBefriend) {
+            if (data.ownerUuid == null) {
+                TermiteDataStore.markFriendly(composterKey, player.uniqueId.toString())
+            }
+            TermiteGameplay.befriendColonyFromComposter(
+                composter = composter,
+                ownerUuid = player.uniqueId.toString(),
+                radius = composterConfig.nestRadius
+            )
         }
 
-        TermiteGameplay.updateNestStage(nest)
-    }
-
-    private fun claimFriendlyNest(player: Player, nest: Block, item: ItemStack, event: PlayerInteractEvent) {
-        val key = TermiteKeys.key(nest)
-        val data = TermiteDataStore.get(key)
-        if (data.food < composterConfig.foodToBefriend) return
-
-        TermiteDataStore.markFriendly(key, player.uniqueId.toString())
-        event.isCancelled = true
-        if (player.gameMode != GameMode.CREATIVE) item.amount -= 1
-        TermiteGameplay.updateNestStage(nest)
+        TermiteGameplay.updateComposterStage(composter, data.food, composterConfig.foodToBefriend)
     }
 
     private fun applySawdust(player: Player, item: ItemStack, event: PlayerInteractEvent) {
@@ -193,15 +196,14 @@ class TermiteListener(
         if (!itemEntity.isValid) return false
 
         val stack = itemEntity.itemStack
-        if (!isWoodFood(stack.type)) return false
+        if (!isWoodFood(stack)) return false
 
         val composter = itemEntity.location.clone().subtract(0.0, 0.25, 0.0).block
         if (!isTermiteComposter(composter)) return false
 
-        val nest = findNearestNestBlock(composter, composterConfig.nestRadius) ?: return false
-        val nestKey = TermiteKeys.key(nest)
+        val composterKey = TermiteGameplay.composterKey(composter)
         val maxFoodFromStack = stack.amount * composterConfig.foodPerWood
-        val acceptedFood = TermiteDataStore.addFood(nestKey, maxFoodFromStack, composterConfig.foodToBefriend)
+        val acceptedFood = TermiteDataStore.addFood(composterKey, maxFoodFromStack, composterConfig.foodToBefriend)
         if (acceptedFood <= 0) return false
 
         val consumedItems = ceil(acceptedFood.toDouble() / composterConfig.foodPerWood.toDouble()).toInt()
@@ -214,32 +216,13 @@ class TermiteListener(
             itemEntity.itemStack = stack
         }
 
-        TermiteGameplay.updateNestStage(nest)
+        val data = TermiteDataStore.get(composterKey)
+        TermiteGameplay.updateComposterStage(composter, data.food, composterConfig.foodToBefriend)
         return true
     }
 
-    private fun findNearestNestBlock(origin: Block, radius: Int): Block? {
-        var best: Block? = null
-        var bestDistance = Double.MAX_VALUE
-
-        for (dx in -radius..radius) for (dy in -radius..radius) for (dz in -radius..radius) {
-            val block = origin.world.getBlockAt(origin.x + dx, origin.y + dy, origin.z + dz)
-            if (!isTermiteNest(block)) continue
-            val data = TermiteDataStore.peek(TermiteKeys.key(block)) ?: continue
-            if (data.termites <= 0) continue
-
-            val distance = block.location.distanceSquared(origin.location)
-            if (distance < bestDistance) {
-                bestDistance = distance
-                best = block
-            }
-        }
-
-        return best
-    }
-
     private fun isTermiteNest(block: Block): Boolean =
-        customBlockHasProperty(block, "stage") && customBlockId(block).contains("termite")
+        customBlockId(block).contains("termite_nest")
 
     private fun isTermiteComposter(block: Block): Boolean =
         customBlockId(block).contains("termite_composter")
@@ -247,11 +230,6 @@ class TermiteListener(
     private fun customBlockId(block: Block): String {
         val state = CraftEngineBlocks.getCustomBlockState(block.blockData) ?: return ""
         return state.owner().value().id().toString()
-    }
-
-    private fun customBlockHasProperty(block: Block, property: String): Boolean {
-        val state = CraftEngineBlocks.getCustomBlockState(block.blockData) ?: return false
-        return state.owner().value().getProperty(property) != null
     }
 
     private fun hasTermiteNearby(block: Block): Boolean {
@@ -284,8 +262,26 @@ class TermiteListener(
             PersistentDataType.INTEGER
         ) == true || item.type == TermiteGameplay.sawdustMaterial
 
-    private fun isWoodFood(material: Material): Boolean =
-        material.name.endsWith("_LOG") || material.name.endsWith("_WOOD") || material == Material.STICK
+    private fun isWoodFood(item: ItemStack): Boolean {
+        if (isVanillaWoodFood(item.type)) return true
+
+        val customId = CraftEngineItems.getCustomItemId(item)?.toString()?.lowercase() ?: return false
+        val path = customId.substringAfter(':')
+        return path.endsWith("_log") ||
+                path.endsWith("_wood") ||
+                path.endsWith("_stem") ||
+                path.endsWith("_hyphae") ||
+                path.endsWith("_block") && path.contains("bamboo")
+    }
+
+    private fun isVanillaWoodFood(material: Material): Boolean =
+        material.name.endsWith("_LOG") ||
+                material.name.endsWith("_WOOD") ||
+                material.name.endsWith("_STEM") ||
+                material.name.endsWith("_HYPHAE") ||
+                material == Material.BAMBOO_BLOCK ||
+                material == Material.STRIPPED_BAMBOO_BLOCK ||
+                material == Material.STICK
 
     private fun isConsumedWoodCandidate(block: Block): Boolean =
         TermiteGameplay.isConsumedWoodCandidate(block)

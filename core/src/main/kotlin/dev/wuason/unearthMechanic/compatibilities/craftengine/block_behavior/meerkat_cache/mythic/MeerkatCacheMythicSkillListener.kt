@@ -17,6 +17,8 @@ class MeerkatCacheMythicSkillListener : Listener {
             "meerkatburyhelditem" -> event.register(MeerkatBuryHeldItemMechanic(manager, line, config))
             "meerkatuseburrow" -> event.register(MeerkatUseBurrowMechanic(manager, line, config))
             "meerkattargetarachnid" -> event.register(MeerkatTargetArachnidMechanic(manager, line, config))
+            "meerkatmountpig" -> event.register(MeerkatMountPigMechanic(manager, line, config))
+            "meerkatdismountpig" -> event.register(MeerkatDismountPigMechanic(manager, line, config))
         }
     }
 }

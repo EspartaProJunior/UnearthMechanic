@@ -26,6 +26,7 @@ object UneProperties {
 
         Properties.register(UneKeys.TERMITE_NEST_STAGE_PROPERTY, EnumProperty.factory(TermiteNestStage::class.java))
         Properties.register(UneKeys.HOLLOW_LOG_STAGE_PROPERTY, EnumProperty.factory(HollowLogStage::class.java))
+        Properties.register(UneKeys.TERMITE_COMPOSTER_STAGE_PROPERTY, EnumProperty.factory(TermiteComposterStage::class.java))
     }
 
     fun registerCurtainYPos() {

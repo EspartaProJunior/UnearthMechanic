@@ -143,3 +143,8 @@ enum class HollowLogStage {
     nest
 }
 
+enum class TermiteComposterStage {
+    empty,
+    log,
+    full
+}

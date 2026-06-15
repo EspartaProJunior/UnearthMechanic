@@ -55,6 +55,7 @@ object UneKeys {
 
     val TERMITE_NEST_STAGE_PROPERTY: Key = Key.of("$NAMESPACE:termite_nest_stage")
     val HOLLOW_LOG_STAGE_PROPERTY: Key = Key.of("$NAMESPACE:hollow_log_stage")
+    val TERMITE_COMPOSTER_STAGE_PROPERTY: Key = Key.of("$NAMESPACE:termite_composter_stage")
 
     val TERMITE_BUCKET_ITEM_BEHAVIOR: Key = Key.of("$NAMESPACE:termite_bucket")
 

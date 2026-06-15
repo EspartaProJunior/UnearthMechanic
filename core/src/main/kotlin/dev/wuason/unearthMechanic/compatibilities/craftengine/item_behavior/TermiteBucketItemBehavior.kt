@@ -32,7 +32,7 @@ class TermiteBucketItemBehavior(
         )
 
         FoliaUtils.runAtLocation(location) {
-            MythicTermites.spawn(location)
+            MythicTermites.spawnFriendly(location)
 
             FoliaUtils.runAtEntity(player) {
                 if (player.gameMode != GameMode.CREATIVE) {

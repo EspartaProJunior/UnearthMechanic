@@ -53,6 +53,6 @@ class LiveTool(private var toolData: ToolData, private val iTool: ITool, private
     }
 
     override fun isOriginalItem(): Boolean {
-        return Adapter.getAdapterData(Adapter.getAdapterId(getItemMainHand())).get() == iTool.getAdapterData()
+        return Adapter.getAdapterData(Adapter.getAdapterId(getItemMainHand())).getOrNull() == iTool.getAdapterData()
     }
 }

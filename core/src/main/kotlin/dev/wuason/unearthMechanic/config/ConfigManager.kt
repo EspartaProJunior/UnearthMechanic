@@ -484,18 +484,6 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
             val fixedValue = sectionStage.getString(fixedKey)
             val randomValue = sectionStage.getStringList(randomKey, emptyList())
 
-            if (!fixedValue.isNullOrBlank()) {
-                if (fixedValue.equals("um:previous", ignoreCase = true)) {
-                    stageType = t
-                    adapterData = null
-                    break
-                }
-
-                stageType = t
-                adapterData = Adapter.getAdapterData(parseBlockStateId(fixedValue).cleanId).getOrNull()
-                break
-            }
-
             if (!fixedValue.isNullOrBlank() && randomValue.isNotEmpty()) {
                 core.logger.warning("Stage '$stageKey' in generic '$genericId' has both '$fixedKey' and '$randomKey'. Using '$randomKey'.")
             }
@@ -518,6 +506,12 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
             }
 
             if (!fixedValue.isNullOrBlank()) {
+                if (fixedValue.equals("um:previous", ignoreCase = true)) {
+                    stageType = t
+                    adapterData = null
+                    break
+                }
+
                 stageType = t
                 adapterData = Adapter.getAdapterData(parseBlockStateId(fixedValue).cleanId).getOrNull()
                 break

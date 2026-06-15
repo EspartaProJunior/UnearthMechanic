@@ -8,6 +8,7 @@ import org.bukkit.Sound
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
 import org.bukkit.event.block.BlockBreakEvent
+import org.bukkit.event.block.BlockDropItemEvent
 import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
@@ -22,6 +23,7 @@ class MeerkatCacheListener : Listener {
         val brush = event.item ?: return
         if (brush.type != Material.BRUSH) return
         if (!MeerkatCacheGameplay.isCacheBlock(block)) return
+        if (MeerkatCacheGameplay.isVanillaSuspiciousCache(block)) return
 
         event.isCancelled = true
 
@@ -43,6 +45,11 @@ class MeerkatCacheListener : Listener {
             0.03,
             Material.SAND.createBlockData()
         )
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    fun onVanillaBrushReveal(event: BlockDropItemEvent) {
+        MeerkatCacheGameplay.consumeVanillaBrushReveal(event.block)
     }
 
     @EventHandler(ignoreCancelled = true)

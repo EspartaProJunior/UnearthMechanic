@@ -14,9 +14,11 @@ import org.bukkit.Material
 import org.bukkit.Sound
 import org.bukkit.Bukkit
 import org.bukkit.block.Block
+import org.bukkit.entity.Entity
 import org.bukkit.entity.Item
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Mob
+import org.bukkit.entity.Pig
 import org.bukkit.inventory.ItemStack
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -25,8 +27,6 @@ import java.lang.reflect.Modifier
 import kotlin.math.max
 
 object MeerkatCacheGameplay {
-    const val NO_PACK_SPAWN_TAG: String = "meerkat_no_pack_spawn"
-
     var cacheBlockId: String = "elitefantasy:meerkat_cache_sand"
     var burrowBlockId: String = "elitefantasy:meerkat_burrow"
     var searchRadius: Double = 12.0
@@ -37,6 +37,9 @@ object MeerkatCacheGameplay {
     var avoidEntityRadius: Double = 7.0
     var calmChance: Double = 0.18
     var calmTicks: Long = 60L
+    var pigRideRadius: Double = 5.0
+    var pigMountDistance: Double = 1.6
+    var useVanillaSuspiciousSand: Boolean = true
     var brushUses: Int = 4
     var maxCachesPerChunk: Int = 8
     var dropBuriedItemWhenBroken: Boolean = true
@@ -63,6 +66,9 @@ object MeerkatCacheGameplay {
         avoidEntityRadius = section.getDouble("avoid-entity-radius", avoidEntityRadius).coerceAtLeast(1.0)
         calmChance = section.getDouble("calm-chance", calmChance).coerceIn(0.0, 1.0)
         calmTicks = section.getInt("calm-ticks", calmTicks.toInt()).coerceAtLeast(1).toLong()
+        pigRideRadius = section.getDouble("pig-ride-radius", pigRideRadius).coerceAtLeast(1.0)
+        pigMountDistance = section.getDouble("pig-mount-distance", pigMountDistance).coerceAtLeast(0.5)
+        useVanillaSuspiciousSand = section.getBoolean("use-vanilla-suspicious-sand", useVanillaSuspiciousSand)
         brushUses = section.getInt("brush-uses", brushUses).coerceAtLeast(1)
         maxCachesPerChunk = section.getInt("max-caches-per-chunk", maxCachesPerChunk).coerceAtLeast(1)
         dropBuriedItemWhenBroken = section.getBoolean("drop-buried-item-when-broken", dropBuriedItemWhenBroken)
@@ -80,6 +86,7 @@ object MeerkatCacheGameplay {
         if (shouldStayCalm(meerkat)) return true
         if (hasHeldItem(meerkat)) return false
         val item = findNearestAllowedItem(meerkat) ?: return false
+        dismountVehicle(meerkat)
         val distanceSquared = item.location.distanceSquared(meerkat.location)
 
         if (distanceSquared > takeRadius * takeRadius) {
@@ -100,6 +107,7 @@ object MeerkatCacheGameplay {
     fun buryHeldItem(meerkat: LivingEntity): Boolean {
         if (shouldStayCalm(meerkat)) return true
         val held = heldItems[meerkat.uniqueId] ?: return false
+        dismountVehicle(meerkat)
         if (moveAwayFromNearbyEntities(meerkat)) return true
         val target = findClaimedOrNearestBuryBlock(meerkat) ?: return false
         val center = target.location.add(0.5, 0.5, 0.5)
@@ -116,7 +124,7 @@ object MeerkatCacheGameplay {
 
         val key = MeerkatCacheKeys.key(target)
         val original = target.type
-        if (!setCustomBlock(target, cacheBlockId)) {
+        if (!setCacheBlock(target, held.item)) {
             releaseBlockClaim(meerkat.uniqueId, target)
             return false
         }
@@ -145,6 +153,7 @@ object MeerkatCacheGameplay {
     fun useNightBurrow(meerkat: LivingEntity): Boolean {
         if (!isNight(meerkat.location.world?.time ?: return false)) return false
         if (shouldStayCalm(meerkat)) return true
+        dismountVehicle(meerkat)
 
         val nearbyBurrow = findNearestExistingBurrow(meerkat)
         if (nearbyBurrow != null) {
@@ -211,13 +220,51 @@ object MeerkatCacheGameplay {
             .minByOrNull { it.location.distanceSquared(meerkat.location) }
             ?: return false
 
+        dismountVehicle(meerkat)
         mob.target = target
         mob.pathfinder.moveTo(target.location, 1.25)
         return true
     }
 
-    fun isCacheBlock(block: Block): Boolean =
-        customBlockId(block) == cacheBlockId.lowercase()
+    fun mountNearbyPig(meerkat: LivingEntity): Boolean {
+        if (meerkat.vehicle != null) return false
+        if (hasHeldItem(meerkat)) return false
+        if (isNight(meerkat.location.world?.time ?: return false)) return false
+        if ((meerkat as? Mob)?.target != null) return false
+
+        val pig = meerkat.getNearbyEntities(pigRideRadius, pigRideRadius / 2.0, pigRideRadius)
+            .filterIsInstance<Pig>()
+            .filter { it.uniqueId != meerkat.uniqueId }
+            .filter { it.passengers.isEmpty() }
+            .filter { !it.isDead && it.isValid }
+            .filter { !isMythicActiveMob(it) }
+            .minByOrNull { it.location.distanceSquared(meerkat.location) }
+            ?: return false
+
+        if (meerkat.location.distanceSquared(pig.location) > pigMountDistance * pigMountDistance) {
+            return moveToward(meerkat, pig.location)
+        }
+
+        pig.addPassenger(meerkat)
+        pig.world.playSound(pig.location, Sound.ENTITY_PIG_AMBIENT, 0.45f, 1.35f)
+        return true
+    }
+
+    fun dismountVehicle(meerkat: LivingEntity): Boolean {
+        if (meerkat.vehicle == null) return false
+        return meerkat.leaveVehicle()
+    }
+
+    fun isCacheBlock(block: Block): Boolean {
+        val data = MeerkatCacheDataStore.peek(MeerkatCacheKeys.key(block))
+        if (data?.kind == "cache" && block.type == Material.SUSPICIOUS_SAND) return true
+        return customBlockId(block) == cacheBlockId.lowercase()
+    }
+
+    fun isVanillaSuspiciousCache(block: Block): Boolean {
+        val data = MeerkatCacheDataStore.peek(MeerkatCacheKeys.key(block)) ?: return false
+        return data.kind == "cache" && block.type == Material.SUSPICIOUS_SAND
+    }
 
     fun isBurrowBlock(block: Block): Boolean =
         customBlockId(block) == burrowBlockId.lowercase()
@@ -233,6 +280,15 @@ object MeerkatCacheGameplay {
         restoreOriginalBlock(block, data.originalBlock)
         releaseShelteredMeerkats(block.location.add(0.5, 1.0, 0.5), data.shelteredMeerkats)
         return CacheReveal(data.item?.clone(), data.shelteredMeerkats)
+    }
+
+    fun consumeVanillaBrushReveal(block: Block): CacheReveal? {
+        val key = MeerkatCacheKeys.key(block)
+        val data = MeerkatCacheDataStore.peek(key) ?: return null
+        if (data.kind != "cache") return null
+        MeerkatCacheDataStore.remove(key)
+        releaseShelteredMeerkats(block.location.add(0.5, 1.0, 0.5), data.shelteredMeerkats)
+        return CacheReveal(null, data.shelteredMeerkats)
     }
 
     fun breakCacheBlock(block: Block): CacheReveal? {
@@ -403,6 +459,29 @@ object MeerkatCacheGameplay {
         return ids.any { it in allowedItems }
     }
 
+    private fun setCacheBlock(block: Block, item: ItemStack): Boolean {
+        if (!useVanillaSuspiciousSand) return setCustomBlock(block, cacheBlockId)
+
+        block.type = Material.SUSPICIOUS_SAND
+        if (!setBrushableBlockItem(block, item)) {
+            block.type = Material.SAND
+            return false
+        }
+        return true
+    }
+
+    private fun setBrushableBlockItem(block: Block, item: ItemStack): Boolean = runCatching {
+        val state = block.state
+        val method = state.javaClass.methods.firstOrNull { method ->
+            method.name == "setItem" &&
+                    method.parameterTypes.size == 1 &&
+                    method.parameterTypes[0].isAssignableFrom(ItemStack::class.java)
+        } ?: return@runCatching false
+
+        method.invoke(state, item.clone())
+        state.update(true, false)
+    }.getOrDefault(false)
+
     private fun setCustomBlock(block: Block, blockId: String): Boolean {
         val definition = BukkitBlockManager.instance()
             .blockById(Key.of(blockId))
@@ -422,22 +501,8 @@ object MeerkatCacheGameplay {
 
     private fun releaseShelteredMeerkats(location: Location, amount: Int) {
         repeat(amount.coerceAtLeast(0)) {
-            val spawned = MythicBukkit.inst().apiHelper.spawnMythicMob(shelteredMeerkatMobId, location)
-            tagSpawnedNoPack(spawned)
+            MythicBukkit.inst().apiHelper.spawnMythicMob(shelteredMeerkatMobId, location)
         }
-    }
-
-    private fun tagSpawnedNoPack(spawned: Any?) {
-        val activeEntity = spawned?.javaClass?.methods
-            ?.firstOrNull { it.name == "getEntity" && it.parameterCount == 0 }
-            ?.invoke(spawned)
-            ?: return
-        val bukkitEntity = activeEntity.javaClass.methods
-            .firstOrNull { it.name == "getBukkitEntity" && it.parameterCount == 0 }
-            ?.invoke(activeEntity) as? org.bukkit.entity.Entity
-            ?: return
-
-        bukkitEntity.addScoreboardTag(NO_PACK_SPAWN_TAG)
     }
 
     private fun shouldStayCalm(meerkat: LivingEntity): Boolean {
@@ -479,6 +544,21 @@ object MeerkatCacheGameplay {
         val state = CraftEngineBlocks.getCustomBlockState(block.blockData) ?: return null
         return state.owner().value().id().toString().lowercase()
     }
+
+    private fun isMythicActiveMob(entity: Entity): Boolean = runCatching {
+        val mobManager = MythicBukkit.inst().mobManager
+        val method = mobManager.javaClass.methods.firstOrNull { method ->
+            method.name == "isActiveMob" && method.parameterTypes.size == 1
+        } ?: return@runCatching false
+
+        val argument = when {
+            method.parameterTypes[0].isAssignableFrom(UUID::class.java) -> entity.uniqueId
+            method.parameterTypes[0].isAssignableFrom(Entity::class.java) -> entity
+            else -> return@runCatching false
+        }
+
+        method.invoke(mobManager, argument) as? Boolean ?: false
+    }.getOrDefault(false)
 
     private fun releaseBlockClaim(meerkatId: UUID, block: Block) {
         claimedBlocks.remove(MeerkatCacheKeys.key(block), meerkatId)

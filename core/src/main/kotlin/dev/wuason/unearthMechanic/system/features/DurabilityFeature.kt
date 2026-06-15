@@ -16,7 +16,7 @@ import org.bukkit.inventory.ItemStack
 import org.bukkit.inventory.meta.Damageable
 import kotlin.math.min
 
-class DurabilityFeature: AbstractFeature() {
+class DurabilityFeature : AbstractFeature() {
 
     override fun onApply(
         p: Player,
@@ -27,53 +27,40 @@ class DurabilityFeature: AbstractFeature() {
         stage: IStage,
         iGeneric: IGeneric
     ) {
-        if (stage.getDurabilityToRemove() > 0 && p.gameMode != GameMode.CREATIVE) {
-            val itemMainHand: ItemStack = toolUsed.getItemMainHand()?: return
-            if (!itemMainHand.type.isAir) {
-                itemMainHand.editMeta { meta ->
-                    if (meta is Damageable) {
+        val reduce = stage.getDurabilityToRemove()
+        if (reduce <= 0 || p.gameMode == GameMode.CREATIVE) return
 
-                        if (VersionDetector.getServerVersion().isLessThan(VersionDetector.ServerVersion.v1_20_5)) {
-                            meta.damage += stage.getDurabilityToRemove()
-                            if (meta.damage >= itemMainHand.type.maxDurability) {
-                                toolUsed.getITool().getReplaceOnBreak()?.let {
-                                    toolUsed.setItemMainHand(ItemBuilder(it, 1).build())
-                                }?: toolUsed.setItemMainHand(ItemStack(Material.AIR))
-                            }
-                        }
-                        else {
-                            if (meta.hasMaxDamage()) {
+        val itemMainHand: ItemStack = toolUsed.getItemMainHand() ?: return
+        if (itemMainHand.type.isAir) return
 
-                                meta.damage += min(stage.getDurabilityToRemove(), meta.maxDamage - meta.damage)
+        var shouldBreak = false
 
-                                if (meta.damage >= meta.maxDamage) {
-                                    toolUsed.getITool().getReplaceOnBreak()?.let {
-                                        toolUsed.setItemMainHand(ItemBuilder(it, 1).build())
-                                    }?: toolUsed.setItemMainHand(ItemStack(Material.AIR))
-                                }
-                            }
-                            else {
+        itemMainHand.editMeta { meta ->
+            if (meta !is Damageable) return@editMeta
 
-                                meta.damage += stage.getDurabilityToRemove()
-
-                                if (meta.damage >= itemMainHand.type.maxDurability) {
-
-                                    toolUsed.getITool().getReplaceOnBreak()?.let {
-                                        toolUsed.setItemMainHand(ItemBuilder(it, 1).build())
-                                    }?: toolUsed.setItemMainHand(ItemStack(Material.AIR))
-
-                                }
-                            }
-                        }
-                    }
+            val maxDurability =
+                if (!VersionDetector.getServerVersion().isLessThan(VersionDetector.ServerVersion.v1_20_5) && meta.hasMaxDamage()) {
+                    meta.maxDamage
+                } else {
+                    itemMainHand.type.maxDurability.toInt()
                 }
 
-                UnearthMechanic.getInstance().getStageManager().getAnimator().getAnimation(p)?.let { anim ->
-                    anim.updateItemMainHandData()
-                }
-            }
+            if (maxDurability <= 0) return@editMeta
 
+            val newDamage = meta.damage + min(reduce, maxDurability - meta.damage)
+            meta.damage = newDamage
+
+            shouldBreak = newDamage >= maxDurability
+        }
+
+        if (shouldBreak) {
+            toolUsed.getITool().getReplaceOnBreak()?.let {
+                toolUsed.setItemMainHand(ItemBuilder(it, 1).build())
+            } ?: toolUsed.setItemMainHand(ItemStack(Material.AIR))
+        }
+
+        UnearthMechanic.getInstance().getStageManager().getAnimator().getAnimation(p)?.let { anim ->
+            anim.updateItemMainHandData()
         }
     }
-
 }

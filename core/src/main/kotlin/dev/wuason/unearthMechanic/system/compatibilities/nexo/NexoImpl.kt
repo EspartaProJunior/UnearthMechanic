@@ -902,7 +902,7 @@ class NexoImpl(
         stage: IStage,
         targetCompatibility: ICompatibility
     ): Boolean {
-        return hardRemoveNexoAt(loc, player)
+        return hardRemoveNexoAt(loc, null)
     }
 
     override fun handleRemove(

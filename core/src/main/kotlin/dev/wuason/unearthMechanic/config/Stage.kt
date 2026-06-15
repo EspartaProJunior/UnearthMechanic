@@ -3,6 +3,7 @@ package dev.wuason.unearthMechanic.config
 import dev.wuason.adapter.AdapterData
 import dev.wuason.unearthMechanic.compatibilities.worldguard.WorldGuardPlugin
 import dev.wuason.unearthMechanic.system.LiveTool
+import dev.wuason.unearthMechanic.utils.StorageUtils
 import org.bukkit.Location
 import org.bukkit.entity.Player
 import kotlin.random.Random
@@ -183,35 +184,30 @@ open class Stage(
     override fun getExecuteCommands(): List<IStageCommand> = executeCommands
 
     override fun dropItems(loc: Location, player: Player) {
-        if(drops.isEmpty()) return
-        if (isOnlyOneDrop()) {
-            val results = drops.filter { drop ->
-                drop.rollItem(true) != null
-            }
-            if (results.isEmpty()) return
-            results.random().dropItem(loc, false)
+        if (drops.isEmpty()) return
 
-            //drops[Random.nextInt(drops.size)].dropItem(loc, false)
+        if (isOnlyOneDrop()) {
+            val results = drops.mapNotNull { drop -> drop.rollItem(true) }
+            if (results.isEmpty()) return
+
+            StorageUtils.addItemToInventoryOrDrop(player, results.random())
             return
         }
+
         drops.forEach { it.dropItemOrAddToInventory(loc, player, true) }
     }
 
     override fun addItems(player: Player) {
-        if(items.isEmpty()) return
-        if (isOnlyOneItem()) {
-            val results = items.filter { drop ->
-                drop.rollItem(true) != null
-            }
-            if (results.isEmpty()) return
-            results.random().addItem(player, true)
+        if (items.isEmpty()) return
 
-            try {//items[Random.nextInt(items.size)].addItem(player, true)
-            } catch (e: Exception) {
-                TODO("Not yet implemented")
-            }
+        if (isOnlyOneItem()) {
+            val results = items.mapNotNull { item -> item.rollItem(true) }
+            if (results.isEmpty()) return
+
+            StorageUtils.addItemToInventoryOrDrop(player, results.random())
             return
         }
+
         items.forEach { it.addItem(player, true) }
     }
 

@@ -950,8 +950,8 @@ class CraftEngineImpl(
                 .trim()
                 .lowercase(Locale.ENGLISH)
         ) {
-            "1b", "1", "true" -> true
-            "0b", "0", "false" -> false
+            "1b", "true" -> true
+            "0b", "false" -> false
             else -> null
         }
     }

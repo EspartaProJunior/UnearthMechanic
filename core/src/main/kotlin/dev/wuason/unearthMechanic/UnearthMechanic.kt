@@ -289,14 +289,11 @@ class UnearthMechanic : UnearthMechanicPlugin() {
     }
 
     private fun onMythicMobsReady() {
-        val termiteListener = TermiteListener(
-            specialFriendItem = Material.HONEYCOMB
-        )
 
-        server.pluginManager.registerEvents(termiteListener, this)
+        server.pluginManager.registerEvents(TermiteListener(), this)
         server.pluginManager.registerEvents(MeerkatCacheListener(), this)
         MeerkatBurrowTask.start()
-        TermiteConsumptionTask.start(termiteListener)
+        TermiteConsumptionTask.start(TermiteListener())
     }
 
     private fun registerSafely(label: String, action: () -> Unit) {

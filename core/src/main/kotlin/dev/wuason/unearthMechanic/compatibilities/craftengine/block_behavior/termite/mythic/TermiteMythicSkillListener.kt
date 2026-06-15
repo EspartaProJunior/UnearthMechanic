@@ -13,6 +13,7 @@ class TermiteMythicSkillListener : Listener {
         val config = event.config
 
         when (event.mechanicName.lowercase()) {
+            "termitebefriendatcomposter" -> event.register(TermiteBefriendAtComposterMechanic(manager, line, config))
             "termiteconsumewood" -> event.register(TermiteConsumeWoodMechanic(manager, line, config))
             "termiteenternest" -> event.register(TermiteEnterNestMechanic(manager, line, config))
             "termitereturnhome" -> event.register(TermiteReturnHomeMechanic(manager, line, config))

@@ -12,7 +12,7 @@ import io.lumine.mythic.core.skills.SkillMechanic
 import org.bukkit.entity.LivingEntity
 
 @Suppress("DEPRECATION")
-class MeerkatTargetArachnidMechanic(
+class MeerkatMountPigMechanic(
     manager: SkillExecutor,
     line: String,
     mlc: MythicLineConfig
@@ -23,7 +23,7 @@ class MeerkatTargetArachnidMechanic(
             ?: return SkillResult.INVALID_TARGET
 
         FoliaUtils.runAtEntity(caster) {
-            MeerkatCacheGameplay.targetNearestArachnid(caster)
+            MeerkatCacheGameplay.mountNearbyPig(caster)
         }
 
         return SkillResult.SUCCESS
