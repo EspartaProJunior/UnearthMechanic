@@ -569,28 +569,6 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
     ): Boolean {
         return canUseUnearthInteraction(player, location, generic)
     }
-    /*fun canInteractNotExist(
-        player: Player,
-        location: Location,
-        generic: IGeneric,
-        core: UnearthMechanic
-    ): Boolean {
-        return hasUnearthBypass(player)
-                || generic.isNotProtect()
-                || (
-                !WorldGuardPlugin.isWorldGuardEnabled()
-                        && core.getAntiGriefLib().test(player, Flag.INTERACT, location)
-                        && core.getAntiGriefLib().test(player, Flag.BREAK, location)
-                        && core.getAntiGriefLib().test(player, Flag.PLACE, location)
-                )
-                || (
-                WorldGuardPlugin.isWorldGuardEnabled()
-                        && core.getAntiGriefLib().test(player, Flag.INTERACT, location)
-                        && core.getAntiGriefLib().test(player, Flag.BREAK, location)
-                        && core.getAntiGriefLib().test(player, Flag.PLACE, location)
-                        && core.getWorldGuardComp().canInteractCustom(player, location)
-                )
-    }*/
 
     private fun onPreApplyStage(
         player: Player,
@@ -2427,7 +2405,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
         }
 
         val allowed = if (WorldGuardPlugin.isWorldGuardEnabled()) {
-            core.getWorldGuardComp().canInteractCustom(player, keyLoc)
+            core.getWorldGuardComp().canModify(player, keyLoc)
         } else {
             core.getAntiGriefLib().test(player, Flag.INTERACT, keyLoc)
         }
