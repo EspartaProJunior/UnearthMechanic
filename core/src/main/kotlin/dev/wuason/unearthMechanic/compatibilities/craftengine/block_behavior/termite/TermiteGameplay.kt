@@ -183,6 +183,7 @@ object TermiteGameplay {
         )
 
         for (nest in findNearestNests(composter.location, radius)) {
+            if (!hasStoredOrVisibleTermites(nest)) continue
             if (TermiteDataStore.takeFood(composterKey(composter), 1) <= 0) break
             TermiteDataStore.markFriendly(TermiteKeys.key(nest), ownerUuid)
             updateNestStage(nest)
@@ -266,7 +267,7 @@ object TermiteGameplay {
         val colonyKey = termite.scoreboardTags
             .firstOrNull { it.startsWith("um_termite_colony:") }
             ?.removePrefix("um_termite_colony:")
-            ?: findNearestNest(composter.location, radius)?.let { TermiteKeys.key(it) }
+            ?: findNearestNestWithTermites(composter.location, radius)?.let { TermiteKeys.key(it) }
         val ownerUuid = TermiteDataStore.peek(composterKey(composter))?.ownerUuid
         if (ownerUuid == null || TermiteDataStore.takeFood(composterKey(composter), 1) <= 0) {
             TermiteDataStore.peek(composterKey(composter))?.let { data ->
@@ -277,7 +278,7 @@ object TermiteGameplay {
 
         if (ownerUuid != null && colonyKey != null) {
             TermiteDataStore.markFriendly(colonyKey, ownerUuid)
-            findNearestNest(composter.location, radius)?.let { updateNestStage(it) }
+            findNearestNestWithTermites(composter.location, radius)?.let { updateNestStage(it) }
         }
 
         val spawnLocation = termite.location.clone()
@@ -305,7 +306,7 @@ object TermiteGameplay {
                 val colonyKey = termite.scoreboardTags
                     .firstOrNull { it.startsWith("um_termite_colony:") }
                     ?.removePrefix("um_termite_colony:")
-                    ?: findNearestNest(termite.location, radius.toInt())?.let { TermiteKeys.key(it) }
+                    ?: findNearestNestWithTermites(termite.location, radius.toInt())?.let { TermiteKeys.key(it) }
 
                 if (colonyKey != null) TermiteDataStore.markFriendly(colonyKey, ownerUuid)
 
@@ -342,6 +343,10 @@ object TermiteGameplay {
         return findNearestNests(location, radius).firstOrNull()
     }
 
+    private fun findNearestNestWithTermites(location: Location, radius: Int): Block? {
+        return findNearestNests(location, radius).firstOrNull { hasStoredOrVisibleTermites(it) }
+    }
+
     private fun findNearestNests(location: Location, radius: Int): List<Block> {
         val world = location.world ?: return emptyList()
         val nests = mutableListOf<Pair<Double, Block>>()
@@ -355,6 +360,13 @@ object TermiteGameplay {
         }
 
         return nests.sortedBy { it.first }.map { it.second }
+    }
+
+    private fun hasStoredOrVisibleTermites(block: Block): Boolean {
+        val data = TermiteDataStore.peek(TermiteKeys.key(block))
+        if (data != null && data.termites > 0) return true
+
+        return fallbackTermitesFromNestStage(block) > 0
     }
 
     private fun findNearestFeedableComposter(location: Location, radius: Int): Block? {

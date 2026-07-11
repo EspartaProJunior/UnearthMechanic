@@ -172,16 +172,7 @@ class TermiteListener : Listener {
         if (player.gameMode != GameMode.CREATIVE) item.amount -= 1
 
         val data = TermiteDataStore.get(composterKey)
-        if (data.food >= composterConfig.foodToBefriend) {
-            if (data.ownerUuid == null) {
-                TermiteDataStore.markFriendly(composterKey, player.uniqueId.toString())
-            }
-            TermiteGameplay.befriendColonyFromComposter(
-                composter = composter,
-                ownerUuid = player.uniqueId.toString(),
-                radius = composterConfig.nestRadius
-            )
-        }
+        activateComposterIfFull(composter, player.uniqueId.toString())
 
         TermiteGameplay.updateComposterStage(composter, data.food, composterConfig.foodToBefriend)
     }
@@ -217,8 +208,29 @@ class TermiteListener : Listener {
         }
 
         val data = TermiteDataStore.get(composterKey)
+        activateComposterIfFull(
+            composter = composter,
+            ownerUuid = itemEntity.owner?.toString() ?: itemEntity.thrower?.toString()
+        )
         TermiteGameplay.updateComposterStage(composter, data.food, composterConfig.foodToBefriend)
         return true
+    }
+
+    private fun activateComposterIfFull(composter: Block, ownerUuid: String?) {
+        val composterKey = TermiteGameplay.composterKey(composter)
+        val data = TermiteDataStore.get(composterKey)
+        if (data.food < composterConfig.foodToBefriend) return
+
+        val effectiveOwner = data.ownerUuid ?: ownerUuid ?: return
+        if (data.ownerUuid == null) {
+            TermiteDataStore.markFriendly(composterKey, effectiveOwner)
+        }
+
+        TermiteGameplay.befriendColonyFromComposter(
+            composter = composter,
+            ownerUuid = effectiveOwner,
+            radius = composterConfig.nestRadius
+        )
     }
 
     private fun isTermiteNest(block: Block): Boolean =

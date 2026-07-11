@@ -45,7 +45,6 @@ import org.bukkit.event.EventPriority
 import org.bukkit.event.block.Action
 import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.inventory.EquipmentSlot
-import org.bukkit.scheduler.BukkitTask
 import java.util.*
 import kotlin.jvm.optionals.getOrNull
 
@@ -2413,6 +2412,11 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
         dbgStage(
             "canUseUnearthInteraction result=$allowed worldGuard=${WorldGuardPlugin.isWorldGuardEnabled()} " +
                     "player=${player.name} loc=${keyLoc.debugShort()} generic=${generic.getId()}"
+        )
+
+        dbgStage(
+            "[UM-WG] player=${player.name} loc=${keyLoc.world?.name}:${keyLoc.blockX},${keyLoc.blockY},${keyLoc.blockZ} " +
+                    "generic=${generic.getId()} notProtect=${generic.isNotProtect()} wg=${WorldGuardPlugin.isWorldGuardEnabled()} allowed=$allowed"
         )
 
         return allowed

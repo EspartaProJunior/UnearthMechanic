@@ -29,6 +29,7 @@ class TermiteNestBehavior(
             ?.getNearbyEntities(location.clone().add(0.5, 0.5, 0.5), absorbRadius, absorbRadius, absorbRadius)
             ?.filterIsInstance<LivingEntity>()
             ?.filter { MythicTermites.isTermite(it) }
+            ?.filterNot { TermiteGameplay.isRecentlyReleased(it) }
             ?: return
 
         for (termite in nearbyTermites) {
@@ -39,11 +40,8 @@ class TermiteNestBehavior(
 
         if (ThreadLocalRandom.current().nextInt(releaseChance.coerceAtLeast(1)) == 0) {
             if (TermiteDataStore.takeTermite(key)) {
-                if (TermiteDataStore.peek(key)?.ownerUuid != null) {
-                    MythicTermites.spawnFriendly(location.clone().add(0.5, 1.0, 0.5), key)
-                } else {
-                    MythicTermites.spawn(location.clone().add(0.5, 1.0, 0.5), key)
-                }
+                val spawned = TermiteGameplay.spawnReleasedTermite(block, key, TermiteDataStore.peek(key)?.ownerUuid)
+                if (spawned != null) TermiteGameplay.markRecentlyReleased(spawned)
                 changed = true
             }
         }

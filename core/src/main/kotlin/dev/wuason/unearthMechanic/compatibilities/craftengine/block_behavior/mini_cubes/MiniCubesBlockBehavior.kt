@@ -1,7 +1,10 @@
 package dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.mini_cubes
 
+import dev.wuason.unearthMechanic.UnearthMechanic
 import dev.wuason.unearthMechanic.compatibilities.craftengine.types.MiniCubeMaskState
+import dev.wuason.unearthMechanic.compatibilities.worldguard.WorldGuardPlugin
 import dev.wuason.unearthMechanic.utils.StorageUtils
+import net.momirealms.antigrieflib.Flag
 import net.momirealms.craftengine.bukkit.api.CraftEngineItems
 import net.momirealms.craftengine.bukkit.item.BukkitItemDefinition
 import net.momirealms.craftengine.core.block.BlockDefinition
@@ -522,6 +525,11 @@ class MiniCubesBlockBehavior(
         targetedBit: Int,
         bukkitPlayer: org.bukkit.entity.Player
     ): InteractionResult {
+        if (!canExtractMiniCube(world, pos, bukkitPlayer)) {
+            debug("removeMiniCube result=CANCEL reason=worldguard_denied pos=$pos player=${bukkitPlayer.name}")
+            return InteractionResult.SUCCESS_AND_CANCEL
+        }
+
         val newMask = MiniCubeMask.remove(currentMask, targetedBit)
 
         debug(
@@ -553,6 +561,34 @@ class MiniCubesBlockBehavior(
         swingHand(bukkitPlayer)
         dropOnePiece(bukkitPlayer)
         return InteractionResult.SUCCESS_AND_CANCEL
+    }
+
+    private fun canExtractMiniCube(
+        world: World,
+        pos: BlockPos,
+        player: org.bukkit.entity.Player
+    ): Boolean {
+        val bukkitWorld = Bukkit.getWorld(world.name()) ?: run {
+            debug("canExtractMiniCube=true reason=bukkit_world_not_found world=${world.name()} pos=$pos")
+            return true
+        }
+
+        val keyLoc = org.bukkit.Location(
+            bukkitWorld,
+            pos.x().toDouble(),
+            pos.y().toDouble(),
+            pos.z().toDouble()
+        )
+
+        val core = UnearthMechanic.getInstance()
+
+        val allowed = if (WorldGuardPlugin.isWorldGuardEnabled()) {
+            core.getWorldGuardComp().canModify(player, keyLoc)
+        } else {
+            core.getAntiGriefLib().test(player, Flag.INTERACT, keyLoc)
+        }
+
+        return allowed
     }
 
     private fun addToExistingMiniCubeBlock(
