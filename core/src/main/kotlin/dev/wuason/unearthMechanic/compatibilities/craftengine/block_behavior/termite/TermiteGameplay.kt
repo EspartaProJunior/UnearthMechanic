@@ -40,6 +40,7 @@ object TermiteGameplay {
     private val chewing = ConcurrentHashMap<UUID, ChewProgress>()
     private val blockClaims = ConcurrentHashMap<String, UUID>()
     private val alertedUntil = ConcurrentHashMap<UUID, Long>()
+    private val recentlyReleasedUntil = ConcurrentHashMap<UUID, Long>()
     private val blockPosClass by lazy { Class.forName("net.minecraft.core.BlockPos") }
     private val blockPosConstructor by lazy {
         blockPosClass.getConstructor(
@@ -203,11 +204,7 @@ object TermiteGameplay {
         val amount = stored.takeIf { it > 0 } ?: fallbackTermitesFromNestStage(block)
 
         repeat(amount) {
-            if (data?.ownerUuid != null) {
-                MythicTermites.spawnFriendly(block.location.add(0.5, 1.0, 0.5), key)
-            } else {
-                MythicTermites.spawn(block.location.add(0.5, 1.0, 0.5), key)
-            }
+            spawnReleasedTermite(block, key, data?.ownerUuid)?.let { markRecentlyReleased(it) }
         }
 
         TermiteDataStore.remove(key)
@@ -327,16 +324,33 @@ object TermiteGameplay {
 
         repeat(amount.coerceAtLeast(1)) {
             if (!TermiteDataStore.takeTermite(key)) return@repeat
-            if (TermiteDataStore.peek(key)?.ownerUuid != null) {
-                MythicTermites.spawnFriendly(nest.location.add(0.5, 1.0, 0.5), key)
-            } else {
-                MythicTermites.spawn(nest.location.add(0.5, 1.0, 0.5), key)
-            }
+            spawnReleasedTermite(nest, key, TermiteDataStore.peek(key)?.ownerUuid)?.let { markRecentlyReleased(it) }
             released++
         }
 
         updateNestStage(nest)
         return released
+    }
+
+    fun spawnReleasedTermite(block: Block, colonyKey: String, ownerUuid: String?): LivingEntity? {
+        val location = block.location.add(0.5, 1.0, 0.5)
+        return if (ownerUuid != null) {
+            MythicTermites.spawnFriendly(location, colonyKey)
+        } else {
+            MythicTermites.spawn(location, colonyKey)
+        }
+    }
+
+    fun markRecentlyReleased(termite: LivingEntity, durationMillis: Long = 2500L) {
+        recentlyReleasedUntil[termite.uniqueId] = System.currentTimeMillis() + durationMillis
+    }
+
+    fun isRecentlyReleased(termite: LivingEntity): Boolean {
+        val until = recentlyReleasedUntil[termite.uniqueId] ?: return false
+        if (until > System.currentTimeMillis()) return true
+
+        recentlyReleasedUntil.remove(termite.uniqueId)
+        return false
     }
 
     fun findNearestNest(location: Location, radius: Int): Block? {
