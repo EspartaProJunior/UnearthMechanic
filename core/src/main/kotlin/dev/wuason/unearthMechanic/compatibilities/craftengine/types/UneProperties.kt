@@ -27,6 +27,8 @@ object UneProperties {
         Properties.register(UneKeys.TERMITE_NEST_STAGE_PROPERTY, EnumProperty.factory(TermiteNestStage::class.java))
         Properties.register(UneKeys.HOLLOW_LOG_STAGE_PROPERTY, EnumProperty.factory(HollowLogStage::class.java))
         Properties.register(UneKeys.TERMITE_COMPOSTER_STAGE_PROPERTY, EnumProperty.factory(TermiteComposterStage::class.java))
+
+        registerTrialBlockProperties()
     }
 
     fun registerCurtainYPos() {
@@ -35,5 +37,12 @@ object UneProperties {
 
     fun registerMiniCubes() {
         Properties.register(UneKeys.MINI_CUBES_PROPERTY, EnumProperty.factory(MiniCubeMaskState::class.java))
+    }
+
+    fun registerTrialBlockProperties() {
+        Properties.register(UneKeys.VAULT_STAGE_PROPERTY, EnumProperty.factory(VaultStage::class.java)
+        )
+        Properties.register(UneKeys.TRIAL_SPAWNER_STAGE_PROPERTY, EnumProperty.factory(TrialSpawnerStage::class.java)
+        )
     }
 }

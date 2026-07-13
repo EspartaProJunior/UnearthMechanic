@@ -30,6 +30,8 @@ import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.ter
 import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.termite.TermiteListener
 import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.termite.TermiteNestBehavior
 import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.termite.mythic.TermiteMythicSkillListener
+import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.trial_spawner.TrialSpawnerBehavior
+import dev.wuason.unearthMechanic.compatibilities.craftengine.block_behavior.trial_spawner.VaultBehavior
 import dev.wuason.unearthMechanic.compatibilities.craftengine.item_behavior.FrozenTotemOfUndyingItemBehavior
 import dev.wuason.unearthMechanic.compatibilities.craftengine.item_behavior.FrozenTotemOfUndyingListener
 import dev.wuason.unearthMechanic.compatibilities.craftengine.item_behavior.ShiftPlaceBlockItemBehavior
@@ -58,7 +60,6 @@ import net.momirealms.craftengine.core.block.behavior.BlockBehaviors
 import net.momirealms.craftengine.core.item.behavior.ItemBehaviors
 import net.momirealms.craftengine.core.util.Key
 import org.bukkit.Bukkit
-import org.bukkit.Material
 
 class UnearthMechanic : UnearthMechanicPlugin() {
 
@@ -219,6 +220,12 @@ class UnearthMechanic : UnearthMechanicPlugin() {
             }
             registerSafely(UneKeys.MULTI_SAPLING_BEHAVIOR.asString()) {
                 BlockBehaviors.register(UneKeys.MULTI_SAPLING_BEHAVIOR, MultiSaplingBehavior.FACTORY)
+            }
+            registerSafely(UneKeys.TRIAL_SPAWNER_BEHAVIOR.asString()) {
+                BlockBehaviors.register(UneKeys.TRIAL_SPAWNER_BEHAVIOR, TrialSpawnerBehavior.FACTORY)
+            }
+            registerSafely(UneKeys.VAULT_BEHAVIOR.asString()) {
+                BlockBehaviors.register(UneKeys.VAULT_BEHAVIOR, VaultBehavior.FACTORY)
             }
 
             // ItemBehaviors

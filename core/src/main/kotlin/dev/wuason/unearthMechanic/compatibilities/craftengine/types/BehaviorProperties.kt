@@ -148,3 +148,17 @@ enum class TermiteComposterStage {
     log,
     full
 }
+
+enum class VaultStage {
+    inactive,
+    active,
+    unlocking,
+    ejecting
+}
+
+enum class TrialSpawnerStage {
+    inactive,
+    active,
+    ejecting,
+    cooldown
+}

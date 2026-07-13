@@ -68,4 +68,11 @@ object UneKeys {
     val FROZEN_TOTEM_OF_UNDYING_ITEM_BEHAVIOR: Key = Key.of("$NAMESPACE:frozen_totem_of_undying")
 
     val MULTI_SAPLING_BEHAVIOR: Key = Key.of("$NAMESPACE:multi_sapling")
+
+    val TRIAL_SPAWNER_BEHAVIOR: Key = Key.of("$NAMESPACE:trial_spawner")
+
+    val VAULT_BEHAVIOR: Key = Key.of("$NAMESPACE:vault")
+
+    val VAULT_STAGE_PROPERTY: Key = Key.of("$NAMESPACE:vault_stage")
+    val TRIAL_SPAWNER_STAGE_PROPERTY: Key = Key.of("$NAMESPACE:trial_spawner_stage")
 }

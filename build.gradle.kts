@@ -19,7 +19,7 @@ val targetJavaVersion = 21
 allprojects {
 
     project.group = "dev.wuason"
-    project.version = "0.1.15"
+    project.version = "0.1.16"
 
     //apply kotlin jvm plugin
     apply(plugin = "kotlin")
