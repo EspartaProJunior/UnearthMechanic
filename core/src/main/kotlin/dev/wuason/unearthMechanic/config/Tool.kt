@@ -56,6 +56,7 @@ class Tool(
                 var anim: String? = null
                 var permission: String? = null
                 var delayAnim = 0L
+                var blockInteractions = true
                 var delay = 0L
                 var replaceOnBreak: String? = null
                 var tintFurniture: String? = null
@@ -77,6 +78,9 @@ class Tool(
                         "anim" -> anim = x[1].trim()
                         "permission" -> permission = x[1].trim()
                         "delayanim" -> delayAnim = x[1].trim().toLong()
+                        "blockinteractions" -> blockInteractions = x[1].trim()
+                            .lowercase(Locale.ENGLISH)
+                            .toBooleanStrict()
                         "delay" -> delay = x[1].trim().toLong()
                         "replaceonbreak" -> replaceOnBreak = x[1].trim()
                         "tintfurniture" -> tintFurniture = x[1].trim()
@@ -97,7 +101,7 @@ class Tool(
                 }
 
                 val animation = if (anim != null) {
-                    Animation(if (delayAnim > 0) delayAnim else -1, anim)
+                    Animation(if (delayAnim > 0) delayAnim else -1, anim, blockInteractions)
                 } else null
 
                 Tool(

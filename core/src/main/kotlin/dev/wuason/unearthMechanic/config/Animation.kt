@@ -6,7 +6,8 @@ import org.bukkit.inventory.ItemStack
 
 class Animation(
     private val ticks: Long,
-    private val animationItem: String
+    private val animationItem: String,
+    private val blockInteractions: Boolean = true
 ): IAnimation {
 
     override fun getTicks(): Long {
@@ -17,7 +18,11 @@ class Animation(
         return ItemBuilder(animationItem, 1).addPersistentData(AnimationManager.ANIM_NAMESPACED_KEY, animationItem).build()
     }
 
+    override fun shouldBlockInteractions(): Boolean {
+        return blockInteractions
+    }
+
     override fun toString(): String {
-        return "Animation(ticks=$ticks, animationItem=$animationItem)"
+        return "Animation(ticks=$ticks, animationItem=$animationItem, blockInteractions=$blockInteractions)"
     }
 }

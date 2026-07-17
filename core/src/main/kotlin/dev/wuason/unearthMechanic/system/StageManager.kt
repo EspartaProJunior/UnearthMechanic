@@ -240,6 +240,15 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                 return
             }
         }
+
+        if (animator.isBlockingInteractions(player)) {
+            (event as? Cancellable)?.isCancelled = true
+            dbgStage(
+                "STOP interact animation still running, event cancelled " +
+                        "player=${player.name} loc=${location.debugShort()}"
+            )
+            return
+        }
         //core.logger.info("[UM-DBG] interact ENTER baseItemId=$baseItemId loc=${location.blockX},${location.blockY},${location.blockZ} comp=${compatibility.adapterComp()?.type}")
         //if (player.isSneaking) return
 

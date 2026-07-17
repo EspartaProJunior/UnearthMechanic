@@ -20,4 +20,6 @@ interface IAnimation {
      * @return The number of ticks for the animation as a `Long`.
      */
     fun getTicks(): Long
+
+    fun shouldBlockInteractions(): Boolean = true
 }

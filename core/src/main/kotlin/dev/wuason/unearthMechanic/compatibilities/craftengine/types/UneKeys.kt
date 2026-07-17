@@ -45,7 +45,12 @@ object UneKeys {
     val REDSTONE_FIELD_BEHAVIOR: Key = Key.of("$NAMESPACE:redstone_field")
 
     val WALL_CONNECTION_PROPERTY: Key = Key.of("$NAMESPACE:wall_connection")
+    val WALL_POS_PROPERTY: Key = Key.of("$NAMESPACE:pos")
+    val WALL_SHAPE_PROPERTY: Key = Key.of("$NAMESPACE:shape")
+    val WALL_YPOS_PROPERTY: Key = Key.of("$NAMESPACE:ypos")
     val WALL_BLOCK_BEHAVIOR: Key = Key.of("$NAMESPACE:wall_block")
+
+    val ADAPTIVE_FACADE_BLOCK_BEHAVIOR: Key = Key.of("$NAMESPACE:adaptive_facade_block")
 
     val REDSTONE_FIELD_RESONATOR_BEHAVIOR: Key = Key.of("$NAMESPACE:redstone_field_resonator")
 

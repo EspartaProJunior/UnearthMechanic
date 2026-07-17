@@ -131,6 +131,25 @@ enum class WallConnection {
     tall
 }
 
+enum class WallPos {
+    single,
+    left,
+    middle,
+    right
+}
+
+enum class WallShape {
+    straight,
+    inner
+}
+
+enum class WallYPos {
+    single,
+    bottom,
+    middle,
+    top
+}
+
 enum class TermiteNestStage {
     empty,
     occupied,

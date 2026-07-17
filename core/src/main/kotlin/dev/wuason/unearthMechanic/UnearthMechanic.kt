@@ -94,6 +94,12 @@ class UnearthMechanic : UnearthMechanicPlugin() {
 
     private var antiGriefLib: AntiGriefLib? = null
 
+    /**
+     * MaskyCore owns CraftEngine when installed. This flag keeps the old implementation as a
+     * temporary backwards-compatible fallback for servers which have not migrated yet.
+     */
+    private var legacyCraftEngineActive = false
+
     override fun onLoad() {
         CommandAPI.onLoad(CommandAPIPaperConfig(this).verboseOutput(false))
         if(WorldGuardPlugin.isWorldGuardLoaded()) worldGuardComp = WorldGuardComp(this)
@@ -115,7 +121,7 @@ class UnearthMechanic : UnearthMechanicPlugin() {
         AdventureUtils.sendMessagePluginConsole(this, "<gold> Selected compatibility: <aqua>${checkCompatibility()}");
 
         //if (check()) return
-        Adapter.init(this);
+        Adapter.init(this)
         configManager = ConfigManager(this)
         configManager.loadConfig()
 
@@ -130,9 +136,18 @@ class UnearthMechanic : UnearthMechanicPlugin() {
         PreviousBlockDataStore.load()
 
         if (CraftEnginePlugin.isCraftEngineEnabled()) {
-            onCraftEngineReady();
+            if (server.pluginManager.isPluginEnabled("MaskyCore")) {
+                logger.info("MaskyCore detected; CraftEngine mechanics are delegated to MaskyCore.")
+            } else {
+                logger.warning(
+                    "MaskyCore was not detected. Loading the deprecated CraftEngine fallback; " +
+                            "install MaskyCore before this fallback is removed in a future release."
+                )
+                legacyCraftEngineActive = true
+                onCraftEngineReady()
+            }
         }
-        if (MythicMobsPlugin.isMythicMobsEnabled()) {
+        if (legacyCraftEngineActive && MythicMobsPlugin.isMythicMobsEnabled()) {
             server.pluginManager.registerEvents(TermiteMythicSkillListener(), this)
             server.pluginManager.registerEvents(MeerkatCacheMythicSkillListener(), this)
         }
@@ -198,6 +213,9 @@ class UnearthMechanic : UnearthMechanicPlugin() {
             }
             registerSafely(UneKeys.WALL_BLOCK_BEHAVIOR.asString()){
                 BlockBehaviors.register(UneKeys.WALL_BLOCK_BEHAVIOR, WideWallBlockBehavior.FACTORY)
+            }
+            registerSafely(UneKeys.ADAPTIVE_FACADE_BLOCK_BEHAVIOR.asString()){
+                BlockBehaviors.register(UneKeys.ADAPTIVE_FACADE_BLOCK_BEHAVIOR, AdaptiveFacadeBlockBehavior.FACTORY)
             }
             registerSafely(UneKeys.REDSTONE_FIELD_BEHAVIOR.asString()){
                 BlockBehaviors.register(UneKeys.REDSTONE_FIELD_BEHAVIOR, RedstoneFieldBehavior.FACTORY)
@@ -279,7 +297,7 @@ class UnearthMechanic : UnearthMechanicPlugin() {
                 server.pluginManager.registerEvents(FrozenTotemOfUndyingListener(), this)
 
                 if (MythicMobsPlugin.isMythicMobsEnabled()) {
-                    onMythicMobsReady();
+                    onMythicMobsReady()
                 }
 
                 runCatching {
@@ -313,20 +331,20 @@ class UnearthMechanic : UnearthMechanicPlugin() {
 
     override fun onDisable() {
         CommandAPI.onDisable()
-        if(CraftEnginePlugin.isCraftEngineEnabled()){
+        if (legacyCraftEngineActive) {
             FishTankDataStore.flushSaveNow()
             TermiteDataStore.flushSaveNow()
             MeerkatCacheDataStore.flushSaveNow()
             MeerkatBurrowTask.stop()
+
+            FishTankDataStore.close()
+            RedstoneFieldManager.shutdown()
+            TermiteConsumptionTask.stop()
+            TermiteDataStore.close()
+            MeerkatCacheDataStore.close()
         }
-        FishTankDataStore.close()
+
         PreviousBlockDataStore.close()
-        RedstoneFieldManager.shutdown()
-
-        TermiteConsumptionTask.stop()
-        TermiteDataStore.close()
-        MeerkatCacheDataStore.close()
-
         FoliaUtils.shutdown()
     }
 

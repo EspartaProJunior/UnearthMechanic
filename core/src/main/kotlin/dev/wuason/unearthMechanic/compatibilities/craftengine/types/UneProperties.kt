@@ -23,6 +23,9 @@ object UneProperties {
         Properties.register(UneKeys.BRITTLE_ICE_PROPERTY, EnumProperty.factory(BrittleIceStage::class.java))
         Properties.register(UneKeys.REDSTONE_POWER_PROPERTY, IntegerProperty.FACTORY)
         Properties.register(UneKeys.WALL_CONNECTION_PROPERTY, EnumProperty.factory(WallConnection::class.java))
+        Properties.register(UneKeys.WALL_POS_PROPERTY, EnumProperty.factory(WallPos::class.java))
+        Properties.register(UneKeys.WALL_SHAPE_PROPERTY, EnumProperty.factory(WallShape::class.java))
+        Properties.register(UneKeys.WALL_YPOS_PROPERTY, EnumProperty.factory(WallYPos::class.java))
 
         Properties.register(UneKeys.TERMITE_NEST_STAGE_PROPERTY, EnumProperty.factory(TermiteNestStage::class.java))
         Properties.register(UneKeys.HOLLOW_LOG_STAGE_PROPERTY, EnumProperty.factory(HollowLogStage::class.java))

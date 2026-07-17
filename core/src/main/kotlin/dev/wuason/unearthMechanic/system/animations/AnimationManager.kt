@@ -9,6 +9,7 @@ import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
+import org.bukkit.event.player.PlayerItemHeldEvent
 import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataContainer
@@ -54,10 +55,19 @@ class AnimationManager(
                 persistentData.remove(ANIM_ITEM_MAIN_HAND_NAMESPACED_KEY)
                 persistentData.remove(ANIM_ITEM_MAIN_HAND_ANIM_ITEM_NAMESPACED_KEY)
             }
+
+            @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+            fun onPlayerItemHeld(event: PlayerItemHeldEvent) {
+                if (this@AnimationManager.isBlockingInteractions(event.player)) {
+                    event.isCancelled = true
+                }
+            }
         }, core)
     }
 
     private val animations: WeakHashMap<Player, IAnimationRunner> = WeakHashMap()
+    private val interactionBlockingPlayers: MutableSet<Player> =
+        Collections.newSetFromMap(WeakHashMap<Player, Boolean>())
 
     override fun isAnimating(player: Player): Boolean {
         return animations.containsKey(player)
@@ -65,6 +75,10 @@ class AnimationManager(
 
     override fun getAnimation(player: Player): IAnimationRunner? {
         return animations[player]
+    }
+
+    fun isBlockingInteractions(player: Player): Boolean {
+        return interactionBlockingPlayers.contains(player)
     }
 
     override fun playAnimation(player: Player, animation: IAnimation) {
@@ -78,12 +92,22 @@ class AnimationManager(
 
             override fun onFinish() {
                 animations.remove(player)
+                interactionBlockingPlayers.remove(player)
             }
         }
 
         animations[player] = animationRunner
+        if (animation.shouldBlockInteractions()) {
+            interactionBlockingPlayers.add(player)
+        }
 
-        animationRunner.start(true)
+        try {
+            animationRunner.start(true)
+        } catch (throwable: Throwable) {
+            animations.remove(player)
+            interactionBlockingPlayers.remove(player)
+            throw throwable
+        }
     }
 
     override fun stopAnimation(player: Player) {

@@ -8,6 +8,10 @@ folia-supported: true
 dependencies:
   #- Mechanics
   server:
+    MaskyCore:
+      load: BEFORE
+      required: false
+      join-classpath: false
     CraftEngine:
       load: BEFORE
       required: false
