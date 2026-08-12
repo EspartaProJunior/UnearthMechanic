@@ -20,6 +20,7 @@ import kotlin.let
 class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
 
     private val generics: HashMap<String, IGeneric> = HashMap()
+    private val templateConfigManager = TemplateConfigManager(core.logger::warning)
     //private val genericsBaseItemId: HashMap<AdapterData, HashMap<AdapterData, IGeneric>> = HashMap()
 
     private val genericsBaseItemIdMode:
@@ -30,8 +31,11 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
         //genericsBaseItemId.clear()
         genericsBaseItemIdMode.clear()
 
-        loadConfig(GenericType.BLOCK)
-        loadConfig(GenericType.FURNITURE)
+        val documents = loadYamlDocuments()
+        templateConfigManager.load(documents)
+
+        loadConfig(GenericType.BLOCK, documents)
+        loadConfig(GenericType.FURNITURE, documents)
         //core.logger.info("[UM-DBG] LOADED BASES: ${genericsBaseItemIdMode.keys}")
     }
 
@@ -47,20 +51,34 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
         return files
     }
 
-    fun loadConfig(type: GenericType) {
+    private fun loadYamlDocuments(): List<Pair<File, YamlDocument>> {
         val base = File(core.dataFolder.path)
         base.mkdirs()
         val files: List<File> = getAllFilesRecursive(base).filter { it.name.endsWith(".yml") }
-        for (file in files) {
+        return files.map { file ->
+            file to YamlDocument.create(file, GeneralSettings.DEFAULT, LoaderSettings.DEFAULT, DumperSettings.DEFAULT, UpdaterSettings.DEFAULT)
+        }
+    }
 
-            val config = YamlDocument.create(file, GeneralSettings.DEFAULT, LoaderSettings.DEFAULT, DumperSettings.DEFAULT, UpdaterSettings.DEFAULT)
+    fun loadConfig(type: GenericType) {
+        val documents = loadYamlDocuments()
+        templateConfigManager.load(documents)
+        loadConfig(type, documents)
+    }
+
+    private fun loadConfig(type: GenericType, documents: List<Pair<File, YamlDocument>>) {
+        for ((file, config) in documents) {
 
             config.getSection("unearth.${type.getRoute()}")?.let { sectionGenerics ->
 
                 for (key in sectionGenerics.getRoutesAsStrings(false)) {
 
-                    val sectionGeneric: Section = sectionGenerics.getSection(key) ?: continue
                     val id: String = key
+                    val sectionGeneric: Section = templateConfigManager.resolve(
+                        section = sectionGenerics.getSection(key) ?: continue,
+                        entryId = id,
+                        sourceFile = file
+                    ) ?: continue
                     val basesItemId: ArrayList<String> = ArrayList()
                     val baseItemId = sectionGeneric.get("base")?: continue
                     if (baseItemId is String) {
