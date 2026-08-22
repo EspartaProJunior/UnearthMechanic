@@ -5,6 +5,7 @@ import dev.wuason.adapter.AdapterData
 import dev.wuason.unearthMechanic.config.ITool
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
+import java.util.UUID
 import kotlin.jvm.optionals.getOrNull
 
 
@@ -55,4 +56,6 @@ class LiveTool(private var toolData: ToolData, private val iTool: ITool, private
     override fun isOriginalItem(): Boolean {
         return Adapter.getAdapterData(Adapter.getAdapterId(getItemMainHand())).getOrNull() == iTool.getAdapterData()
     }
+
+    fun getActivationId(): UUID = toolData.activationId
 }

@@ -97,13 +97,21 @@ class BasicFeatures: AbstractFeature() {
             }
 
             if (reduceHand > 0) {
-                liveTool.getItemMainHand()?.let { item ->
-                    if (!item.type.isAir && item == p.inventory.itemInMainHand) {
-                        item.subtract(reduceHand)
+                val currentItem = liveTool.getItemMainHand()
+
+                if (currentItem != null && !currentItem.type.isAir) {
+                    val remaining = currentItem.amount - reduceHand
+
+                    val updatedItem = if (remaining <= 0) {
+                        ItemStack(Material.AIR)
+                    } else {
+                        currentItem.clone().apply {
+                            amount = remaining
+                        }
                     }
-                    plugin.getStageManager().getAnimator().getAnimation(p)?.let { anim ->
-                        anim.updateItemMainHandData()
-                    }
+
+                    // Updates the actual item or the saved item behind the animation.
+                    liveTool.setItemMainHand(updatedItem)
                 }
             }
         }
@@ -178,29 +186,59 @@ class BasicFeatures: AbstractFeature() {
         previousHeldSlot: Int,
         before: Array<ItemStack?>
     ) {
+        val plugin = UnearthMechanic.getInstance()
         val inventory = player.inventory
 
-        val currentSlotItem = inventory.getItem(previousHeldSlot)
-        if (currentSlotItem != null && !currentSlotItem.type.isAir) return
+        val animation = plugin
+            .getStageManager()
+            .getAnimator()
+            .getAnimation(player)
+            ?.takeIf {
+                it.isRunning() &&
+                        previousHeldSlot == inventory.heldItemSlot
+            }
+
+        /*
+         * During the animation, the slot contains the temporary visual element.
+         * The actual item is stored within the AnimationRunner.
+         */
+        val currentSlotItem =
+            animation?.getItemMainHand()
+                ?: inventory.getItem(previousHeldSlot)
+
+        if (currentSlotItem != null && !currentSlotItem.type.isAir) {
+            return
+        }
+
+        fun setPreviousHeldItem(item: ItemStack) {
+            if (animation != null) {
+                animation.setItemMainHand(item)
+            } else {
+                inventory.setItem(previousHeldSlot, item)
+            }
+        }
 
         val after = inventory.contents
 
-        // The slot was empty before, and then a new item appeared.
+        // Search for a new item placed in a slot that was previously empty.
         for (slot in after.indices) {
             if (slot == previousHeldSlot) continue
 
             val beforeItem = before.getOrNull(slot)
             val afterItem = after[slot]
 
-            if ((beforeItem == null || beforeItem.type.isAir) && afterItem != null && !afterItem.type.isAir) {
-                inventory.setItem(previousHeldSlot, afterItem.clone())
+            if (
+                (beforeItem == null || beforeItem.type.isAir) &&
+                afterItem != null &&
+                !afterItem.type.isAir
+            ) {
+                setPreviousHeldItem(afterItem.clone())
                 inventory.setItem(slot, ItemStack(Material.AIR))
                 return
             }
         }
 
-        // The new item was stacked on top of an existing stack.
-        // We just take the change and put it in our hand.
+        // Find a new item that has been added to the top of another stack.
         for (slot in after.indices) {
             if (slot == previousHeldSlot) continue
 
@@ -214,8 +252,9 @@ class BasicFeatures: AbstractFeature() {
 
             val addedAmount = afterItem.amount - beforeItem.amount
 
-            val movedItem = afterItem.clone()
-            movedItem.amount = addedAmount
+            val movedItem = afterItem.clone().apply {
+                amount = addedAmount
+            }
 
             afterItem.amount -= addedAmount
 
@@ -225,7 +264,7 @@ class BasicFeatures: AbstractFeature() {
                 inventory.setItem(slot, afterItem)
             }
 
-            inventory.setItem(previousHeldSlot, movedItem)
+            setPreviousHeldItem(movedItem)
             return
         }
     }

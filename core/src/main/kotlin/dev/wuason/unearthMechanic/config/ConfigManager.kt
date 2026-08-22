@@ -422,6 +422,9 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
 
         stage.setRandomStageOptions(randomStageOptions)
         stage.setRegionConditions(regionConditions)
+        stage.setWateringCanSettings(
+            parseWateringCanSettings(sectionStage, genericId, stageKey)
+        )
 
         parseTimedSequenceInteraction(
             sectionStage = sectionStage,
@@ -433,6 +436,63 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
         }
 
         return stage
+    }
+
+    private fun parseWateringCanSettings(
+        section: Section,
+        genericId: String,
+        stageKey: String
+    ): WateringCanSettings? {
+        val wateringCan = section.getSection("customcrops_watering_can") ?: return null
+        val water = wateringCan.getSection("water")
+
+        val rawCans = wateringCan.getStringList("cans", listOf("*"))
+        val cans = rawCans.map(String::trim).filter(String::isNotEmpty).toSet().ifEmpty { setOf("*") }
+
+        val requiredWater = (water?.getInt("require", 1) ?: 1).coerceAtLeast(0)
+        val consumeWater = (water?.getInt("consume", 1) ?: 1).coerceAtLeast(0)
+
+        val rawConsumeOn = water?.getString("consume_on", "success")
+        val consumeOn = WaterConsumeOn.parse(rawConsumeOn)
+        if (consumeOn == null) {
+            core.logger.warning(
+                "Invalid customcrops_watering_can.water.consume_on '$rawConsumeOn' in generic " +
+                        "'$genericId', stage '$stageKey'. Using 'success'."
+            )
+        }
+
+        val rawChargeMode = wateringCan.getString("charge_mode", "activation")
+        val chargeMode = WaterChargeMode.parse(rawChargeMode)
+        if (chargeMode == null) {
+            core.logger.warning(
+                "Invalid customcrops_watering_can.charge_mode '$rawChargeMode' in generic " +
+                        "'$genericId', stage '$stageKey'. Using 'activation'."
+            )
+        }
+
+        val rawCreative = wateringCan.getString("creative", "consume")
+        val creativeMode = WaterCreativeMode.parse(rawCreative)
+        if (creativeMode == null) {
+            core.logger.warning(
+                "Invalid customcrops_watering_can.creative '$rawCreative' in generic " +
+                        "'$genericId', stage '$stageKey'. Using 'consume'."
+            )
+        }
+
+        val onFail = wateringCan.getSection("on_fail")
+        val actionbar = onFail?.getString("actionbar")?.takeIf { it.isNotBlank() }
+        val sound = onFail?.getString("sound")?.takeIf { it.isNotBlank() }
+
+        return WateringCanSettings(
+            cans = cans,
+            requiredWater = requiredWater,
+            consumeWater = consumeWater,
+            consumeOn = consumeOn ?: WaterConsumeOn.SUCCESS,
+            chargeMode = chargeMode ?: WaterChargeMode.ACTIVATION,
+            respectInfinite = wateringCan.getBoolean("respect_infinite", true),
+            creativeMode = creativeMode ?: WaterCreativeMode.CONSUME,
+            onFail = WateringCanFailureFeedback(actionbar, sound)
+        )
     }
 
     private fun parseRegionConditions(

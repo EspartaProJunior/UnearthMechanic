@@ -8,6 +8,10 @@ folia-supported: true
 dependencies:
   #- Mechanics
   server:
+    CustomCrops:
+      load: BEFORE
+      required: false
+      join-classpath: true
     MaskyCore:
       load: BEFORE
       required: false

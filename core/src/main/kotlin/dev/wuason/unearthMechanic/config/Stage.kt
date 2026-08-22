@@ -89,6 +89,7 @@ open class Stage(
         resolved.setFallbackProperties(this.getFallbackProperties())
         resolved.setRegionConditions(this.getRegionConditions())
         resolved.setTimedSequenceInteraction(this.getTimedSequenceInteraction())
+        resolved.setWateringCanSettings(this.getWateringCanSettings())
 
         sequenceStages?.let { resolved.setSequenceStages(it) }
         return resolved
@@ -308,6 +309,7 @@ open class Stage(
         copy.setFallbackProperties(this.getFallbackProperties())
         copy.setRegionConditions(this.getRegionConditions())
         copy.setTimedSequenceInteraction(this.getTimedSequenceInteraction())
+        copy.setWateringCanSettings(this.getWateringCanSettings())
         sequenceStages?.let { copy.setSequenceStages(it) }
 
         return copy
@@ -359,6 +361,16 @@ open class Stage(
         return regionConditions.all { condition ->
             condition.matches(currentRegions)
         }
+    }
+
+    private var wateringCanSettings: WateringCanSettings? = null
+
+    fun setWateringCanSettings(settings: WateringCanSettings?) {
+        wateringCanSettings = settings
+    }
+
+    fun getWateringCanSettings(): WateringCanSettings? {
+        return wateringCanSettings
     }
 
     override fun getFoodAdd(): Int {

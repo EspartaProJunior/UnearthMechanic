@@ -5,6 +5,8 @@ import dev.wuason.adapter.Adapter
 import dev.wuason.adapter.AdapterData
 import dev.wuason.unearthMechanic.UnearthMechanic
 import dev.wuason.unearthMechanic.compatibilities.luckperms.LuckPermsPlugin
+import dev.wuason.unearthMechanic.compatibilities.customcrops.CustomCropsPlugin
+import dev.wuason.unearthMechanic.compatibilities.customcrops.CustomCropsWateringCanSupport
 import dev.wuason.unearthMechanic.compatibilities.worldguard.WorldGuardPlugin
 import dev.wuason.unearthMechanic.config.*
 import dev.wuason.unearthMechanic.events.ApplyStageEvent
@@ -27,6 +29,7 @@ import dev.wuason.unearthMechanic.system.features.SwingHandFeature
 import dev.wuason.unearthMechanic.system.features.TintFurnitureFeature
 import dev.wuason.unearthMechanic.system.features.ToolSoundFeature
 import dev.wuason.unearthMechanic.utils.FoliaUtils
+import dev.wuason.unearthMechanic.utils.AdventureUtils
 import dev.wuason.unearthMechanic.utils.Utils
 import net.momirealms.antigrieflib.Flag
 import org.bukkit.Bukkit
@@ -66,6 +69,11 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
     private val debugStageManager = false
 
     private val compatibilitiesLoaded: MutableList<ICompatibility> = ArrayList()
+
+    private val customCropsWateringCanSupport: CustomCropsWateringCanSupport? =
+        CustomCropsPlugin.createSupport(core)
+    private var warnedMissingCustomCrops = false
+    private val currentInteractionActivation = ThreadLocal<UUID?>()
 
     private val delays: HashMap<Location, WrappedTask> = HashMap()
 
@@ -209,14 +217,39 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
     }
 
     private fun resolveToolItemStack(player: Player, toolSlot: Int): ToolData {
+        val activationId = currentInteractionActivation.get() ?: UUID.randomUUID()
         return if (toolSlot == -1) {
-            ToolData(animator.getAnimation(player)?.getItemMainHand() ?: player.inventory.itemInMainHand,player.inventory.heldItemSlot)
+            ToolData(
+                animator.getAnimation(player)?.getItemMainHand() ?: player.inventory.itemInMainHand,
+                player.inventory.heldItemSlot,
+                activationId
+            )
         } else {
-            ToolData(player.inventory.getItem(toolSlot) ?: player.inventory.itemInMainHand, toolSlot)
+            ToolData(player.inventory.getItem(toolSlot) ?: player.inventory.itemInMainHand, toolSlot, activationId)
         }
     }
 
     fun interact(player: Player, baseItemId: String, location: Location, event: Event, compatibility: ICompatibility) {
+        if (currentInteractionActivation.get() != null) {
+            interactWithActivation(player, baseItemId, location, event, compatibility)
+            return
+        }
+
+        currentInteractionActivation.set(UUID.randomUUID())
+        try {
+            interactWithActivation(player, baseItemId, location, event, compatibility)
+        } finally {
+            currentInteractionActivation.remove()
+        }
+    }
+
+    private fun interactWithActivation(
+        player: Player,
+        baseItemId: String,
+        location: Location,
+        event: Event,
+        compatibility: ICompatibility
+    ) {
         val normalizedLocation = canonicalStageTarget(compatibility, location.block)
 
         if (normalizedLocation != location.block.location) {
@@ -597,6 +630,14 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
             return
         }
 
+        if (!validateCustomCropsWateringCan(player, event, loc, toolUsed, stage, true)) {
+            dbgStage(
+                "STOP onPreApplyStage CustomCrops watering-can condition failed " +
+                        "loc=${loc.debugShort()} generic=${generic.getId()}"
+            )
+            return
+        }
+
         //send event
         val eventStage: PreApplyStageEvent =
             PreApplyStageEvent(player, compatibility, event, loc, toolUsed, generic, stage)
@@ -841,6 +882,14 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                         "active=${activeSequences.contains(keyLoc)} starting=${startingSequences.contains(keyLoc)}"
             )
 
+            return
+        }
+
+        if (!validateCustomCropsWateringCan(player, event, loc, toolUsed, stage, true)) {
+            dbgStage(
+                "STOP onApplyStage CustomCrops watering-can condition failed " +
+                        "loc=${keyLoc.debugShort()} generic=${generic.getId()}"
+            )
             return
         }
 
@@ -1174,6 +1223,20 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
             }
         }
         lastInteractionProps.remove(loc.block.location)
+
+        resolvedStage.getWateringCanSettings()?.let { settings ->
+            val consumed = customCropsWateringCanSupport?.consumeAfterSuccess(
+                player,
+                toolUsed,
+                loc,
+                settings
+            ) ?: false
+            if (!consumed) {
+                core.logger.warning(
+                    "The stage '${generic.getId()}' was applied, but CustomCrops water could not be consumed."
+                )
+            }
+        }
 
         if (resolvedStage.isRemove() || generic.isLastStage(resolvedStage)) {
             if (resolvedStage.isRemove()) compatibility.handleRemove(
@@ -2225,7 +2288,11 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
             ?: active.originalToolUsed.getITool()
 
         val outcomeLiveTool = LiveTool(
-            ToolData(clickedItem, player.inventory.heldItemSlot),
+            ToolData(
+                clickedItem,
+                player.inventory.heldItemSlot,
+                currentInteractionActivation.get() ?: UUID.randomUUID()
+            ),
             outcomeTool,
             player,
             this
@@ -2393,6 +2460,42 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                 || (LuckPermsPlugin.isLuckPermsEnabled()
                 && core.getLuckPermsComb().hasPermission(player, "unearthMechanic.bypass"))
                 || player.hasPermission("unearthMechanic.bypass")
+    }
+
+    private fun validateCustomCropsWateringCan(
+        player: Player,
+        event: Event,
+        location: Location,
+        liveTool: LiveTool,
+        stage: Stage,
+        notifyFailure: Boolean
+    ): Boolean {
+        val settings = stage.getWateringCanSettings() ?: return true
+        val support = customCropsWateringCanSupport
+
+        if (support != null) {
+            val valid = support.validate(player, liveTool, location, settings, notifyFailure)
+            if (!valid && event is Cancellable) event.isCancelled = true
+            return valid
+        }
+
+        if (!warnedMissingCustomCrops) {
+            warnedMissingCustomCrops = true
+            core.logger.warning(
+                "A stage uses customcrops_watering_can, but CustomCrops is not installed or its API could not be loaded."
+            )
+        }
+
+        if (notifyFailure) {
+            settings.onFail.actionbar?.let {
+                player.sendActionBar(AdventureUtils.deserialize(it))
+            }
+            settings.onFail.sound?.let {
+                player.playSound(player.location, it, 1.0f, 1.0f)
+            }
+        }
+        if (event is Cancellable) event.isCancelled = true
+        return false
     }
 
     private fun canUseUnearthInteraction(

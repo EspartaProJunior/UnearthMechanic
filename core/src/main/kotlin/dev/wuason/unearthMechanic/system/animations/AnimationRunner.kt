@@ -77,8 +77,14 @@ open class AnimationRunner(
 
     override fun setItemMainHand(item: ItemStack) {
         if (!running) return
-        player.persistentDataContainer.set(AnimationManager.ANIM_ITEM_MAIN_HAND_NAMESPACED_KEY, DataType.ITEM_STACK, itemMainHand)
-        itemMainHand = item
+
+        itemMainHand = item.clone()
+
+        player.persistentDataContainer.set(
+            AnimationManager.ANIM_ITEM_MAIN_HAND_NAMESPACED_KEY,
+            DataType.ITEM_STACK,
+            itemMainHand
+        )
     }
 
     override fun getItemMainHand(): ItemStack {

@@ -25,7 +25,9 @@ import org.bukkit.NamespacedKey
 import org.bukkit.block.Block
 import org.bukkit.block.BlockFace
 import org.bukkit.entity.ArmorStand
+import org.bukkit.entity.BlockDisplay
 import org.bukkit.entity.Entity
+import org.bukkit.entity.Interaction
 import org.bukkit.entity.ItemDisplay
 import org.bukkit.entity.ItemFrame
 import org.bukkit.entity.Player
@@ -53,6 +55,22 @@ class ItemsAdderImpl(
 
     private val removedLocations = Collections.synchronizedSet(mutableSetOf<Location>())
 
+    private val lastFurnitureInteractionTick =
+        Collections.synchronizedMap(mutableMapOf<UUID, Int>())
+
+    private fun claimFurnitureInteraction(player: Player): Boolean {
+        val currentTick = Bukkit.getCurrentTick()
+
+        synchronized(lastFurnitureInteractionTick) {
+            if (lastFurnitureInteractionTick[player.uniqueId] == currentTick) {
+                return false
+            }
+
+            lastFurnitureInteractionTick[player.uniqueId] = currentTick
+            return true
+        }
+    }
+
     override fun isRemoving(location: Location): Boolean {
         return removedLocations.contains(location)
     }
@@ -77,7 +95,7 @@ class ItemsAdderImpl(
     }
 
     fun isPossibleFurnitureEntity(entity: Entity): Boolean {
-        return entity is ItemFrame || entity is ArmorStand || entity is ItemDisplay || entity is TextDisplay
+        return entity is ItemFrame || entity is ArmorStand || entity is ItemDisplay || entity is TextDisplay || entity is Interaction || entity is BlockDisplay
     }
 
     override fun getFurnitureUUID(location: Location): UUID? {
@@ -222,6 +240,151 @@ class ItemsAdderImpl(
         return false
     }
 
+    private fun getFurnitureFromEvent(event: Event): CustomFurniture? {
+        return try {
+            when (event) {
+                is FurnitureInteractEvent -> {
+                    event.furniture
+                        ?: CustomFurniture.byAlreadySpawned(event.bukkitEntity)
+                }
+
+                is PlayerInteractEvent -> {
+                    event.clickedBlock?.let {
+                        CustomFurniture.byAlreadySpawned(it)
+                    }
+                }
+
+                else -> null
+            }
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    private fun getFurnitureEntity(
+        event: Event,
+        furniture: CustomFurniture
+    ): Entity? {
+        return try {
+            furniture.entity ?: when (event) {
+                is FurnitureInteractEvent -> event.bukkitEntity
+                else -> null
+            }
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    private fun getFurnitureId(
+        event: FurnitureInteractEvent,
+        furniture: CustomFurniture?
+    ): String? {
+        val eventId = try {
+            event.namespacedID
+        } catch (_: Throwable) {
+            null
+        }
+
+        /*
+         * The wrapper may be null on the first access after a restart,
+         * but namespacedID is normally already available in the event.
+         */
+        if (!eventId.isNullOrBlank()) {
+            return eventId
+        }
+
+        return try {
+            furniture?.namespacedID?.takeIf { it.isNotBlank() }
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    private fun normalizeFurnitureId(id: String): String {
+        return id
+            .removePrefix("ia:")
+            .removePrefix("itemsadder:")
+            .substringBefore("[")
+    }
+
+    private fun resolveFurnitureBaseLocation(
+        event: Event,
+        furnitureId: String,
+        entity: Entity?
+    ): Location {
+        val eventLocation = when (event) {
+            is FurnitureInteractEvent -> event.bukkitEntity.location
+            is PlayerInteractEvent -> event.clickedBlock?.location
+            else -> null
+        }
+
+        val entityLocation = entity?.location
+        val cachedLocation = entity?.let {
+            furnitureBaseLocationByEntity[it.uniqueId]
+        }
+
+        val origins = listOfNotNull(
+            cachedLocation,
+            entityLocation,
+            eventLocation
+        )
+
+        val expectedId = normalizeFurnitureId(furnitureId)
+        val candidates = LinkedHashSet<Location>()
+
+        origins.forEach { origin ->
+            val base = origin.block.location
+
+            for (x in -2..2) {
+                for (y in -2..2) {
+                    for (z in -2..2) {
+                        candidates.add(
+                            base.clone().add(
+                                x.toDouble(),
+                                y.toDouble(),
+                                z.toDouble()
+                            ).block.location
+                        )
+                    }
+                }
+            }
+        }
+
+        val persistentLocation = candidates
+            .asSequence()
+            .filter { StageData.hasStageData(it) }
+            .filter { location ->
+                val stageData = StageData.fromLoc(location)
+                    ?: return@filter false
+
+                normalizeFurnitureId(
+                    stageData.getActualAdapterData().id
+                ).equals(expectedId, ignoreCase = true)
+            }
+            .minByOrNull { location ->
+                val reference = entityLocation ?: eventLocation
+                reference?.distanceSquared(location) ?: 0.0
+            }
+
+        val baseLocation = persistentLocation
+            ?: cachedLocation?.block?.location
+            ?: entityLocation?.block?.location
+            ?: eventLocation?.block?.location
+            ?: throw IllegalStateException(
+                "Could not resolve ItemsAdder furniture location"
+            )
+
+        entity?.let {
+            rememberFurnitureBase(it, baseLocation)
+        }
+
+        if (event is FurnitureInteractEvent) {
+            rememberFurnitureBase(event.bukkitEntity, baseLocation)
+        }
+
+        return baseLocation
+    }
+
     override fun isValidFurniture(loc: Location, expectedAdapterId: String?): Boolean {
         val keyLoc = loc.block.location
         val world = keyLoc.world ?: run {
@@ -324,30 +487,59 @@ class ItemsAdderImpl(
 
     @EventHandler
     fun onInteractFurniture(event: FurnitureInteractEvent) {
-        val loc = event.bukkitEntity.location.block.location
+        val furniture = try {
+            event.furniture
+                ?: CustomFurniture.byAlreadySpawned(event.bukkitEntity)
+        } catch (_: Throwable) {
+            null
+        }
+
+        val furnitureId = try {
+            event.namespacedID?.takeIf { it.isNotBlank() }
+        } catch (_: Throwable) {
+            null
+        } ?: try {
+            furniture?.namespacedID?.takeIf { it.isNotBlank() }
+        } catch (_: Throwable) {
+            null
+        } ?: return
+
+        val entity = event.bukkitEntity
+
+        val loc = resolveFurnitureBaseLocation(
+            event = event,
+            furnitureId = furnitureId,
+            entity = entity
+        )
+
+        if (!claimFurnitureInteraction(event.player)) {
+            return
+        }
+
         if (stageManager.isTransitioning(loc)) {
             event.isCancelled = true
             return
         }
 
-        val uuid = event.bukkitEntity.uniqueId
-
-        if (event.bukkitEntity != null && event.bukkitEntity.uniqueId == uuid) {
-            val adapterId = "ia:" + event.namespacedID
-
-            stageManager.interact(
-                event.player,
-                adapterId,
-                loc,
-                event,
-                this
-            )
-        }
+        stageManager.interact(
+            event.player,
+            "ia:$furnitureId",
+            loc,
+            event,
+            this
+        )
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
     fun onBlockBreak(event: CustomBlockBreakEvent) {
         StageData.removeStageData(event.block)
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun onFurnitureBreakCommitted(event: FurnitureBreakEvent) {
+        val loc = event.bukkitEntity.location.block.location
+        removeStageData(loc)
+        setRemoving(loc)
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -365,8 +557,8 @@ class ItemsAdderImpl(
             return
         }
 
-        removeStageData(loc)
-        setRemoving(loc)
+        //removeStageData(loc)
+        //setRemoving(loc)
 
         if (!isRemoving(loc)) {
             if (!stageManager.activeSequences.contains(loc)) {
@@ -376,15 +568,17 @@ class ItemsAdderImpl(
     }
 
     private val lastFurniturePlace: MutableMap<UUID, Location> = mutableMapOf()
-    @EventHandler
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun onPlayerInteract(event: PlayerInteractEvent) {
         if (event.action != Action.RIGHT_CLICK_BLOCK) return
         if (event.hand != EquipmentSlot.HAND) return
 
-        val player = event.player
-        val block = event.clickedBlock ?: return
+        val clickedBlock = event.clickedBlock ?: return
 
-        lastFurniturePlace[player.uniqueId] = block.location.block.location
+        // No ejecutar stageManager.interact() aquí.
+        lastFurniturePlace[event.player.uniqueId] =
+            clickedBlock.location.block.location
     }
 
     @EventHandler

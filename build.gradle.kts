@@ -226,6 +226,7 @@ project(":core") {
 
     dependencies {
         compileOnly(project(":api"))
+        compileOnly("net.momirealms:custom-crops:3.6.43")
     }
 }
 
@@ -240,8 +241,8 @@ subprojects {
             exclude(group = "com.google.code.gson", module = "gson")
         }
 
-        compileOnly("net.momirealms:craft-engine-core:26.5-SNAPSHOT")
-        compileOnly("net.momirealms:craft-engine-bukkit:26.5-SNAPSHOT")
+        compileOnly("net.momirealms:craft-engine-core:26.8-SNAPSHOT")
+        compileOnly("net.momirealms:craft-engine-bukkit:26.8-SNAPSHOT")
 
         compileOnly("net.momirealms:craft-engine-nms-helper:1.0.157")
 
