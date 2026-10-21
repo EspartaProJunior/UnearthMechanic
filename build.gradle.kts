@@ -235,7 +235,7 @@ subprojects {
         compileOnly("io.papermc.paper:paper-api:1.20.6-R0.1-SNAPSHOT")
         //compileOnly("dev.wuason:mechanics:1.0.4.2")
         compileOnly("io.th0rgal:oraxen:1.189.0") // 1.174.0 supported version
-        compileOnly("dev.lone:api-itemsadder:4.0.2-beta-release-11")
+        compileOnly("beer.devs:itemsadder-api:4.0.17")
         compileOnly("com.sk89q.worldguard:worldguard-bukkit:7.0.12-SNAPSHOT")
         compileOnly("com.nexomc:nexo:1.23") {
             exclude(group = "com.google.code.gson", module = "gson")
@@ -249,7 +249,7 @@ subprojects {
         compileOnly("net.luckperms:api:5.4")
         implementation("dev.wuason:adapter:1.0.6.3")
 
-        implementation("dev.jorel:commandapi-paper-shade:11.2.0")
+        implementation("dev.jorel:commandapi-paper-shade:12.1.0")
 
         compileOnly("io.lumine:Mythic-Dist:5.6.1") //MythicMobs
         compileOnly("io.lumine:MythicCrucible-Dist:2.1.0") //MythicCrucible
