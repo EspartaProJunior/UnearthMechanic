@@ -27,6 +27,10 @@ class ConfigManager(private val core: UnearthMechanic) : IConfigManager {
             HashMap<AdapterData, HashMap<AdapterData, HashMap<InteractionMode, MutableList<IGeneric>>>> = HashMap()
 
     override fun loadConfig() {
+        core.saveDefaultConfig()
+        core.reloadConfig()
+        dev.wuason.unearthMechanic.utils.DebugSettings.configure(core.config)
+
         generics.clear()
         //genericsBaseItemId.clear()
         genericsBaseItemIdMode.clear()

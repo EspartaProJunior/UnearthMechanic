@@ -19,7 +19,7 @@ val targetJavaVersion = 21
 allprojects {
 
     project.group = "dev.wuason"
-    project.version = "0.1.17"
+    project.version = "0.1.18"
 
     //apply kotlin jvm plugin
     apply(plugin = "kotlin")
@@ -83,10 +83,15 @@ allprojects {
             name = "placeholderapi-repository"
         }
 
+        providers.gradleProperty("dependencyRepository").orNull?.let { maven { url = uri(it) } }
     }
 
     kotlin {
         jvmToolchain(targetJavaVersion)
+    }
+
+    tasks.withType<KotlinCompile>().configureEach {
+        compilerOptions.freeCompilerArgs.addAll("-Xskip-prerelease-check", "-Xskip-metadata-version-check")
     }
 
     configurations.configureEach {
@@ -226,7 +231,24 @@ project(":core") {
 
     dependencies {
         compileOnly(project(":api"))
+        testImplementation("org.junit.jupiter:junit-jupiter:5.11.3")
+        testImplementation("org.mockito:mockito-core:5.14.2")
+        testImplementation("org.objenesis:objenesis:3.3")
+        val ia = providers.gradleProperty("itemsAdderJar").orNull
+        if (ia != null) testImplementation(files(ia))
+
         compileOnly("net.momirealms:custom-crops:3.6.43")
+    }
+
+    configurations.named("testCompileClasspath") {
+        extendsFrom(configurations.compileOnly.get())
+    }
+    tasks.test {
+        useJUnitPlatform()
+        // Optional plugin API classes are needed by mocked method signatures in tests only.
+        classpath += sourceSets.main.get().compileClasspath
+        jvmArgs("-Xverify:all")
+        testLogging { events("passed", "failed", "skipped"); showStandardStreams = true }
     }
 }
 
@@ -235,7 +257,12 @@ subprojects {
         compileOnly("io.papermc.paper:paper-api:1.20.6-R0.1-SNAPSHOT")
         //compileOnly("dev.wuason:mechanics:1.0.4.2")
         compileOnly("io.th0rgal:oraxen:1.189.0") // 1.174.0 supported version
-        compileOnly("dev.lone:api-itemsadder:4.0.2-beta-release-11")
+
+        //compileOnly("dev.lone:api-itemsadder:4.0.2-beta-release-11")
+        val itemsAdderJar = providers.gradleProperty("itemsAdderJar").orNull
+        if (itemsAdderJar != null) compileOnly(files(itemsAdderJar))
+        else compileOnly("dev.lone:api-itemsadder:4.0.2-beta-release-11")
+
         compileOnly("com.sk89q.worldguard:worldguard-bukkit:7.0.12-SNAPSHOT")
         compileOnly("com.nexomc:nexo:1.23") {
             exclude(group = "com.google.code.gson", module = "gson")
@@ -247,7 +274,11 @@ subprojects {
         compileOnly("net.momirealms:craft-engine-nms-helper:1.0.157")
 
         compileOnly("net.luckperms:api:5.4")
-        implementation("dev.wuason:adapter:1.0.6.3")
+
+        //implementation("dev.wuason:adapter:1.0.6.3")
+        implementation(
+            files(rootProject.file("libs/Adapter-1.0.6.4.jar"))
+        )
 
         implementation("dev.jorel:commandapi-paper-shade:11.2.0")
 

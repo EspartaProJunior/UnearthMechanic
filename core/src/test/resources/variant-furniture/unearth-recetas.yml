@@ -1,0 +1,1107 @@
+unearth:
+  furniture:
+###########################
+#    MILANESA DE CARNE    #
+###########################
+    cocina_sarten_milanesa_carne_crudo_1:
+      base:
+        - "ia:glozz:cocina_prendida_sarten_aceite"
+        - "ia:glozz:cocina_prendida_sarten_sucio"
+      tool:
+        - "ia:glozz:milanesa_carne_cruda"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_milanesa_carne_crudo_1"
+            delay: 2
+            reduce_item_main_hand: 1
+            sounds:
+              - sound: "minecraft:block.honey_block.place"
+                volume: 0.7
+                pitch: 1
+              - sound: "glozz:sarten"
+                volume: 1
+                pitch: 1
+            sequence:
+              100:
+                furniture_id: "ia:glozz:cocina_sarten_milanesa_carne_frito_1"
+    cocina_sarten_milanesa_carne_crudo_2:
+      base: "ia:glozz:cocina_sarten_milanesa_carne_frito_1"
+      tool:
+        - "ia:glozz:milanesa_carne_cruda"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_milanesa_carne_friendo_2"
+            delay: 2
+            reduce_item_main_hand: 1
+            sounds:
+              - sound: "minecraft:block.honey_block.place"
+                volume: 0.7
+                pitch: 1
+              - sound: "glozz:sarten"
+                volume: 1
+                pitch: 1
+            sequence:
+              100:
+                furniture_id: "ia:glozz:cocina_sarten_milanesa_carne_frito_2"
+    cocina_sarten_milanesa_carne_frito_1_sacar:
+      base: "ia:glozz:cocina_sarten_milanesa_carne_frito_1"
+      tool:
+        - "ia:glozz:espatula_cocina;replaceOnBreak=ia:glozz:espatula_cocina_milanesa_carne"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_prendida_sarten_sucio"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "minecraft:item.armor.equip_iron"
+                volume: 0.7
+                pitch: 1.5
+    cocina_sarten_milanesa_carne_frito_2_sacar:
+      base: "ia:glozz:cocina_sarten_milanesa_carne_frito_2"
+      tool:
+        - "ia:glozz:espatula_cocina;replaceOnBreak=ia:glozz:espatula_cocina_milanesa_carne"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_milanesa_carne_frito_1"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "minecraft:item.armor.equip_iron"
+                volume: 0.7
+                pitch: 1.5
+###########################
+#    MILANESA DE POLLO    #
+###########################
+    cocina_sarten_milanesa_pollo_crudo_1:
+      base:
+        - "ia:glozz:cocina_prendida_sarten_aceite"
+        - "ia:glozz:cocina_prendida_sarten_sucio"
+      tool:
+        - "ia:glozz:milanesa_pollo_cruda"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_milanesa_pollo_crudo_1"
+            delay: 2
+            reduce_item_main_hand: 1
+            sounds:
+              - sound: "minecraft:block.honey_block.place"
+                volume: 0.7
+                pitch: 1
+              - sound: "glozz:sarten"
+                volume: 1
+                pitch: 1
+            sequence:
+              100:
+                furniture_id: "ia:glozz:cocina_sarten_milanesa_pollo_frito_1"
+    cocina_sarten_milanesa_pollo_crudo_2:
+      base: "ia:glozz:cocina_sarten_milanesa_pollo_frito_1"
+      tool:
+        - "ia:glozz:milanesa_pollo_cruda"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_milanesa_pollo_friendo_2"
+            delay: 2
+            reduce_item_main_hand: 1
+            sounds:
+              - sound: "minecraft:block.honey_block.place"
+                volume: 0.7
+                pitch: 1
+              - sound: "glozz:sarten"
+                volume: 1
+                pitch: 1
+            sequence:
+              100:
+                furniture_id: "ia:glozz:cocina_sarten_milanesa_pollo_frito_2"
+    cocina_sarten_milanesa_pollo_frito_1_sacar:
+      base: "ia:glozz:cocina_sarten_milanesa_pollo_frito_1"
+      tool:
+        - "ia:glozz:espatula_cocina;replaceOnBreak=ia:glozz:espatula_cocina_milanesa_pollo"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_prendida_sarten_sucio"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "minecraft:item.armor.equip_iron"
+                volume: 0.7
+                pitch: 1.5
+    cocina_sarten_milanesa_pollo_frito_2_sacar:
+      base: "ia:glozz:cocina_sarten_milanesa_pollo_frito_2"
+      tool:
+        - "ia:glozz:espatula_cocina;replaceOnBreak=ia:glozz:espatula_cocina_milanesa_pollo"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_milanesa_pollo_frito_1"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "minecraft:item.armor.equip_iron"
+                volume: 0.7
+                pitch: 1.5
+###########################
+#         HUEVOS          #
+###########################
+    cocina_sarten_huevo_crudo_1:
+      base:
+        - "ia:glozz:cocina_prendida_sarten_aceite"
+        - "ia:glozz:cocina_prendida_sarten_sucio"
+      tool:
+        - "ia:glozz:huevo;anim=ia:glozz:huevo_roto;delayAnim=20"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_huevo_crudo_1"
+            delay: 2
+            reduce_item_main_hand: 1
+            sounds:
+              - sound: "minecraft:entity.turtle.egg_crack"
+                volume: 0.7
+                pitch: 1
+              - sound: "glozz:sarten"
+                volume: 1
+                pitch: 1
+            sequence:
+              100:
+                furniture_id: "ia:glozz:cocina_sarten_huevo_friendo_1"
+    cocina_sarten_huevo_frito_1:
+      base: "ia:glozz:cocina_sarten_huevo_friendo_1"
+      tool:
+        - "ia:glozz:sal_fina_abierto;anim=ia:glozz:sal_fina_anim;delayAnim=20"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_huevo_frito_1"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "minecraft:block.fire.extinguish"
+                volume: 0.5
+                pitch: 1
+              - sound: "glozz:granos"
+                volume: 1
+                pitch: 1
+                delay: 2
+    cocina_sarten_huevo_crudo_2:
+      base:
+        - "ia:glozz:cocina_sarten_huevo_friendo_1"
+        - "ia:glozz:cocina_sarten_huevo_frito_1"
+      tool:
+        - "ia:glozz:huevo;anim=ia:glozz:huevo_roto;delayAnim=20"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_huevo_crudo_2"
+            delay: 2
+            reduce_item_main_hand: 1
+            sounds:
+              - sound: "minecraft:entity.turtle.egg_crack"
+                volume: 0.7
+                pitch: 1
+              - sound: "glozz:sarten"
+                volume: 1
+                pitch: 1
+            sequence:
+              100:
+                furniture_id: "ia:glozz:cocina_sarten_huevo_friendo_2"
+    cocina_sarten_huevo_frito_2:
+      base: "ia:glozz:cocina_sarten_huevo_friendo_2"
+      tool:
+        - "ia:glozz:sal_fina_abierto;anim=ia:glozz:sal_fina_anim;delayAnim=20"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_huevo_frito_2"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "minecraft:block.fire.extinguish"
+                volume: 0.5
+                pitch: 1
+              - sound: "glozz:granos"
+                volume: 1
+                pitch: 1
+                delay: 2
+    cocina_sarten_huevo_frito_1_sacar:
+      base: "ia:glozz:cocina_sarten_huevo_frito_1"
+      tool:
+        - "ia:glozz:espatula_cocina;replaceOnBreak=ia:glozz:espatula_cocina_huevo_frito"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_prendida_sarten_sucio"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "minecraft:item.armor.equip_iron"
+                volume: 0.7
+                pitch: 1.5
+    cocina_sarten_huevo_frito_2_sacar:
+      base: "ia:glozz:cocina_sarten_huevo_frito_2"
+      tool:
+        - "ia:glozz:espatula_cocina;replaceOnBreak=ia:glozz:espatula_cocina_huevo_frito"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_huevo_frito_1"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "minecraft:item.armor.equip_iron"
+                volume: 0.7
+                pitch: 1.5
+###########################
+#         TOCINO          #
+###########################
+    cocina_sarten_tocino_crudo_1:
+      base:
+        - "ia:glozz:cocina_prendida_sarten_aceite"
+        - "ia:glozz:cocina_prendida_sarten_sucio"
+      tool:
+        - "ia:glozz:tocino_crudo"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_tocino_crudo_1"
+            delay: 2
+            reduce_item_main_hand: 1
+            sounds:
+              - sound: "minecraft:block.honey_block.place"
+                volume: 0.7
+                pitch: 1
+              - sound: "glozz:sarten"
+                volume: 1
+                pitch: 1
+            sequence:
+              100:
+                furniture_id: "ia:glozz:cocina_sarten_tocino_frito_1"
+    cocina_sarten_tocino_crudo_2:
+      base: "ia:glozz:cocina_sarten_tocino_frito_1"
+      tool:
+        - "ia:glozz:tocino_crudo"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_tocino_friendo_2"
+            delay: 2
+            reduce_item_main_hand: 1
+            sounds:
+              - sound: "minecraft:block.honey_block.place"
+                volume: 0.7
+                pitch: 1
+              - sound: "glozz:sarten"
+                volume: 1
+                pitch: 1
+            sequence:
+              100:
+                furniture_id: "ia:glozz:cocina_sarten_tocino_frito_2"
+    cocina_sarten_tocino_frito_1_sacar:
+      base: "ia:glozz:cocina_sarten_tocino_frito_1"
+      tool:
+        - "ia:glozz:espatula_cocina;replaceOnBreak=ia:glozz:espatula_cocina_tocino_frito"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_prendida_sarten_sucio"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "minecraft:item.armor.equip_iron"
+                volume: 0.7
+                pitch: 1.5
+    cocina_sarten_tocino_frito_2_sacar:
+      base: "ia:glozz:cocina_sarten_tocino_frito_2"
+      tool:
+        - "ia:glozz:espatula_cocina;replaceOnBreak=ia:glozz:espatula_cocina_tocino_frito"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_tocino_frito_1"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "minecraft:item.armor.equip_iron"
+                volume: 0.7
+                pitch: 1.5
+###########################
+#      PAPAS FRITAS       #
+###########################
+    cocina_sarten_papas_crudo_1:
+      base:
+        - "ia:glozz:cocina_prendida_sarten_aceite"
+        - "ia:glozz:cocina_prendida_sarten_sucio"
+      tool:
+        - "ia:glozz:tabla_papa_cruda_1;replaceOnBreak=ia:glozz:tabla;anim=ia:glozz:tabla_anim;delayAnim=20"
+        - "ia:glozz:tabla_papas_crudas;replaceOnBreak=ia:glozz:tabla_papa_cruda_1;anim=ia:glozz:tabla_anim_papa_cruda_1;delayAnim=20"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_papas_crudo_1"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "glozz:cuchillo_arrastrar"
+                volume: 0.7
+                pitch: 1
+              - sound: "glozz:cuchillo_arrastrar"
+                volume: 0.7
+                pitch: 1
+                delay: 10
+              - sound: "glozz:sarten"
+                volume: 1
+                pitch: 1
+            sequence:
+              100:
+                furniture_id: "ia:glozz:cocina_sarten_papas_friendo_1"
+    cocina_sarten_papas_frito_1:
+      base: "ia:glozz:cocina_sarten_papas_friendo_1"
+      tool:
+        - "ia:glozz:sal_fina_abierto;anim=ia:glozz:sal_fina_anim;delayAnim=20"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_papas_frito_1"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "minecraft:block.fire.extinguish"
+                volume: 0.5
+                pitch: 1
+              - sound: "glozz:granos"
+                volume: 1
+                pitch: 1
+                delay: 2
+    cocina_sarten_papas_crudo_2:
+      base:
+        - "ia:glozz:cocina_sarten_papas_friendo_1"
+        - "ia:glozz:cocina_sarten_papas_frito_1"
+      tool:
+        - "ia:glozz:tabla_papa_cruda_1;replaceOnBreak=ia:glozz:tabla;anim=ia:glozz:tabla_anim;delayAnim=20"
+        - "ia:glozz:tabla_papas_crudas;replaceOnBreak=ia:glozz:tabla_papa_cruda_1;anim=ia:glozz:tabla_anim_papa_cruda_1;delayAnim=20"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_papas_crudo_2"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "glozz:cuchillo_arrastrar"
+                volume: 0.7
+                pitch: 1
+              - sound: "glozz:cuchillo_arrastrar"
+                volume: 0.7
+                pitch: 1
+                delay: 10
+              - sound: "glozz:sarten"
+                volume: 1
+                pitch: 1
+            sequence:
+              100:
+                furniture_id: "ia:glozz:cocina_sarten_papas_friendo_2"
+    cocina_sarten_papas_frito_2:
+      base: "ia:glozz:cocina_sarten_papas_friendo_2"
+      tool:
+        - "ia:glozz:sal_fina_abierto;anim=ia:glozz:sal_fina_anim;delayAnim=20"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_papas_frito_2"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "minecraft:block.fire.extinguish"
+                volume: 0.5
+                pitch: 1
+              - sound: "glozz:granos"
+                volume: 1
+                pitch: 1
+                delay: 2
+    cocina_sarten_papas_frito_1_sacar:
+      base: "ia:glozz:cocina_sarten_papas_frito_1"
+      tool:
+        - "ia:glozz:espatula_cocina;replaceOnBreak=ia:glozz:espatula_cocina_papas_fritas"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_prendida_sarten_sucio"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "minecraft:item.armor.equip_iron"
+                volume: 0.7
+                pitch: 1.5
+    cocina_sarten_papas_frito_2_sacar:
+      base: "ia:glozz:cocina_sarten_papas_frito_2"
+      tool:
+        - "ia:glozz:espatula_cocina;replaceOnBreak=ia:glozz:espatula_cocina_papas_fritas"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_papas_frito_1"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "minecraft:item.armor.equip_iron"
+                volume: 0.7
+                pitch: 1.5
+###########################
+#         FILETE          #
+###########################
+    cocina_sarten_filete_crudo_1:
+      base:
+        - "ia:glozz:cocina_prendida_sarten_aceite"
+        - "ia:glozz:cocina_prendida_sarten_sucio"
+      tool:
+        - "ia:glozz:filete_crudo"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_filete_crudo_1"
+            delay: 2
+            reduce_item_main_hand: 1
+            sounds:
+              - sound: "minecraft:block.honey_block.place"
+                volume: 0.7
+                pitch: 1
+              - sound: "glozz:sarten"
+                volume: 1
+                pitch: 1
+            sequence:
+              100:
+                furniture_id: "ia:glozz:cocina_sarten_filete_friendo_1"
+    cocina_sarten_filete_frito_1:
+      base: "ia:glozz:cocina_sarten_filete_friendo_1"
+      tool:
+        - "ia:glozz:sal_fina_abierto;anim=ia:glozz:sal_fina_anim;delayAnim=20"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_filete_frito_1"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "minecraft:block.fire.extinguish"
+                volume: 0.5
+                pitch: 1
+              - sound: "glozz:granos"
+                volume: 1
+                pitch: 1
+                delay: 2
+    cocina_sarten_filete_crudo_2:
+      base:
+        - "ia:glozz:cocina_sarten_filete_friendo_1"
+        - "ia:glozz:cocina_sarten_filete_frito_1"
+      tool:
+        - "ia:glozz:filete_crudo"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_filete_crudo_2"
+            delay: 2
+            reduce_item_main_hand: 1
+            sounds:
+              - sound: "minecraft:block.honey_block.place"
+                volume: 0.7
+                pitch: 1
+              - sound: "glozz:sarten"
+                volume: 1
+                pitch: 1
+            sequence:
+              100:
+                furniture_id: "ia:glozz:cocina_sarten_filete_friendo_2"
+    cocina_sarten_filete_frito_2:
+      base: "ia:glozz:cocina_sarten_filete_friendo_2"
+      tool:
+        - "ia:glozz:sal_fina_abierto;anim=ia:glozz:sal_fina_anim;delayAnim=20"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_filete_frito_2"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "minecraft:block.fire.extinguish"
+                volume: 0.5
+                pitch: 1
+              - sound: "glozz:granos"
+                volume: 1
+                pitch: 1
+                delay: 2
+    cocina_sarten_filete_frito_1_sacar:
+      base: "ia:glozz:cocina_sarten_filete_frito_1"
+      tool:
+        - "ia:glozz:espatula_cocina;replaceOnBreak=ia:glozz:espatula_cocina_filete_cocinado"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_prendida_sarten_sucio"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "minecraft:item.armor.equip_iron"
+                volume: 0.7
+                pitch: 1.5
+    cocina_sarten_filete_frito_2_sacar:
+      base: "ia:glozz:cocina_sarten_filete_frito_2"
+      tool:
+        - "ia:glozz:espatula_cocina;replaceOnBreak=ia:glozz:espatula_cocina_filete_cocinado"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_filete_frito_1"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "minecraft:item.armor.equip_iron"
+                volume: 0.7
+                pitch: 1.5
+###########################
+#      MUSLO DE POLLO     #
+###########################
+    cocina_sarten_muslo_crudo_1:
+      base:
+        - "ia:glozz:cocina_prendida_sarten_aceite"
+        - "ia:glozz:cocina_prendida_sarten_sucio"
+      tool:
+        - "ia:glozz:muslo_pollo_crudo"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_muslo_crudo_1"
+            delay: 2
+            reduce_item_main_hand: 1
+            sounds:
+              - sound: "minecraft:block.honey_block.place"
+                volume: 0.7
+                pitch: 1
+              - sound: "glozz:sarten"
+                volume: 1
+                pitch: 1
+            sequence:
+              100:
+                furniture_id: "ia:glozz:cocina_sarten_muslo_friendo_1"
+    cocina_sarten_muslo_frito_1:
+      base: "ia:glozz:cocina_sarten_muslo_friendo_1"
+      tool:
+        - "ia:glozz:sal_fina_abierto;anim=ia:glozz:sal_fina_anim;delayAnim=20"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_muslo_frito_1"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "minecraft:block.fire.extinguish"
+                volume: 0.5
+                pitch: 1
+              - sound: "glozz:granos"
+                volume: 1
+                pitch: 1
+                delay: 2
+    cocina_sarten_muslo_crudo_2:
+      base:
+        - "ia:glozz:cocina_sarten_muslo_friendo_1"
+        - "ia:glozz:cocina_sarten_muslo_frito_1"
+      tool:
+        - "ia:glozz:muslo_pollo_crudo"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_muslo_crudo_2"
+            delay: 2
+            reduce_item_main_hand: 1
+            sounds:
+              - sound: "minecraft:block.honey_block.place"
+                volume: 0.7
+                pitch: 1
+              - sound: "glozz:sarten"
+                volume: 1
+                pitch: 1
+            sequence:
+              100:
+                furniture_id: "ia:glozz:cocina_sarten_muslo_friendo_2"
+    cocina_sarten_muslo_frito_2:
+      base: "ia:glozz:cocina_sarten_muslo_friendo_2"
+      tool:
+        - "ia:glozz:sal_fina_abierto;anim=ia:glozz:sal_fina_anim;delayAnim=20"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_muslo_frito_2"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "minecraft:block.fire.extinguish"
+                volume: 0.5
+                pitch: 1
+              - sound: "glozz:granos"
+                volume: 1
+                pitch: 1
+                delay: 2
+    cocina_sarten_muslo_frito_1_sacar:
+      base: "ia:glozz:cocina_sarten_muslo_frito_1"
+      tool:
+        - "ia:glozz:espatula_cocina;replaceOnBreak=ia:glozz:espatula_cocina_muslo_pollo_cocinado"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_prendida_sarten_sucio"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "minecraft:item.armor.equip_iron"
+                volume: 0.7
+                pitch: 1.5
+    cocina_sarten_muslo_frito_2_sacar:
+      base: "ia:glozz:cocina_sarten_muslo_frito_2"
+      tool:
+        - "ia:glozz:espatula_cocina;replaceOnBreak=ia:glozz:espatula_cocina_muslo_pollo_cocinado"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_muslo_frito_1"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "minecraft:item.armor.equip_iron"
+                volume: 0.7
+                pitch: 1.5
+###########################
+#         NUGGETS         #
+###########################
+    cocina_sarten_nuggets_crudo_1:
+      base:
+        - "ia:glozz:cocina_prendida_sarten_aceite"
+        - "ia:glozz:cocina_prendida_sarten_sucio"
+      tool:
+        - "ia:glozz:nuggets_crudos"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_nuggets_crudo_1"
+            delay: 2
+            reduce_item_main_hand: 1
+            sounds:
+              - sound: "minecraft:block.honey_block.place"
+                volume: 0.7
+                pitch: 1
+              - sound: "glozz:sarten"
+                volume: 1
+                pitch: 1
+            sequence:
+              100:
+                furniture_id: "ia:glozz:cocina_sarten_nuggets_frito_1"
+    cocina_sarten_nuggets_crudo_2:
+      base: "ia:glozz:cocina_sarten_nuggets_frito_1"
+      tool:
+        - "ia:glozz:nuggets_crudos"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_nuggets_friendo_2"
+            delay: 2
+            reduce_item_main_hand: 1
+            sounds:
+              - sound: "minecraft:block.honey_block.place"
+                volume: 0.7
+                pitch: 1
+              - sound: "glozz:sarten"
+                volume: 1
+                pitch: 1
+            sequence:
+              100:
+                furniture_id: "ia:glozz:cocina_sarten_nuggets_frito_2"
+    cocina_sarten_nuggets_frito_1_sacar:
+      base: "ia:glozz:cocina_sarten_nuggets_frito_1"
+      tool:
+        - "ia:glozz:espatula_cocina;replaceOnBreak=ia:glozz:espatula_cocina_nuggets_fritos"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_prendida_sarten_sucio"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "minecraft:item.armor.equip_iron"
+                volume: 0.7
+                pitch: 1.5
+    cocina_sarten_nuggets_frito_2_sacar:
+      base: "ia:glozz:cocina_sarten_nuggets_frito_2"
+      tool:
+        - "ia:glozz:espatula_cocina;replaceOnBreak=ia:glozz:espatula_cocina_nuggets_fritos"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_nuggets_frito_1"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "minecraft:item.armor.equip_iron"
+                volume: 0.7
+                pitch: 1.5
+###########################
+#         PESCADO         #
+###########################
+    cocina_sarten_pescado_crudo_1:
+      base:
+        - "ia:glozz:cocina_prendida_sarten_aceite"
+        - "ia:glozz:cocina_prendida_sarten_sucio"
+      tool:
+        - "ia:glozz:pescado_fileteado_crudo"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_pescado_crudo_1"
+            delay: 2
+            reduce_item_main_hand: 1
+            sounds:
+              - sound: "minecraft:block.honey_block.place"
+                volume: 0.7
+                pitch: 1
+              - sound: "glozz:sarten"
+                volume: 1
+                pitch: 1
+            sequence:
+              100:
+                furniture_id: "ia:glozz:cocina_sarten_pescado_friendo_1"
+    cocina_sarten_pescado_frito_1:
+      base: "ia:glozz:cocina_sarten_pescado_friendo_1"
+      tool:
+        - "ia:glozz:sal_fina_abierto;anim=ia:glozz:sal_fina_anim;delayAnim=20"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_pescado_frito_1"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "minecraft:block.fire.extinguish"
+                volume: 0.5
+                pitch: 1
+              - sound: "glozz:granos"
+                volume: 1
+                pitch: 1
+                delay: 2
+    cocina_sarten_pescado_crudo_2:
+      base:
+        - "ia:glozz:cocina_sarten_pescado_friendo_1"
+        - "ia:glozz:cocina_sarten_pescado_frito_1"
+      tool:
+        - "ia:glozz:pescado_fileteado_crudo"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_pescado_crudo_2"
+            delay: 2
+            reduce_item_main_hand: 1
+            sounds:
+              - sound: "minecraft:block.honey_block.place"
+                volume: 0.7
+                pitch: 1
+              - sound: "glozz:sarten"
+                volume: 1
+                pitch: 1
+            sequence:
+              100:
+                furniture_id: "ia:glozz:cocina_sarten_pescado_friendo_2"
+    cocina_sarten_pescado_frito_2:
+      base: "ia:glozz:cocina_sarten_pescado_friendo_2"
+      tool:
+        - "ia:glozz:sal_fina_abierto;anim=ia:glozz:sal_fina_anim;delayAnim=20"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_pescado_frito_2"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "minecraft:block.fire.extinguish"
+                volume: 0.5
+                pitch: 1
+              - sound: "glozz:granos"
+                volume: 1
+                pitch: 1
+                delay: 2
+    cocina_sarten_pescado_frito_1_sacar:
+      base: "ia:glozz:cocina_sarten_pescado_frito_1"
+      tool:
+        - "ia:glozz:espatula_cocina;replaceOnBreak=ia:glozz:espatula_cocina_pescado_frito"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_prendida_sarten_sucio"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "minecraft:item.armor.equip_iron"
+                volume: 0.7
+                pitch: 1.5
+    cocina_sarten_pescado_frito_2_sacar:
+      base: "ia:glozz:cocina_sarten_pescado_frito_2"
+      tool:
+        - "ia:glozz:espatula_cocina;replaceOnBreak=ia:glozz:espatula_cocina_pescado_frito"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_pescado_frito_1"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "minecraft:item.armor.equip_iron"
+                volume: 0.7
+                pitch: 1.5
+###########################
+# CARNE MOLIDA Y CEBOLLA  #
+###########################
+    cocina_sarten_carne_molida_1:
+      base:
+        - "ia:glozz:cocina_prendida_sarten_aceite"
+        - "ia:glozz:cocina_prendida_sarten_sucio"
+      tool:
+        - "ia:glozz:tabla_carne_molida_1;replaceOnBreak=ia:glozz:tabla;anim=ia:glozz:tabla_anim;delayAnim=20"
+        - "ia:glozz:tabla_carnes_molidas;replaceOnBreak=ia:glozz:tabla_carne_molida_1;anim=ia:glozz:tabla_anim_carne_molida_1;delayAnim=20"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_carne_molida_1"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "glozz:cuchillo_arrastrar"
+                volume: 0.7
+                pitch: 1
+              - sound: "glozz:cuchillo_arrastrar"
+                volume: 0.7
+                pitch: 1
+                delay: 10
+              - sound: "glozz:sarten"
+                volume: 1
+                pitch: 1
+            sequence:
+              100:
+                furniture_id: "ia:glozz:cocina_sarten_carne_molida_friendo_1"
+    cocina_sarten_carne_molida_1_x:
+      base:
+        - "ia:glozz:cocina_prendida_sarten_aceite"
+        - "ia:glozz:cocina_prendida_sarten_sucio"
+      tool:
+        - "ia:glozz:carne_molida_cruda"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_carne_molida_1"
+            delay: 2
+            reduce_item_main_hand: 1
+            sounds:
+              - sound: "minecraft:block.honey_block.place"
+                volume: 0.7
+                pitch: 1
+              - sound: "glozz:sarten"
+                volume: 1
+                pitch: 1
+            sequence:
+              100:
+                furniture_id: "ia:glozz:cocina_sarten_carne_molida_friendo_1"
+    cocina_sarten_cebolla_picada_1:
+      base:
+        - "ia:glozz:cocina_prendida_sarten_aceite"
+        - "ia:glozz:cocina_prendida_sarten_sucio"
+      tool:
+        - "ia:glozz:tabla_cebolla_picada_1;replaceOnBreak=ia:glozz:tabla;anim=ia:glozz:tabla_anim;delayAnim=20"
+        - "ia:glozz:tabla_cebollas_picadas;replaceOnBreak=ia:glozz:tabla_cebolla_picada_1;anim=ia:glozz:tabla_anim_cebolla_picada_1;delayAnim=20"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_cebolla_picada_1"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "glozz:cuchillo_arrastrar"
+                volume: 0.7
+                pitch: 1
+              - sound: "glozz:cuchillo_arrastrar"
+                volume: 0.7
+                pitch: 1
+                delay: 10
+              - sound: "glozz:sarten"
+                volume: 1
+                pitch: 1
+            sequence:
+              100:
+                furniture_id: "ia:glozz:cocina_sarten_cebolla_picada_friendo_1"
+    cocina_sarten_cebolla_carne_molida_1:
+      base: "ia:glozz:cocina_sarten_cebolla_picada_friendo_1"
+      tool:
+        - "ia:glozz:tabla_carne_molida_1;replaceOnBreak=ia:glozz:tabla;anim=ia:glozz:tabla_anim;delayAnim=20"
+        - "ia:glozz:tabla_carnes_molidas;replaceOnBreak=ia:glozz:tabla_carne_molida_1;anim=ia:glozz:tabla_anim_carne_molida_1;delayAnim=20"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_cebolla_carne_molida_friendo_1"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "glozz:cuchillo_arrastrar"
+                volume: 0.7
+                pitch: 1
+              - sound: "glozz:cuchillo_arrastrar"
+                volume: 0.7
+                pitch: 1
+                delay: 10
+              - sound: "glozz:sarten"
+                volume: 1
+                pitch: 1
+            sequence:
+              100:
+                furniture_id: "ia:glozz:cocina_sarten_carne_molida_cebolla_friendo_2"
+    cocina_sarten_cebolla_carne_molida_1_x:
+      base: "ia:glozz:cocina_sarten_cebolla_picada_friendo_1"
+      tool:
+        - "ia:glozz:carne_molida_cruda"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_cebolla_carne_molida_friendo_1"
+            delay: 2
+            reduce_item_main_hand: 1
+            sounds:
+              - sound: "minecraft:block.honey_block.place"
+                volume: 0.7
+                pitch: 1
+              - sound: "glozz:sarten"
+                volume: 1
+                pitch: 1
+            sequence:
+              100:
+                furniture_id: "ia:glozz:cocina_sarten_carne_molida_cebolla_friendo_2"
+    cocina_sarten_carne_molida_cebolla_1:
+      base: "ia:glozz:cocina_sarten_carne_molida_friendo_1"
+      tool:
+        - "ia:glozz:tabla_cebolla_picada_1;replaceOnBreak=ia:glozz:tabla;anim=ia:glozz:tabla_anim;delayAnim=20"
+        - "ia:glozz:tabla_cebollas_picadas;replaceOnBreak=ia:glozz:tabla_cebolla_picada_1;anim=ia:glozz:tabla_anim_cebolla_picada_1;delayAnim=20"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_carne_molida_cebolla_friendo_1"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "glozz:cuchillo_arrastrar"
+                volume: 0.7
+                pitch: 1
+              - sound: "glozz:cuchillo_arrastrar"
+                volume: 0.7
+                pitch: 1
+                delay: 10
+              - sound: "glozz:sarten"
+                volume: 1
+                pitch: 1
+            sequence:
+              100:
+                furniture_id: "ia:glozz:cocina_sarten_carne_molida_cebolla_friendo_2"
+    cocina_sarten_carne_molida_cebolla_sal:
+      base: "ia:glozz:cocina_sarten_carne_molida_cebolla_friendo_2"
+      tool:
+        - "ia:glozz:sal_fina_abierto;anim=ia:glozz:sal_fina_anim;delayAnim=20"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_carne_molida_cebolla_sal"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "minecraft:block.fire.extinguish"
+                volume: 0.5
+                pitch: 1
+              - sound: "glozz:granos"
+                volume: 1
+                pitch: 1
+                delay: 2
+    cocina_sarten_carne_molida_cebolla_sal_pimienta:
+      base: "ia:glozz:cocina_sarten_carne_molida_cebolla_sal"
+      tool:
+        - "ia:glozz:pimienta_molida_abierto;anim=ia:glozz:pimienta_molida_anim;delayAnim=20"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_carne_molida_cebolla_sal_pimienta"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "minecraft:block.fire.extinguish"
+                volume: 0.5
+                pitch: 1
+              - sound: "glozz:granos"
+                volume: 1
+                pitch: 1
+                delay: 2
+###########################
+#  SALSA DE CARNE MOLIDA  #
+###########################
+    cocina_sarten_carne_cebolla_salsa_1:
+      base:
+        - "ia:glozz:cocina_sarten_carne_molida_cebolla_sal"
+        - "ia:glozz:cocina_sarten_carne_molida_cebolla_sal_pimienta"
+      tool:
+        - "ia:glozz:salsa_tomate_abierto;anim=ia:glozz:salsa_tomate_anim;delayAnim=20"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_carne_cebolla_salsa_1"
+            reduce_durability: 1
+            delay: 2
+            sounds:
+              - sound: "minecraft:block.brewing_stand.brew"
+                volume: 0.7
+                pitch: 1
+    cocina_sarten_carne_salsa_carne_molida_2:
+      base: "ia:glozz:cocina_sarten_carne_cebolla_salsa_1"
+      tool:
+        - "ia:glozz:cuchara_palo;anim=ia:glozz:cuchara_palo_anim;delayAnim=20"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_salsa_carne_molida_2"
+            delay: 2
+            sounds:
+              - sound: "minecraft:block.fire.extinguish"
+                volume: 0.2
+                pitch: 1
+              - sound: "minecraft:block.honey_block.slide"
+                volume: 0.7
+                pitch: 1
+    cocina_sarten_salsa_carne_molida_2_sacar:
+      base: "ia:glozz:cocina_sarten_salsa_carne_molida_2"
+      tool:
+        - "ia:glozz:cucharon;replaceOnBreak=ia:glozz:cucharon_salsa_carne_molida"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_sarten_salsa_carne_molida_1"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "minecraft:item.armor.equip_iron"
+                volume: 0.7
+                pitch: 1.5
+    cocina_sarten_salsa_carne_molida_1_sacar:
+      base: "ia:glozz:cocina_sarten_salsa_carne_molida_1"
+      tool:
+        - "ia:glozz:cucharon;replaceOnBreak=ia:glozz:cucharon_salsa_carne_molida"
+      transformation:
+        stages:
+          1:
+            furniture_id: "ia:glozz:cocina_prendida_sarten_sucio"
+            delay: 2
+            reduce_durability: 1
+            sounds:
+              - sound: "minecraft:item.armor.equip_iron"
+                volume: 0.7
+                pitch: 1.5

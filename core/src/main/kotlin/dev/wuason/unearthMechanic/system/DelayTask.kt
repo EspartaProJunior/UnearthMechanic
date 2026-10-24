@@ -5,6 +5,7 @@ import dev.wuason.unearthMechanic.config.IGeneric
 import dev.wuason.unearthMechanic.config.Stage
 import dev.wuason.unearthMechanic.UnearthMechanicPlugin
 import dev.wuason.unearthMechanic.system.compatibilities.ICompatibility
+import dev.wuason.unearthMechanic.utils.DebugSettings
 import dev.wuason.unearthMechanic.utils.FoliaUtils
 import org.bukkit.Location
 import org.bukkit.entity.Player
@@ -26,7 +27,7 @@ class DelayTask(
     private var tick: Long = 0
     private var task: WrappedTask? = null
     private var cancelled = false
-    private val debugDelayTask = false
+    private val debugDelayTask get() = dev.wuason.unearthMechanic.utils.DebugSettings.isEnabled()
 
     private fun dbgDelay(message: String) {
         if (!debugDelayTask) return
@@ -42,7 +43,9 @@ class DelayTask(
         val keyLoc = loc.block.location
 
         stageManager.addTransitioning(keyLoc)
-        dbgDelay(
+        (compatibility as? dev.wuason.unearthMechanic.system.compatibilities.FurnitureTransitionLifecycle)
+            ?.onFurnitureDelayStarted(event, stage.getMaxCorrectDelay(toolUsed))
+        if (dev.wuason.unearthMechanic.utils.DebugSettings.isEnabled()) dbgDelay(
             "start loc=${keyLoc.debugShort()} event=${event.javaClass.simpleName} " +
                     "tool=${toolUsed.getITool().getAdapterData()} generic=${generic.getId()} " +
                     "stage=${stage.getStage()} maxDelay=${stage.getMaxCorrectDelay(toolUsed)}"
@@ -53,25 +56,35 @@ class DelayTask(
             0L,
             1L
         ) {
-            run()
+            runCatching { run() }.onFailure { error -> throw error }
         }
 
         task?.let {
             stageManager.getDelays()[keyLoc] = it
-            dbgDelay("registered loc=${keyLoc.debugShort()} inDelays=${stageManager.getDelays().containsKey(keyLoc)}")
+            if (DebugSettings.isEnabled()) dbgDelay("registered loc=${keyLoc.debugShort()} inDelays=${stageManager.getDelays().containsKey(keyLoc)}")
         }
     }
 
     private fun run() {
         if (cancelled) {
-            dbgDelay("run skipped because already cancelled loc=${loc.block.location.debugShort()} tick=$tick")
+            if (DebugSettings.isEnabled()) dbgDelay("run skipped because already cancelled loc=${loc.block.location.debugShort()} tick=$tick")
             return
         }
 
-        dbgDelay("run loc=${loc.block.location.debugShort()} tick=$tick")
+        if (DebugSettings.isEnabled()) dbgDelay("run loc=${loc.block.location.debugShort()} tick=$tick")
+
+        if (!ownsFurnitureTransition("before_process")) {
+            cancel()
+            return
+        }
 
         if (!check()) {
-            dbgDelay("run check failed, cancelling loc=${loc.block.location.debugShort()} tick=$tick")
+            if (DebugSettings.isEnabled()) dbgDelay("run check failed, cancelling loc=${loc.block.location.debugShort()} tick=$tick")
+            cancel()
+            return
+        }
+
+        if (!ownsFurnitureTransition("before_process")) {
             cancel()
             return
         }
@@ -100,13 +113,22 @@ class DelayTask(
         val stageDataOk = StageData.compare(StageData(loc, stage.getStage(), generic), loc)
         val result = validationOk && toolOk && stageDataOk
 
-        dbgDelay(
+        if (DebugSettings.isEnabled()) dbgDelay(
             "check loc=${loc.block.location.debugShort()} tick=$tick result=$result " +
                     "validation=$validationOk tool=$toolOk stageData=$stageDataOk " +
                     "hasStageData=${StageData.hasStageData(loc)} currentStageData=${currentStageData != null}"
         )
 
         return result
+    }
+
+    private fun ownsFurnitureTransition(point: String): Boolean {
+        val alive = (compatibility as? dev.wuason.unearthMechanic.system.compatibilities.FurnitureTransitionLifecycle)
+            ?.checkFurnitureTransitionOwnership(event, point) ?: true
+        if (!alive && dev.wuason.unearthMechanic.utils.DebugSettings.isEnabled()) dbgDelay(
+            "stale ownership point=$point loc=${loc.block.location.debugShort()} tick=$tick"
+        )
+        return alive
     }
 
     fun cancel() {
@@ -121,5 +143,8 @@ class DelayTask(
 
         task?.cancel()
         task = null
+
+        (compatibility as? dev.wuason.unearthMechanic.system.compatibilities.FurnitureTransitionLifecycle)
+            ?.onFurnitureDelayFinished(event)
     }
 }

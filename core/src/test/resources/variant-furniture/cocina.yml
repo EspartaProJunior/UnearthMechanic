@@ -1,0 +1,475 @@
+info:
+  namespace: glozz
+items:
+  cocina:
+    display_name: '&fStove'
+    resource:
+      material: BRICK
+      generate: false
+      model_path: cocina/cocina
+    behaviours:
+      furniture:
+        entity: item_frame
+        solid: true
+        fixed_rotation: true
+        hitbox:
+          length: 1
+          width: 1
+          height: 1
+        placeable_on:
+          floor: true
+          ceiling: false
+          walls: false
+  cocina_abierta:
+    display_name: '&f'
+    resource:
+      material: NETHER_BRICK
+      generate: false
+      model_path: cocina/cocina_abierta
+    behaviours:
+      furniture:
+        entity: item_frame
+        cancel_drop: true
+        solid: true
+        fixed_rotation: true
+        hitbox:
+          length: 1
+          width: 1
+          height: 1
+        placeable_on:
+          floor: true
+          ceiling: false
+          walls: false
+    events:
+      placed_furniture:
+        break:
+          drop_item:
+            item: glozz:cocina
+  cocina_prendida:
+    display_name: '&f'
+    resource:
+      material: NETHER_BRICK
+      generate: false
+      model_path: cocina/cocina_prendida
+    behaviours:
+      furniture:
+        entity: item_frame
+        solid: true
+        cancel_drop: true
+        fixed_rotation: true
+        hitbox:
+          length: 1
+          width: 1
+          height: 1
+        placeable_on:
+          floor: true
+          ceiling: false
+          walls: false
+    events:
+      placed_furniture:
+        break:
+          drop_item:
+            item: glozz:cocina
+  cocina_prendida_abierta:
+    display_name: '&f'
+    resource:
+      material: NETHER_BRICK
+      generate: false
+      model_path: cocina/cocina_prendida_abierta
+    behaviours:
+      furniture:
+        entity: item_frame
+        solid: true
+        cancel_drop: true
+        fixed_rotation: true
+        hitbox:
+          length: 1
+          width: 1
+          height: 1
+        placeable_on:
+          floor: true
+          ceiling: false
+          walls: false
+    events:
+      placed_furniture:
+        break:
+          drop_item:
+            item: glozz:cocina
+  cocina_sarten:
+    display_name: '&f'
+    resource:
+      material: NETHER_BRICK
+      generate: false
+      model_path: cocina/cocina_sarten
+    behaviours:
+      furniture:
+        entity: item_frame
+        solid: true
+        cancel_drop: true
+        fixed_rotation: true
+        hitbox:
+          length: 1
+          width: 1
+          height: 1
+        placeable_on:
+          floor: true
+          ceiling: false
+          walls: false
+    events:
+      placed_furniture:
+        break:
+          drop_item:
+            item: glozz:cocina
+          drop_item_2:
+            item: glozz:sarten
+  cocina_olla:
+    display_name: '&f'
+    resource:
+      material: NETHER_BRICK
+      generate: false
+      model_path: cocina/cocina_olla
+    behaviours:
+      furniture:
+        entity: item_frame
+        solid: true
+        cancel_drop: true
+        fixed_rotation: true
+        hitbox:
+          length: 1
+          width: 1
+          height: 1
+        placeable_on:
+          floor: true
+          ceiling: false
+          walls: false
+    events:
+      placed_furniture:
+        break:
+          drop_item:
+            item: glozz:cocina
+          drop_item_2:
+            item: glozz:olla
+  cocina_olla_agua:
+    display_name: '&f'
+    resource:
+      material: NETHER_BRICK
+      generate: false
+      model_path: cocina/cocina_olla_agua
+    behaviours:
+      furniture:
+        entity: item_frame
+        solid: true
+        cancel_drop: true
+        fixed_rotation: true
+        hitbox:
+          length: 1
+          width: 1
+          height: 1
+        placeable_on:
+          floor: true
+          ceiling: false
+          walls: false
+    events:
+      placed_furniture:
+        break:
+          drop_item:
+            item: glozz:cocina
+          drop_item_2:
+            item: glozz:olla_agua
+  cocina_olla_agua_sucia:
+    display_name: '&f'
+    resource:
+      material: NETHER_BRICK
+      generate: false
+      model_path: cocina/cocina_olla_agua_sucia
+    behaviours:
+      furniture:
+        entity: item_frame
+        solid: true
+        cancel_drop: true
+        fixed_rotation: true
+        hitbox:
+          length: 1
+          width: 1
+          height: 1
+        placeable_on:
+          floor: true
+          ceiling: false
+          walls: false
+    events:
+      placed_furniture:
+        break:
+          drop_item:
+            item: glozz:cocina
+          drop_item_2:
+            item: glozz:olla_agua_sucia
+  cocina_prendida_sarten:
+    display_name: '&f'
+    resource:
+      material: NETHER_BRICK
+      generate: false
+      model_path: cocina/cocina_prendida_sarten
+    behaviours:
+      furniture:
+        entity: item_frame
+        solid: true
+        cancel_drop: true
+        fixed_rotation: true
+        hitbox:
+          length: 1
+          width: 1
+          height: 1
+        placeable_on:
+          floor: true
+          ceiling: false
+          walls: false
+    events:
+      placed_furniture:
+        break:
+          drop_item:
+            item: glozz:cocina
+          drop_item_2:
+            item: glozz:sarten
+  cocina_prendida_sarten_sucio:
+    display_name: '&f'
+    resource:
+      material: NETHER_BRICK
+      generate: false
+      model_path: cocina/cocina_prendida_sarten_sucio
+    behaviours:
+      furniture:
+        entity: item_frame
+        solid: true
+        cancel_drop: true
+        fixed_rotation: true
+        hitbox:
+          length: 1
+          width: 1
+          height: 1
+        placeable_on:
+          floor: true
+          ceiling: false
+          walls: false
+    events:
+      placed_furniture:
+        break:
+          drop_item:
+            item: glozz:cocina
+          drop_item_2:
+            item: glozz:sarten_sucio
+  cocina_prendida_olla:
+    display_name: '&f'
+    resource:
+      material: NETHER_BRICK
+      generate: false
+      model_path: cocina/cocina_prendida_olla
+    behaviours:
+      furniture:
+        entity: item_frame
+        solid: true
+        cancel_drop: true
+        fixed_rotation: true
+        hitbox:
+          length: 1
+          width: 1
+          height: 1
+        placeable_on:
+          floor: true
+          ceiling: false
+          walls: false
+    events:
+      placed_furniture:
+        break:
+          drop_item:
+            item: glozz:cocina
+          drop_item_2:
+            item: glozz:olla
+  cocina_prendida_olla_sucia:
+    display_name: '&f'
+    resource:
+      material: NETHER_BRICK
+      generate: false
+      model_path: cocina/cocina_prendida_olla_sucia
+    behaviours:
+      furniture:
+        entity: item_frame
+        solid: true
+        cancel_drop: true
+        fixed_rotation: true
+        hitbox:
+          length: 1
+          width: 1
+          height: 1
+        placeable_on:
+          floor: true
+          ceiling: false
+          walls: false
+    events:
+      placed_furniture:
+        break:
+          drop_item:
+            item: glozz:cocina
+          drop_item_2:
+            item: glozz:olla_sucia
+  cocina_prendida_olla_agua:
+    display_name: '&f'
+    resource:
+      material: NETHER_BRICK
+      generate: false
+      model_path: cocina/cocina_prendida_olla_agua
+    behaviours:
+      furniture:
+        entity: item_frame
+        solid: true
+        cancel_drop: true
+        fixed_rotation: true
+        hitbox:
+          length: 1
+          width: 1
+          height: 1
+        placeable_on:
+          floor: true
+          ceiling: false
+          walls: false
+    events:
+      placed_furniture:
+        break:
+          drop_item:
+            item: glozz:cocina
+          drop_item_2:
+            item: glozz:olla_agua
+  cocina_prendida_olla_agua_vapor:
+    display_name: '&f'
+    resource:
+      material: NETHER_BRICK
+      generate: false
+      model_path: cocina/cocina_prendida_olla_agua_vapor
+    behaviours:
+      furniture:
+        entity: item_frame
+        solid: true
+        cancel_drop: true
+        fixed_rotation: true
+        hitbox:
+          length: 1
+          width: 1
+          height: 1
+        placeable_on:
+          floor: true
+          ceiling: false
+          walls: false
+    events:
+      placed_furniture:
+        break:
+          drop_item:
+            item: glozz:cocina
+          drop_item_2:
+            item: glozz:olla_agua_caliente
+  cocina_prendida_olla_agua_vapor_sal:
+    display_name: '&f'
+    resource:
+      material: NETHER_BRICK
+      generate: false
+      model_path: cocina/cocina_prendida_olla_agua_vapor
+    behaviours:
+      furniture:
+        entity: item_frame
+        solid: true
+        cancel_drop: true
+        fixed_rotation: true
+        hitbox:
+          length: 1
+          width: 1
+          height: 1
+        placeable_on:
+          floor: true
+          ceiling: false
+          walls: false
+    events:
+      placed_furniture:
+        break:
+          drop_item:
+            item: glozz:cocina
+          drop_item_2:
+            item: glozz:olla_agua_caliente_sal
+  cocina_prendida_olla_agua_sucia:
+    display_name: '&f'
+    resource:
+      material: NETHER_BRICK
+      generate: false
+      model_path: cocina/cocina_prendida_olla_agua_sucia
+    behaviours:
+      furniture:
+        entity: item_frame
+        solid: true
+        cancel_drop: true
+        fixed_rotation: true
+        hitbox:
+          length: 1
+          width: 1
+          height: 1
+        placeable_on:
+          floor: true
+          ceiling: false
+          walls: false
+    events:
+      placed_furniture:
+        break:
+          drop_item:
+            item: glozz:cocina
+          drop_item_2:
+            item: glozz:olla_agua_sucia
+  cocina_sarten_aceite:
+    display_name: '&f'
+    resource:
+      material: NETHER_BRICK
+      generate: false
+      model_path: cocina/cocina_sarten_aceite
+    behaviours:
+      furniture:
+        entity: item_frame
+        solid: true
+        cancel_drop: true
+        fixed_rotation: true
+        hitbox:
+          length: 1
+          width: 1
+          height: 1
+        placeable_on:
+          floor: true
+          ceiling: false
+          walls: false
+    events:
+      placed_furniture:
+        break:
+          drop_item:
+            item: glozz:cocina
+          drop_item_2:
+            item: glozz:sarten_aceite
+  cocina_prendida_sarten_aceite:
+    display_name: '&f'
+    resource:
+      material: NETHER_BRICK
+      generate: false
+      model_path: cocina/cocina_prendida_sarten_aceite
+    behaviours:
+      furniture:
+        entity: item_frame
+        solid: true
+        cancel_drop: true
+        fixed_rotation: true
+        hitbox:
+          length: 1
+          width: 1
+          height: 1
+        placeable_on:
+          floor: true
+          ceiling: false
+          walls: false
+    events:
+      placed_furniture:
+        break:
+          drop_item:
+            item: glozz:cocina
+          drop_item_2:
+            item: glozz:sarten_aceite

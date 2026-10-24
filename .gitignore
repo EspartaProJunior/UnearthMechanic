@@ -118,3 +118,10 @@ run/
 !gradle-wrapper.jar
 !.idea/icon.png
 target/*
+
+.kotlin/
+outputs/
+evidence/
+.env
+.env.*
+*.sha256

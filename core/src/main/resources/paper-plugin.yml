@@ -52,6 +52,14 @@ dependencies:
       load: BEFORE
       required: false
       join-classpath: true
+    SCore:
+      load: BEFORE
+      required: false
+      join-classpath: true
+    ExecutableItems:
+      load: BEFORE
+      required: false
+      join-classpath: true
 libraries:
   - "org.jetbrains.kotlin:kotlin-stdlib:2.0.20"
 permissions:

@@ -14,6 +14,7 @@ import dev.wuason.unearthMechanic.events.FakePlayerInteractEvent
 import dev.wuason.unearthMechanic.events.PreApplyStageEvent
 import dev.wuason.unearthMechanic.system.animations.AnimationManager
 import dev.wuason.unearthMechanic.system.animations.IAnimationManager
+import dev.wuason.unearthMechanic.system.compatibilities.FurnitureTransitionLifecycle
 import dev.wuason.unearthMechanic.system.compatibilities.ICompatibility
 import dev.wuason.unearthMechanic.system.compatibilities.MinecraftImpl
 import dev.wuason.unearthMechanic.system.compatibilities.ce.CraftEngineImpl
@@ -30,6 +31,7 @@ import dev.wuason.unearthMechanic.system.features.TintFurnitureFeature
 import dev.wuason.unearthMechanic.system.features.ToolSoundFeature
 import dev.wuason.unearthMechanic.utils.FoliaUtils
 import dev.wuason.unearthMechanic.utils.AdventureUtils
+import dev.wuason.unearthMechanic.utils.DebugSettings
 import dev.wuason.unearthMechanic.utils.Utils
 import net.momirealms.antigrieflib.Flag
 import org.bukkit.Bukkit
@@ -65,8 +67,8 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
         }
     }
 
-    private val debugTimedSequence = false
-    private val debugStageManager = false
+    private val debugTimedSequence get() = DebugSettings.isEnabled()
+    private val debugStageManager get() = DebugSettings.isEnabled()
 
     private val compatibilitiesLoaded: MutableList<ICompatibility> = ArrayList()
 
@@ -142,6 +144,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
 
         compatibilitiesLoaded.forEach { compatibility ->
             Bukkit.getPluginManager().registerEvents(compatibility, core)
+            if (compatibility is ItemsAdderImpl) compatibility.installLoadedGeometry(core)
         }
 
         Bukkit.getPluginManager().registerEvents(this, core)
@@ -230,16 +233,21 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
     }
 
     fun interact(player: Player, baseItemId: String, location: Location, event: Event, compatibility: ICompatibility) {
-        if (currentInteractionActivation.get() != null) {
-            interactWithActivation(player, baseItemId, location, event, compatibility)
-            return
-        }
-
-        currentInteractionActivation.set(UUID.randomUUID())
         try {
-            interactWithActivation(player, baseItemId, location, event, compatibility)
+            if (currentInteractionActivation.get() != null) {
+                interactWithActivation(player, baseItemId, location, event, compatibility)
+                return
+            }
+
+            currentInteractionActivation.set(UUID.randomUUID())
+            try {
+                interactWithActivation(player, baseItemId, location, event, compatibility)
+            } finally {
+                currentInteractionActivation.remove()
+            }
         } finally {
-            currentInteractionActivation.remove()
+            (compatibility as? dev.wuason.unearthMechanic.system.compatibilities.FurnitureTransitionLifecycle)
+                ?.onFurnitureDispatchFinished(event, delays.containsKey(location.block.location))
         }
     }
 
@@ -746,6 +754,8 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
             }
         }
         if (tick >= (stage.getMaxCorrectDelay(toolUsed) - 1)) {
+            if (compatibility is FurnitureTransitionLifecycle &&
+                !compatibility.checkFurnitureTransitionOwnership(event, "before_apply")) return
             dbgStage(
                 "onProcessStage threshold reached, calling onApplyStage " +
                         "tick=$tick loc=${loc.debugShort()} stageAdapter=${stage.getAdapterData()}"
@@ -834,6 +844,9 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                     "rawStage=${stage.getAdapterData()} validation=${validation != null} " +
                     "currentStageData=${currentStageData != null} tool=${toolUsed.getITool().getAdapterData()}"
         )
+        if (compatibility is dev.wuason.unearthMechanic.system.compatibilities.FurnitureTransitionLifecycle &&
+            !compatibility.checkFurnitureTransitionOwnership(event, "before_apply")) return
+
         //Bukkit.getConsoleSender().sendMessage("secso Tool "+toolUsed.getITool().getToolPermission().toString())
         toolUsed.getITool()?.getToolPermission()?.let { permission ->
             if (permission.isNotBlank()) {
@@ -1574,6 +1587,11 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
 
                 val preLockTask = runLaterAtLocation(keyLoc, preLockDelay) {
                     if (!activeSequences.contains(keyLoc)) return@runLaterAtLocation
+
+                    val expectedSourceId = lastSequenceStageByLoc[keyLoc]?.getAdapterData()?.id
+                        ?: stage.getAdapterData()?.id
+                    (compatibility as? dev.wuason.unearthMechanic.system.compatibilities.FurnitureTransitionLifecycle)
+                        ?.onFurnitureSequenceClaim(activeSequenceUuids[keyLoc], expectedSourceId, "sequence_prelock")
 
                     lockTransition(keyLoc, 8L)
 
