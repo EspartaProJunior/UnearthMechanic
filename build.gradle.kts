@@ -261,7 +261,7 @@ subprojects {
         //compileOnly("dev.lone:api-itemsadder:4.0.2-beta-release-11")
         val itemsAdderJar = providers.gradleProperty("itemsAdderJar").orNull
         if (itemsAdderJar != null) compileOnly(files(itemsAdderJar))
-        else compileOnly("dev.lone:api-itemsadder:4.0.2-beta-release-11")
+        else compileOnly("beer.devs:itemsadder-api:4.0.17")
 
         compileOnly("com.sk89q.worldguard:worldguard-bukkit:7.0.12-SNAPSHOT")
         compileOnly("com.nexomc:nexo:1.23") {
@@ -280,7 +280,11 @@ subprojects {
             files(rootProject.file("libs/Adapter-1.0.6.4.jar"))
         )
 
-        implementation("dev.jorel:commandapi-paper-shade:11.2.0")
+        implementation("dev.jorel:commandapi-paper-shade:12.1.0") {
+            exclude(group = "dev.jorel", module = "commandapi-paper-vh")
+            exclude(group = "dev.jorel", module = "commandapi-paper-mojang-mapped")
+            exclude(group = "dev.jorel", module = "commandapi-paper-nms-dependency")
+        }
 
         compileOnly("io.lumine:Mythic-Dist:5.6.1") //MythicMobs
         compileOnly("io.lumine:MythicCrucible-Dist:2.1.0") //MythicCrucible
