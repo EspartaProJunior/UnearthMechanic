@@ -68,7 +68,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
     }
 
     private val debugTimedSequence get() = DebugSettings.isEnabled()
-    private val debugStageManager get() = DebugSettings.isEnabled()
+    private val debugStageManager get() = DebugSettings.isStageManagerEnabled()
 
     private val compatibilitiesLoaded: MutableList<ICompatibility> = ArrayList()
 
@@ -76,6 +76,10 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
         CustomCropsPlugin.createSupport(core)
     private var warnedMissingCustomCrops = false
     private val currentInteractionActivation = ThreadLocal<UUID?>()
+    // Secondary area targets must not start the tool animation. Otherwise the
+    // first target marks the player as busy and every remaining target is
+    // rejected by isBlockingInteractions().
+    private val processingMultipleTarget = ThreadLocal.withInitial { false }
 
     private val delays: HashMap<Location, WrappedTask> = HashMap()
 
@@ -666,7 +670,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
         //try multiple interact
         multipleInteract(compatibility, event, player, loc, toolUsed)
 
-        if (!animator.isAnimating(player) && toolUsed.getITool().getAnimation() != null && toolUsed.getITool()
+        if (!processingMultipleTarget.get() && !animator.isAnimating(player) && toolUsed.getITool().getAnimation() != null && toolUsed.getITool()
                 .getAnimation()!!.getTicks() > 0
         ) {
             animator.playAnimation(player, toolUsed.getITool().getAnimation()!!)
@@ -2682,6 +2686,7 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
         if (toolUsed.getITool().isMultiple() && !StageData.hasMultiple(location)) {
             val blockFace: BlockFace = comp.getBlockFace(event) ?: player.getTargetBlockFace(999999999, FluidCollisionMode.NEVER) ?: return
             val visitedTargets = mutableSetOf<Location>()
+            val sourceTarget = canonicalMultipleTarget(comp, location.block)
 
             Utils.blockAround(
                 location.block,
@@ -2698,6 +2703,12 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                         return@forEach
                     }
 
+                    // The original interaction will finish after this method. Dispatching it
+                    // here would recurse before its StageData has been created.
+                    if (targetLoc == sourceTarget) {
+                        return@forEach
+                    }
+
                     val targetBlock = targetLoc.block
 
                     try {
@@ -2710,7 +2721,21 @@ class StageManager(private val core: UnearthMechanic) : IStageManager, org.bukki
                             blockFace,
                             EquipmentSlot.HAND
                         )
-                        Bukkit.getPluginManager().callEvent(playerInteractEvent)
+
+                        /*
+                         * CraftEngine does not convert a synthetic PlayerInteractEvent into a
+                         * CustomBlockInteractEvent. Dispatch directly so every target resolves
+                         * its own current base/adapter, including mixed bases in one area.
+                         */
+                        val targetBaseId = Adapter.getAdapterId(targetBlock)
+                        if (targetBaseId.isNotBlank()) {
+                            processingMultipleTarget.set(true)
+                            try {
+                                interact(player, targetBaseId, targetLoc, playerInteractEvent, comp)
+                            } finally {
+                                processingMultipleTarget.remove()
+                            }
+                        }
                     } finally {
                         StageData.removeMultiple(targetBlock)
                     }

@@ -9,6 +9,7 @@ import dev.jorel.commandapi.executors.PlayerCommandExecutor
 import dev.wuason.unearthMechanic.config.Furniture
 import dev.wuason.unearthMechanic.system.StageData
 import dev.wuason.unearthMechanic.utils.AdventureUtils
+import dev.wuason.unearthMechanic.utils.DebugSettings
 import dev.wuason.unearthMechanic.utils.Utils
 import org.bukkit.block.Block
 import org.bukkit.block.BlockFace
@@ -85,6 +86,19 @@ class CommandManager(private val core: UnearthMechanic) : ICommandManager {
                                 AdventureUtils.sendMessage(player, "<yellow>BaseItem id: <aqua>" + stageData.getGeneric().getBaseStage().getAdapterData().toString())
                                 AdventureUtils.sendMessage(player, "<yellow>Actual item id: <aqua>" + stageData.getActualAdapterData().toString())
                                 AdventureUtils.sendMessage(player, "<yellow>Loc: <aqua>" + stageData.getLocation())
+                            }),
+                        CommandAPICommand("stagemanager")
+                            .withAliases("stage", "sm")
+                            .executes(CommandExecutor { commandSender: CommandSender?, _ ->
+                                val enabled = !DebugSettings.isStageManagerEnabled()
+                                DebugSettings.setStageManagerEnabled(enabled)
+                                DebugSettings.setEnabled(enabled)
+                                DebugSettings.setItemsAdderEnabled(enabled)
+                                AdventureUtils.sendMessage(
+                                    commandSender,
+                                    "<yellow>StageManager and compatibility debug: " +
+                                        if (enabled) "<green>enabled" else "<red>disabled"
+                                )
                             }),
                         CommandAPICommand("test")
                             .withArguments(

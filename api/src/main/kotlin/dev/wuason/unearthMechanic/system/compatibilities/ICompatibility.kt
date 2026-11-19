@@ -6,6 +6,7 @@ import dev.wuason.unearthMechanic.config.IGeneric
 import dev.wuason.unearthMechanic.config.IStage
 import dev.wuason.unearthMechanic.system.ILiveTool
 import org.bukkit.Bukkit
+import org.bukkit.Color
 import org.bukkit.Location
 import org.bukkit.entity.Player
 import org.bukkit.event.Event
@@ -327,4 +328,9 @@ abstract class ICompatibility(
     ): UUID? {
         return null
     }
+
+    open fun tintFurniture(
+        event: Event,
+        color: Color
+    ): Boolean = false
 }

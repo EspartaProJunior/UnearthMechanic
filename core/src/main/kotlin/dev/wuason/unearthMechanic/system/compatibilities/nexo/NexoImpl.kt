@@ -19,6 +19,7 @@ import dev.wuason.unearthMechanic.system.StageData
 import dev.wuason.unearthMechanic.system.StageManager
 import dev.wuason.unearthMechanic.system.compatibilities.ICompatibility
 import dev.wuason.unearthMechanic.utils.FoliaUtils
+import dev.wuason.unearthMechanic.utils.DebugSettings
 import dev.wuason.unearthMechanic.utils.Utils
 import org.bukkit.Location
 import org.bukkit.block.Block
@@ -44,7 +45,7 @@ class NexoImpl(
     adapterComp
 ) {
 
-    private val debugNexo = false
+    private val debugNexo get() = DebugSettings.isEnabled()
 
     private fun dbg(message: String) {
         if (!debugNexo) return

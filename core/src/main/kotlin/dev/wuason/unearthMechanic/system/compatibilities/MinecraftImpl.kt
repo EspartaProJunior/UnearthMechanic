@@ -388,6 +388,10 @@ class MinecraftImpl(
             props["type"] = data.type.name.lowercase(Locale.ENGLISH)
         }
 
+        if (data is org.bukkit.block.data.type.Stairs) {
+            props["shape"] = data.shape.name.lowercase(Locale.ENGLISH)
+        }
+
         if (data is org.bukkit.block.data.type.Switch) {
             props["face"] = data.face.name.lowercase(Locale.ENGLISH)
         }

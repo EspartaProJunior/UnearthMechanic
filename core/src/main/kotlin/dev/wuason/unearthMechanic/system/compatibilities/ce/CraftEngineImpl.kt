@@ -17,6 +17,7 @@ import dev.wuason.unearthMechanic.system.StageData
 import dev.wuason.unearthMechanic.system.StageManager
 import dev.wuason.unearthMechanic.system.compatibilities.ICompatibility
 import dev.wuason.unearthMechanic.utils.FoliaUtils
+import dev.wuason.unearthMechanic.utils.DebugSettings
 import dev.wuason.unearthMechanic.utils.Utils
 import net.momirealms.craftengine.bukkit.api.BukkitAdaptor
 import net.momirealms.craftengine.bukkit.api.CraftEngineBlocks
@@ -31,6 +32,7 @@ import net.momirealms.craftengine.core.entity.player.InteractionHand
 import net.momirealms.craftengine.core.util.Key
 import net.momirealms.craftengine.core.world.BlockPos
 import net.momirealms.craftengine.libraries.nbt.CompoundTag
+import org.bukkit.Color
 import org.bukkit.GameMode
 import org.bukkit.Location
 import org.bukkit.Material
@@ -57,7 +59,7 @@ class CraftEngineImpl(
     adapterComp
 ) {
     private val removedLocations = Collections.synchronizedSet(mutableSetOf<Location>())
-    private val debugCraftEnginePainter = false
+    private val debugCraftEnginePainter get() = DebugSettings.isEnabled()
 
     private fun painterDebug(message: String) {
         if (!debugCraftEnginePainter) return
@@ -680,6 +682,7 @@ class CraftEngineImpl(
     @EventHandler
     fun onInteractBlock(event: CustomBlockInteractEvent) {
         if (event.hand() != InteractionHand.MAIN_HAND) return
+        if (event.action() != CustomBlockInteractEvent.Action.RIGHT_CLICK) return
         val adapterId = "ce:" + event.customBlock().id()
         //Bukkit.getConsoleSender().sendMessage("[DEBUG] onInteractBlock")
 
@@ -1080,27 +1083,58 @@ class CraftEngineImpl(
             return null
         }
 
+        // Vanilla and CE can use the same property name with incompatible
+        // values (for example, a different half/shape domain). Build the CE
+        // state incrementally, keeping only values CraftEngine accepts.
+        var compatibleProperties = CompoundTag()
+        for (name in properties.keySet()) {
+            val value = properties.get(name) ?: continue
+            val candidate = CompoundTag()
+
+            for (acceptedName in compatibleProperties.keySet()) {
+                compatibleProperties.get(acceptedName)?.let {
+                    candidate.put(acceptedName, it.copy())
+                }
+            }
+            candidate.put(name, value.copy())
+
+            val accepted = try {
+                targetBlock.getPossibleStates(candidate).isNotEmpty()
+            } catch (_: Throwable) {
+                false
+            }
+
+            if (accepted) {
+                compatibleProperties = candidate
+            } else {
+                painterDebug(
+                    "resolveBlockState: skipped incompatible property " +
+                        "$name=$value for id=$targetId"
+                )
+            }
+        }
+
         val possibleState = try {
-            targetBlock.getPossibleStates(properties).firstOrNull()
+            targetBlock.getPossibleStates(compatibleProperties).firstOrNull()
         } catch (throwable: Throwable) {
             painterDebug(
-                "resolveBlockState: getPossibleStates failed id=$targetId props=$properties error=${throwable.javaClass.simpleName}: ${throwable.message}"
+                "resolveBlockState: getPossibleStates failed id=$targetId props=$compatibleProperties error=${throwable.javaClass.simpleName}: ${throwable.message}"
             )
             null
         }
 
         if (possibleState != null) {
-            painterDebug("resolveBlockState: matched possible state id=$targetId props=$properties")
+            painterDebug("resolveBlockState: matched possible state id=$targetId props=$compatibleProperties")
             return possibleState
         }
 
         return try {
-            val fallbackState = targetBlock.getBlockState(properties)
-            painterDebug("resolveBlockState: built fallback state id=$targetId props=$properties")
+            val fallbackState = targetBlock.getBlockState(compatibleProperties)
+            painterDebug("resolveBlockState: built fallback state id=$targetId props=$compatibleProperties")
             fallbackState
         } catch (throwable: Throwable) {
             painterDebug(
-                "resolveBlockState: getBlockState failed id=$targetId props=$properties error=${throwable.javaClass.simpleName}: ${throwable.message}"
+                "resolveBlockState: getBlockState failed id=$targetId props=$compatibleProperties error=${throwable.javaClass.simpleName}: ${throwable.message}"
             )
             null
         }
@@ -1646,6 +1680,27 @@ class CraftEngineImpl(
             //debug("handleRemove[Sequence]: no furniture found, breakBlock fallback loc=${loc.block.location}")
             breakBlock(loc)
         }
+    }
+
+    override fun tintFurniture(event: Event, color: Color): Boolean {
+        if (event !is FurnitureInteractEvent) return false
+
+        val furniture = event.furniture()
+        val sourceItem = furniture.sourceItem()
+            ?: furniture.buildNewFurnitureItem()
+            ?: return false
+
+        sourceItem.dyedColor(
+            net.momirealms.craftengine.core.util.Color(
+                color.red,
+                color.green,
+                color.blue
+            )
+        )
+
+        furniture.setSourceItem(sourceItem)
+        furniture.refreshElements()
+        return true
     }
 
     override fun hashCode(
